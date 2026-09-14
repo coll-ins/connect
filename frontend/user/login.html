@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Login</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Login</h1>
+        <p>Connect — Book your matatu</p>
+    </div>
+
+    <div class="container">
+        <form id="login-form">
+            <div class="label">Phone Number</div>
+            <input type="tel" id="phone" placeholder="e.g. 0712345678" autocomplete="tel" autofocus required>
+
+            <div class="label">Password</div>
+            <input type="password" id="password" placeholder="Your password" autocomplete="current-password" required>
+
+            <div class="error-msg" id="error"></div>
+
+            <button type="submit" class="btn btn-primary">Login</button>
+        </form>
+
+        <p style="text-align:center;font-size:14px;color:#666">
+            No account?
+            <a href="signup.html" style="color:#1a6b2f;font-weight:600">Sign up</a>
+        </p>
+    </div>
+
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/user.js"></script>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', handleLogin)
+    </script>
+</body>
+</html>

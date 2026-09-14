@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Driver</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body class="driver-live-page">
+    <div class="header"><h1>Driver location</h1><p>Share your live location with assigned passengers</p></div>
+    <main class="container driver-live-shell">
+        <div class="label">Company</div>
+        <select id="company" onchange="loadDriverChoices()"><option value="">Choose company</option></select>
+        <div class="label">Driver</div>
+        <select id="driver"><option value="">Choose your driver profile</option></select>
+        <button class="btn btn-primary" onclick="startSharing()">Start sharing location</button>
+        <div id="message" class="success-msg"></div>
+        <div class="driver-live-summary"><strong id="passenger-count">0 passengers</strong><span id="driver-distance">Start sharing to see pickup distance</span></div>
+        <div id="driver-map" class="driver-live-map"></div>
+    </main>
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/driver.js"></script>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        getCompanies().then(res => {
+            if (res.ok) res.data.forEach(company => document.getElementById('company').insertAdjacentHTML('beforeend', `<option value="${company.id}">${company.name}</option>`))
+        })
+    </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+/* Global styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f0f4f0;
+    color: #222;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header {
+    background: #1a6b2f;
+    color: white;
+    padding: 20px;
+}
+
+.header h1 { font-size: 22px; font-weight: 700; }
+.header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+.btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: opacity 0.2s;
+}
+
+.btn:hover { opacity: 0.88; }
+.btn-primary { background: #1a6b2f; color: white; }
+.btn-outline { background: white; color: #1a6b2f; border: 2px solid #1a6b2f; }
+.btn-danger { background: #c0392b; color: white; }
+
+input, select {
+    width: 100%;
+    padding: 13px;
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    font-size: 15px;
+    margin-bottom: 14px;
+    background: white;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #1a6b2f;
+}
+
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.card:hover { border-color: #1a6b2f; }
+.card.selected { border-color: #1a6b2f; background: #f0faf0; }
+
+.card h3 { font-size: 16px; margin-bottom: 4px; }
+.card p { font-size: 13px; color: #666; }
+
+.error-msg { color: #c0392b; font-size: 13px; margin-bottom: 10px; }
+.success-msg { color: #1a6b2f; font-size: 13px; margin-bottom: 10px; }
+
+.label { font-size: 12px; color: #888; margin-bottom: 4px; }
+
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-pending { background: #fff9c4; color: #b7770d; }
+.badge-confirmed { background: #e8f5e9; color: #1a6b2f; }
+.badge-completed { background: #e3f2fd; color: #1565c0; }
+.badge-cancelled { background: #ffebee; color: #c0392b; }
+
+.price {
+    background: #e8f5e9;
+    color: #1a6b2f;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.divider {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 16px 0;
+}
+
+.section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+/* Connect visual system */
+:root {
+    --ink: #17231c;
+    --muted: #728078;
+    --line: #e1e9e3;
+    --surface: #ffffff;
+    --canvas: #f5f8f5;
+    --brand: #176b45;
+    --brand-dark: #0f4b31;
+    --accent: #e9f5ee;
+}
+
+body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    letter-spacing: 0;
+}
+
+.container { max-width: 560px; padding: 28px 20px 48px; }
+.header, .admin-header { box-shadow: 0 1px 0 rgba(23, 35, 28, .08); }
+.header { background: var(--brand); padding: 24px 20px; }
+.header h1 { font-size: 24px; letter-spacing: -.2px; }
+.header p { color: rgba(255,255,255,.78); }
+.btn { border-radius: 8px; min-height: 48px; margin-bottom: 10px; }
+.btn-primary { background: var(--brand); }
+.btn-primary:hover { background: var(--brand-dark); opacity: 1; }
+.btn-outline { border: 1px solid #b7c9bc; color: var(--brand-dark); }
+.btn-outline:hover { background: var(--accent); opacity: 1; }
+input, select { border: 1px solid #cbd8ce; border-radius: 8px; min-height: 48px; color: var(--ink); }
+input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(23,107,69,.12); }
+.card, .booking-box, .stat-card, .booking-row { border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 16px rgba(23,35,28,.05); }
+.card { padding: 20px; }
+.card:hover { border-color: #8db9a0; }
+.card h3 { color: var(--ink); }
+.card p, .label, .section-title { color: var(--muted); }
+.section-title { letter-spacing: .8px; }
+.error-msg { min-height: 18px; }
+.success-msg { min-height: 18px; }

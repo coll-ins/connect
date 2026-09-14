@@ -1,0 +1,40 @@
+<!-- Route selection page -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Choose Route</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="../static/css/user.css">
+</head>
+<body>
+    <div class="header">
+        <h1 id="company-name">Routes</h1>
+        <p>Select your route</p>
+    </div>
+
+    <div class="user-layout">
+        <aside class="user-sidebar">
+            <div class="sidebar-brand">Connect</div>
+            <a href="companies.html" class="sidebar-link active">Book a trip</a>
+            <div id="sidebar-bookings"></div>
+        </aside>
+        <main class="container">
+        <div class="section-title">Available Routes</div>
+        <div id="route-list">
+            <p style="color:#888;text-align:center;padding:32px">Loading routes...</p>
+        </div>
+
+        <button class="btn btn-outline" onclick="history.back()">Back</button>
+        </main>
+    </div>
+
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/user.js"></script>
+    <script>
+        loadRoutes()
+        loadBookingSidebar()
+    </script>
+</body>
+</html>

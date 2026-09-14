@@ -1,0 +1,73 @@
+<!-- Booking confirmation page -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Book Your Seat</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="../static/css/user.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Book Your Seat</h1>
+        <p>Tell us where to pick you up</p>
+    </div>
+
+    <div class="user-layout">
+        <aside class="user-sidebar">
+            <div class="sidebar-brand">Connect</div>
+            <a href="companies.html" class="sidebar-link">Book a trip</a>
+            <div id="sidebar-bookings"></div>
+        </aside>
+        <main class="container">
+        <div id="booking-form" class="booking-form-panel">
+            <div class="section-title">Trip details</div>
+            <div class="label">Number of seats</div>
+            <input type="number" id="seats" min="1" max="20" value="1" required>
+            <div class="label">Your Pickup Location</div>
+            <input type="text" id="pickup" placeholder="e.g. Near Harlingham shops" required>
+
+            <div class="error-msg" id="error"></div>
+
+            <button class="btn btn-primary" onclick="handleBooking(event)">Book Now</button>
+            <button class="btn btn-outline" onclick="history.back()">Back</button>
+        </div>
+
+        <div id="booking-confirmation" style="display:none">
+            <div class="booking-box">
+                <div class="booking-tag">Your Booking Number</div>
+                <div class="booking-number" id="booking-number"></div>
+                <p style="color:#666;font-size:14px">Your booking is awaiting confirmation</p>
+
+                <hr class="divider">
+
+                <div class="waiting-msg" id="waiting">
+                    <strong id="trip-status">Finding your driver...</strong>
+                    <br><small id="trip-status-detail">The map will update when your driver shares their location.</small>
+                </div>
+                <div id="driver-map" style="display:none;height:300px;margin-top:16px;border-radius:10px;overflow:hidden"></div>
+
+                <div class="driver-box" id="driver-box" style="display:none">
+                    <h4>Your Driver</h4>
+                    <div class="driver-name" id="driver-name"></div>
+                    <div class="driver-phone" id="driver-phone"></div>
+                    <div class="bus-number" id="bus-number"></div>
+                    <small style="color:#888;margin-top:8px;display:block">Call them for updates on distance</small>
+                </div>
+            </div>
+
+            <button class="btn btn-outline" style="margin-top:20px" onclick="location.href='companies.html'">
+                Book Another
+            </button>
+        </div>
+        </main>
+    </div>
+
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/user.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>loadBookingSidebar()</script>
+</body>
+</html>

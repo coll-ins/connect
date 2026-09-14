@@ -1,0 +1,99 @@
+/* SACCO operator styles */
+.admin-header {
+    background: #1a2f4b;
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.admin-header h1 { font-size: 18px; }
+.admin-header span { font-size: 13px; opacity: 0.7; }
+
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+.stat-card .number {
+    font-size: 28px;
+    font-weight: 800;
+    color: #1a2f4b;
+}
+
+.stat-card .stat-label {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+}
+
+.booking-row {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.booking-row:hover { background: #f8f8f8; }
+
+.booking-row .booking-num {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a2f4b;
+}
+
+.booking-row .booking-info {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+}
+
+.detail-row .detail-label { color: #888; }
+.detail-row .detail-value { font-weight: 600; }
+
+select.driver-select {
+    width: 100%;
+    padding: 13px;
+    border: 1.5px solid #1a2f4b;
+    border-radius: 10px;
+    font-size: 15px;
+    margin-bottom: 14px;
+    background: white;
+}
+
+.admin-header { background: #173b2d; padding: 20px; }
+.admin-header h1 { font-size: 20px; letter-spacing: -.2px; }
+.stats-row { gap: 10px; }
+.stat-card { padding: 18px 12px; }
+.stat-card .number { color: var(--brand-dark); font-size: 30px; }
+.booking-row { padding: 16px; border-left: 3px solid #a8cbb3; }
+.booking-row:hover { background: #f5fbf7; border-left-color: var(--brand); }
+.booking-row .booking-num { color: var(--brand-dark); }
+.detail-row { border-bottom-color: var(--line); padding: 14px 0; }
+.detail-row .detail-label { color: var(--muted); }
+select.driver-select { border-color: #b7c9bc; }
+#driver-form { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 4px 16px rgba(23,35,28,.05); }

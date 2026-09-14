@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Admin Login</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="../static/css/admin.css">
+</head>
+<body>
+    <div class="admin-header">
+        <h1>Connect Admin</h1>
+        <span>SACCO Operator Panel</span>
+    </div>
+
+    <div class="container" style="margin-top:40px">
+        <form id="admin-login-form">
+            <div class="label">Company</div>
+            <select id="company" required>
+                <option value="">Choose your company</option>
+            </select>
+            <div class="label">Phone Number</div>
+            <input type="tel" id="phone" placeholder="Admin phone number" required>
+
+            <div class="label">Password</div>
+            <input type="password" id="password" placeholder="Admin password" required>
+
+            <div class="error-msg" id="error"></div>
+
+            <button type="submit" class="btn btn-primary" style="background:#1a2f4b">Login to Dashboard</button>
+        </form>
+        <p style="text-align:center;font-size:14px;color:#666">
+            New operator? <a href="signup.html" style="color:#1a6b2f;font-weight:600">Create admin account</a>
+        </p>
+    </div>
+
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/admin.js"></script>
+    <script>
+        getCompanies().then(res => {
+            if (res.ok) res.data.forEach(company => {
+                document.getElementById('company').insertAdjacentHTML(
+                    'beforeend', `<option value="${company.id}">${company.name}</option>`
+                )
+            })
+        })
+        document.getElementById('admin-login-form').addEventListener('submit', handleAdminLogin)
+    </script>
+</body>
+</html>

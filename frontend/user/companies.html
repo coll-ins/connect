@@ -1,0 +1,40 @@
+<!-- Bus company selection page -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Choose Company</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="../static/css/user.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Choose a company</h1>
+        <p>Select the SACCO serving your area</p>
+    </div>
+
+    <div class="user-layout">
+        <aside class="user-sidebar">
+            <div class="sidebar-brand">Connect</div>
+            <a href="companies.html" class="sidebar-link active">Book a trip</a>
+            <div id="sidebar-bookings"></div>
+        </aside>
+        <main class="container">
+        <div class="section-title">Available Companies</div>
+        <div id="company-list">
+            <p style="color:#888;text-align:center;padding:32px">Loading companies...</p>
+        </div>
+
+        <button class="btn btn-outline" onclick="history.back()">Back</button>
+        </main>
+    </div>
+
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/user.js"></script>
+    <script>
+        loadCompanies()
+        loadBookingSidebar()
+    </script>
+</body>
+</html>

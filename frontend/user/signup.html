@@ -1,0 +1,47 @@
+<!-- Passenger signup page -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Sign Up</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Create Account</h1>
+        <p>Connect — Book your matatu</p>
+    </div>
+
+    <div class="container">
+        <form id="signup-form">
+            <div class="label">Full Name</div>
+            <input type="text" id="name" placeholder="e.g. Collins Mwangi" required>
+
+            <div class="label">Phone Number</div>
+            <input type="tel" id="phone" placeholder="e.g. 0712345678" required>
+
+            <div class="label">Your Location / Area</div>
+            <input type="text" id="location" placeholder="e.g. Harlingham" required>
+
+            <div class="label">Password</div>
+            <input type="password" id="password" placeholder="Create a password" required>
+
+            <div class="error-msg" id="error"></div>
+
+            <button type="submit" class="btn btn-primary">Create Account</button>
+        </form>
+
+        <p style="text-align:center;font-size:14px;color:#666">
+            Already have an account?
+            <a href="login.html" style="color:#1a6b2f;font-weight:600">Login</a>
+        </p>
+    </div>
+
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/user.js"></script>
+    <script>
+        document.getElementById('signup-form').addEventListener('submit', handleSignup)
+    </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!-- Passenger landing page -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect — Book Your Matatu</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="../static/css/user.css">
+</head>
+<body>
+    <script>
+        if (!sessionStorage.getItem('connectSplashSeen')) {
+            window.location.replace('splash.html')
+        }
+    </script>
+    <div class="hero">
+        <h1>Connect</h1>
+        <p>Book your matatu. Know when it arrives.</p>
+        <button class="btn btn-outline" onclick="location.href='signup.html'" style="max-width:280px;margin:0 auto 12px">
+            Create Account
+        </button>
+        <button class="btn btn-primary" onclick="location.href='login.html'" style="max-width:280px;margin:0 auto;background:rgba(255,255,255,0.2);border:2px solid white">
+            Login
+        </button>
+    </div>
+
+    <div class="container" style="margin-top:32px">
+        <div class="section-title">How it works</div>
+
+        <div class="card" style="cursor:default">
+            <h3>1. Sign up</h3>
+            <p>Enter your name, phone number and where you are.</p>
+        </div>
+        <div class="card" style="cursor:default">
+            <h3>2. Choose your bus</h3>
+            <p>Pick the SACCO and route going your way.</p>
+        </div>
+        <div class="card" style="cursor:default">
+            <h3>3. Book your seat</h3>
+            <p>Get a booking number. The bus comes to you.</p>
+        </div>
+        <div class="card" style="cursor:default">
+            <h3>4. Get driver details</h3>
+            <p>Receive your driver's number via SMS. Call them anytime.</p>
+        </div>
+    </div>
+</body>
+</html>

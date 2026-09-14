@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Connect — Live Trip</title>
+    <link rel="stylesheet" href="../static/css/main.css">
+    <link rel="stylesheet" href="../static/css/user.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body class="trip-page">
+    <main class="trip-shell">
+        <div id="driver-map" class="trip-map"></div>
+        <div class="trip-topbar">
+            <button class="trip-back" onclick="toggleTripSidebar()" aria-label="Open bookings">&#9776;</button>
+            <span>Connect</span>
+            <span class="trip-live-dot">Live</span>
+        </div>
+        <aside id="trip-sidebar" class="trip-sidebar" aria-label="Your bookings">
+            <div class="sidebar-brand">Your bookings</div>
+            <a href="companies.html" class="sidebar-link">Book a trip</a>
+            <div id="sidebar-bookings"></div>
+        </aside>
+        <div id="trip-sidebar-backdrop" class="trip-sidebar-backdrop" onclick="toggleTripSidebar()"></div>
+        <section class="trip-sheet">
+            <div class="trip-handle"></div>
+            <div class="trip-status-row">
+                <div>
+                    <p class="trip-eyebrow">Your trip</p>
+                    <h1 id="trip-status">Finding your driver</h1>
+                    <p id="trip-status-detail">We are matching you with a driver.</p>
+                </div>
+                <div class="trip-booking-code" id="trip-booking-number"></div>
+            </div>
+            <div class="trip-route-card">
+                <div><span>Route</span><strong id="trip-route"></strong></div>
+                <div><span>Pickup</span><strong id="trip-pickup"></strong></div>
+                <div><span>Seats</span><strong id="trip-seats"></strong></div>
+            </div>
+            <div class="trip-eta" id="trip-eta">Waiting for the operator to set a departure time.</div>
+            <div id="trip-driver-card" class="trip-driver-card" hidden>
+                <div class="driver-avatar">D</div>
+                <div class="trip-driver-copy"><span>Your driver</span><strong id="driver-name"></strong><small id="driver-phone"></small></div>
+                <div class="trip-bus" id="driver-bus"></div>
+            </div>
+            <button id="complete-trip-button" class="btn btn-primary trip-complete-button" type="button" onclick="handleCompleteTrip()">Complete trip</button>
+            <div id="trip-complete-message" class="success-msg"></div>
+            <a class="trip-secondary-action" href="companies.html">Book another trip</a>
+        </section>
+    </main>
+    <script src="../static/js/api.js"></script>
+    <script src="../static/js/user.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>initializeTripPage()</script>
+</body>
+</html>
