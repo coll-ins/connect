@@ -93,3 +93,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AT_USERNAME = os.getenv('AT_USERNAME', 'sandbox')
 AT_API_KEY = os.getenv('AT_API_KEY', '')
 ADMIN_SIGNUP_CODE = os.getenv('ADMIN_SIGNUP_CODE', 'connect-admin')
+
+import dj_database_url
+import os
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL')
+    )
+}
+
