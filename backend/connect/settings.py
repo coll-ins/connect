@@ -13,7 +13,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'development-only-change-me')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 # Cleaned up allowed hosts to properly read from environment variable or default to Vercel/localhost
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '.vercel.app,localhost,127.0.0.1').split(',') if host.strip()]
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '.railway.app,localhost,127.0.0.1').split(',') if host.strip()]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
