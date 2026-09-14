@@ -4,12 +4,16 @@
     {
       "src": "backend/connect/wsgi.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "15mb", "runtime": "python3.12" }
+      "config": { "maxLambdaSize": "15mb", "runtime": "python3.9" }
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/static/(.*)",
+      "dest": "backend/staticfiles/$1"
+    },
+    {
+      "src": "(.*)",
       "dest": "backend/connect/wsgi.py"
     }
   ]
