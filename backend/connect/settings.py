@@ -1,4 +1,3 @@
-# Django settings placeholder
 from pathlib import Path
 from dotenv import load_dotenv
 import os
@@ -8,12 +7,24 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'development-only-change-me')
+# Enforce secure secret key in production
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG := os.getenv('DEBUG', 'True').lower() == 'true':
+        SECRET_KEY = 'django-insecure-development-key-123456789'
+    else:
+        raise ValueError("CRITICAL: SECRET_KEY environment variable must be set in production.")
 
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-# Cleaned up allowed hosts to properly read from environment variable or default to Vercel/localhost
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '.railway.app,localhost,127.0.0.1').split(',') if host.strip()]
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        'ALLOWED_HOSTS',
+        'localhost,127.0.0.1,testserver'
+    ).split(',')
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -22,18 +33,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
     'rest_framework',
     'corsheaders',
+
     'users',
     'companies',
     'bookings',
     'drivers',
+    'wallets'
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Only listed once here
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -62,12 +76,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'connect.wsgi.application'
 
-# PostgreSQL Database configuration via Supabase DATABASE_URL
+# Flexible database configuration (SQLite locally, dynamic URL in production)
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=True
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600
     )
 }
 
@@ -77,33 +90,72 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '20/minute',
+        'user': '100/minute',
+        'boarding_verify': '5/minute',
+    }
 }
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         'CORS_ALLOWED_ORIGINS',
-        'http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://127.0.0.1:8000',
+        'http://localhost:5500,'
+        'http://127.0.0.1:5500,'
+        'http://localhost:8000,'
+        'http://127.0.0.1:8000',
     ).split(',')
     if origin.strip()
 ]
+
 CORS_ALLOW_CREDENTIALS = True
+
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
-# Static files configuration for Whitenoise & Vercel
+# Static files
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+TIME_ZONE = 'Africa/Nairobi'
+USE_TZ = True
+
+# Africa's Talking settings
 AT_USERNAME = os.getenv('AT_USERNAME', 'sandbox')
 AT_API_KEY = os.getenv('AT_API_KEY', '')
-ADMIN_SIGNUP_CODE = os.getenv('ADMIN_SIGNUP_CODE', 'connect-admin')
+
+# Critical environment variables validation
+ADMIN_SIGNUP_CODE = os.getenv('ADMIN_SIGNUP_CODE')
+if not ADMIN_SIGNUP_CODE:
+    raise ValueError("CRITICAL: ADMIN_SIGNUP_CODE environment variable must be set.")
+
+ADMIN_ALERT_PHONE_NUMBERS = [
+    number.strip()
+    for number in os.getenv(
+        'ADMIN_ALERT_PHONE_NUMBERS',
+        ''
+    ).split(',')
+    if number.strip()
+]
+
+PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
+if not PAYSTACK_SECRET_KEY:
+    if DEBUG:
+        PAYSTACK_SECRET_KEY = 'sk_test_fallback_key_for_local_dev'
+    else:
+        raise ValueError("CRITICAL: PAYSTACK_SECRET_KEY environment variable must be set in production.")

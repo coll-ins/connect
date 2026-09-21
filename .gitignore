@@ -4,3 +4,21 @@ __pycache__/
 db.sqlite3
 venv/
 *.log
+# Virtual environments
+.venv/
+*/.venv/
+
+# Python tooling
+.coveragerc
+.pytest_cache/
+.coverage
+
+# Generated/static files
+staticfiles/
+
+# Generated archives
+*.zip
+
+# Test/coverage output
+htmlcov/
+.pytest_cache/

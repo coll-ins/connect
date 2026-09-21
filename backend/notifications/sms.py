@@ -50,3 +50,35 @@ def send_driver_sms(phone_number, booking_number, driver_name, driver_phone, bus
         return True
     except Exception as e:
         print(f"SMS failed: {e}")
+
+        sms.send(message, [format_number(phone_number)])
+        return True
+    except Exception as e:
+        print(f"SMS failed: {e}")
+
+
+def send_admin_alert_sms(message):
+    """
+    Send an alert SMS to all configured admin phone numbers.
+    """
+    numbers = getattr(settings, 'ADMIN_ALERT_PHONE_NUMBERS', [])
+
+    if not numbers:
+        return False
+
+    try:
+        sms = get_sms()
+
+        if sms is None:
+            return False
+
+        sms.send(
+            f"CONNECT ALERT: {message}",
+            [format_number(number) for number in numbers]
+        )
+
+        return True
+
+    except Exception as e:
+        print(f"Admin alert SMS failed: {e}")
+        return False
