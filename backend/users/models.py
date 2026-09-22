@@ -3,8 +3,16 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 class CustomUser(AbstractUser):
+    ROLE_CHOICES = [
+        ('passenger', 'Passenger'),
+        ('driver', 'Driver'),
+        ('company_admin', 'Company Admin'),
+        ('platform_admin', 'Platform Admin'),
+    ]
+
     phone_number = models.CharField(max_length=15, unique=True, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='passenger')
     company = models.ForeignKey(
         'companies.Company', 
         on_delete=models.SET_NULL, 
@@ -14,6 +22,9 @@ class CustomUser(AbstractUser):
     )
     boarded_count = models.PositiveIntegerField(default=0)
     no_show_count = models.PositiveIntegerField(default=0)
+
+    REQUIRED_FIELDS = ['email', 'phone_number'] 
+
 
     @property
     def integrity_score(self):

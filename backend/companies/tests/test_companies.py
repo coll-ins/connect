@@ -165,3 +165,175 @@ class CompanyFunctionViewsTests(APITestCase):
     bad_url = reverse("update_trip_status", kwargs={"trip_id": 9999})
     response_404 = self.client.post(bad_url, {"status": "completed"})
     self.assertEqual(response_404.status_code, status.HTTP_404_NOT_FOUND)
+
+
+    def test_create_trip_platform_admin(self):
+      self.client.force_authenticate(user=self.admin_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 40,
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_201_CREATED
+      )
+      self.assertEqual(
+          response.data["capacity"],
+          40
+      )
+      self.assertEqual(
+          response.data["status"],
+          "scheduled"
+      )
+
+
+  def test_create_trip_company_admin_own_company(self):
+      self.company_user.role = "company_admin"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 30,
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_201_CREATED
+      )
+
+
+  def test_create_trip_company_admin_cannot_manage_other_company(self):
+      self.company_user.role = "company_admin"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.other_company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 30,
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_create_trip_regular_user_forbidden(self):
+      self.client.force_authenticate(user=self.user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 30,
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_create_trip_wrong_route_company_rejected(self):
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="Nairobi",
+          end_point="Kisumu",
+          price=Decimal("500.00"),
+      )
+
+      self.client.force_authenticate(user=self.admin_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": other_route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 30,
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_404_NOT_FOUND
+      )
+
+
+  def test_create_trip_invalid_capacity_rejected(self):
+      self.client.force_authenticate(user=self.admin_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 0,
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_400_BAD_REQUEST
+      )

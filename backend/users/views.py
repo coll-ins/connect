@@ -26,7 +26,7 @@ def csrf_token(request):
     return JsonResponse({'csrfToken': get_token(request)})
 
 
-@api_view(['POST'])
+@api_view(['POST', "GET"])
 def signup(request):
     data = request.data.copy()
     data['phone_number'] = normalize_phone_number(data.get('phone_number'))
@@ -75,33 +75,47 @@ def admin_signup(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+from django.db.models import Q
+
 @api_view(['POST'])
 def user_login(request):
-    phone_number = normalize_phone_number(request.data.get('phone_number'))
+    raw_phone = request.data.get('phone_number')
     password = request.data.get('password')
 
-    if not phone_number or not password:
+    if not raw_phone or not password:
         return Response({'error': 'Phone number and password are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        user_obj = CustomUser.objects.get(phone_number=phone_number)
-        user = authenticate(request, username=user_obj.username, password=password)
-        if user:
-            if not user.is_active:
-                return Response({'error': 'Account is disabled'}, status=status.HTTP_403_FORBIDDEN)
-            login(request, user)
-            return Response({
-                'message': 'Login successful',
-                'user': {
-                    'id': user.id,
-                    'name': user.username,
-                    'phone': user.phone_number,
-                    'location': user.location,
-                    'is_admin': user.is_staff
-                }
-            })
-    except CustomUser.DoesNotExist:
-        pass
+    normalized_phone = normalize_phone_number(raw_phone)
+
+    # 1. Search database using both normalized and raw formats
+    user_obj = CustomUser.objects.filter(
+        Q(phone_number=normalized_phone) | Q(phone_number=raw_phone)
+    ).first()
+    
+    # 2. Prevent AttributeErrors by handling missing user accounts early
+    if user_obj is None:
+        return Response({'error': 'Wrong phone number or password'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+    # 3. Authenticate using the matching username string against standard backends
+    user = authenticate(request, username=user_obj.username, password=password)
+    
+    if user is not None:
+        if not user.is_active:
+            return Response({'error': 'Account is disabled'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # 4. Bind the authenticated session context to the request structure
+        login(request, user)
+        
+        return Response({
+            'message': 'Login successful',
+            'user': {
+                'id': user.id,
+                'name': user.username,
+                'phone': user.phone_number,
+                'location': user.location,
+                'is_admin': user.is_staff or user.is_superuser
+            }
+        }, status=status.HTTP_200_OK)
 
     return Response({'error': 'Wrong phone number or password'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -123,3 +137,17 @@ def user_profile(request):
         'location': getattr(user, 'location', ''),
         'is_admin': user.is_staff
     })
+
+@api_view(['GET'])
+def user_api_root(request):
+    return Response({
+        "message": "CONNECT Users API",
+        "endpoints": {
+            "csrf": "/api/users/csrf/",
+            "signup": "/api/users/signup/",
+            "register": "/api/users/register/",
+            "login": "/api/users/login/",
+            "logout": "/api/users/logout/",
+            "profile": "/api/users/profile/",
+        }
+    }, status=status.HTTP_200_OK)

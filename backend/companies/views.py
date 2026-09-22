@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from bookings.models import Booking, Payment, BoardingEvent
+from users.permissions import can_manage_company
 from wallets.models import Wallet
 from .models import Company, Route, Trip
 from .serializers import CompanySerializer, TripSerializer
@@ -33,16 +34,16 @@ def get_routes(request, company_id=None, *args, **kwargs):
         routes = Route.objects.all()
 
     data = [
-        {
-            'id': r.id,
-            'company': r.company.name if hasattr(r, 'company') and r.company else None,
-            'name': getattr(r, 'name', f"{getattr(r, 'origin', '')} - {getattr(r, 'destination', '')}"),
-            'origin': getattr(r, 'origin', None),
-            'destination': getattr(r, 'destination', None),
-            'price': str(getattr(r, 'price', '0.00')),
-        }
-        for r in routes
-    ]
+    {
+        'id': r.id,
+        'company': r.company.name if r.company else None,
+        'name': r.name,
+        'origin': r.start_point,
+        'destination': r.end_point,
+        'price': str(r.price),
+    }
+    for r in routes
+]
     return Response(data, status=status.HTTP_200_OK)
 
 
@@ -131,9 +132,15 @@ def company_analytics(request, company_id):
 def update_trip_status(request, trip_id, *args, **kwargs):
     """Update a trip's status."""
     try:
-        trip = Trip.objects.get(id=trip_id)
+        trip = Trip.objects.select_related('route__company').get(id=trip_id)
     except Trip.DoesNotExist:
         return Response({'error': 'Trip not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not can_manage_company(request.user, trip.route.company):
+        return Response(
+            {'error': 'You are not authorized to manage this company\'s trips.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     new_status = request.data.get('status')
     if not new_status:
@@ -143,12 +150,11 @@ def update_trip_status(request, trip_id, *args, **kwargs):
         )
 
     valid_statuses = [
-        'scheduled',
-        'boarding',
-        'in_transit',
-        'completed',
-        'cancelled',
-        'departed',
+    'scheduled',
+    'boarding',
+    'departed',
+    'completed',
+    'cancelled',
     ]
 
     new_status = str(new_status).strip().lower()
@@ -168,3 +174,105 @@ def update_trip_status(request, trip_id, *args, **kwargs):
         'trip_id': trip.id,
         'status': trip.status
     }, status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_trip(request):
+    """
+    Create a trip for a company.
+
+    Platform admins can create trips for any company.
+    Company admins can only create trips for their own company.
+    """
+
+    company_id = request.data.get('company_id')
+    route_id = request.data.get('route_id')
+    driver_id = request.data.get('driver_id')
+    departure_at = request.data.get('departure_at')
+    capacity = request.data.get('capacity')
+
+    if not all([company_id, route_id, driver_id, departure_at, capacity]):
+        return Response(
+            {
+                'error': (
+                    'company_id, route_id, driver_id, '
+                    'departure_at and capacity are required.'
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company = get_object_or_404(Company, id=company_id)
+
+    # Enforce company-level authorization.
+    if not can_manage_company(request.user, company):
+        return Response(
+            {
+                'error': (
+                    "You are not authorized to create trips "
+                    "for this company."
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # Import here to avoid unnecessary module-level coupling.
+    from drivers.models import Driver
+
+    route = get_object_or_404(
+        Route,
+        id=route_id,
+        company=company
+    )
+
+    driver = get_object_or_404(
+        Driver,
+        id=driver_id,
+        company=company
+    )
+
+    try:
+        capacity = int(capacity)
+    except (TypeError, ValueError):
+        return Response(
+            {'error': 'capacity must be a positive integer.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if capacity <= 0:
+        return Response(
+            {'error': 'capacity must be greater than zero.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if capacity > 100:
+        return Response(
+            {'error': 'capacity cannot exceed 100.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not departure_at:
+        return Response(
+            {'error': 'departure_at is required.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        with transaction.atomic():
+            trip = Trip.objects.create(
+                route=route,
+                driver=driver,
+                departure_at=departure_at,
+                capacity=capacity,
+                status='scheduled',
+            )
+    except Exception:
+        return Response(
+            {'error': 'Unable to create trip.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    return Response(
+        TripSerializer(trip).data,
+        status=status.HTTP_201_CREATED
+    )

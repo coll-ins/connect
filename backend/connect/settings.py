@@ -87,6 +87,10 @@ DATABASES = {
 AUTH_USER_MODEL = 'users.CustomUser'
 
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',  # Mandatory for Django Admin access
+        'rest_framework.authentication.TokenAuthentication',    # (Or JWT authentication if you use it)
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
@@ -119,6 +123,13 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 # Static files
 STATIC_URL = '/static/'
+
+STATICFILES_DIRS = [
+    BASE_DIR.parent / 'frontend' / 'static',  # If your assets are in frontend/static/
+    # If your folder structure is just frontend/css/ and frontend/js/, use this instead:
+    # BASE_DIR.parent / 'frontend', 
+]
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 STORAGES = {
@@ -159,3 +170,7 @@ if not PAYSTACK_SECRET_KEY:
         PAYSTACK_SECRET_KEY = 'sk_test_fallback_key_for_local_dev'
     else:
         raise ValueError("CRITICAL: PAYSTACK_SECRET_KEY environment variable must be set in production.")
+
+    # Force Django to look back at the admin dashboard upon successful admin panel auth
+LOGIN_REDIRECT_URL = '/admin/'
+LOGOUT_REDIRECT_URL = '/admin/'

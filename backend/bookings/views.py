@@ -23,6 +23,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 
 from companies.models import Trip
+from users.permissions import can_manage_company
 from notifications.sms import send_admin_alert_sms
 from drivers.models import Driver
 from wallets.models import Wallet, WalletTransaction
@@ -914,25 +915,32 @@ def get_booking_detail(request, booking_id):
 
 @api_view(['POST'])
 def assign_driver(request, booking_id):
-    if (
-        not request.user.is_authenticated
-        or not request.user.is_staff
-    ):
+    if not request.user.is_authenticated:
         return Response(
-            {'error': 'Admin authorization required'},
-            status=status.HTTP_403_FORBIDDEN
+            {'error': 'Login required'},
+            status=status.HTTP_401_UNAUTHORIZED
         )
 
     try:
         booking = (
             Booking.objects
-            .select_related('trip')
+            .select_related('trip', 'route__company')
             .get(id=booking_id)
         )
     except Booking.DoesNotExist:
         return Response(
             {'error': 'Booking not found'},
             status=status.HTTP_404_NOT_FOUND
+        )
+
+    # is_staff kept for backward compatibility (existing admin
+    # accounts), company_admin/platform_admin via the shared helper
+    # for everyone else — either grants access, but a company_admin
+    # only for their own company's bookings.
+    if not (request.user.is_staff or can_manage_company(request.user, booking.route.company)):
+        return Response(
+            {'error': 'Admin authorization required'},
+            status=status.HTTP_403_FORBIDDEN
         )
 
     serializer = AssignDriverSerializer(
@@ -953,6 +961,12 @@ def assign_driver(request, booking_id):
         return Response(
             {'error': 'Driver not found'},
             status=status.HTTP_404_NOT_FOUND
+        )
+
+    if driver.company_id != booking.route.company_id:
+        return Response(
+            {'error': 'Driver must belong to the same company as the booking.'},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
     with transaction.atomic():
