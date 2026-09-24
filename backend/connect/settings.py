@@ -112,23 +112,30 @@ CORS_ALLOWED_ORIGINS = [
         'http://localhost:5500,'
         'http://127.0.0.1:5500,'
         'http://localhost:8000,'
-        'http://127.0.0.1:8000',
+        'http://127.0.0.1:8000,'
+        'http://localhost:5173,'
+        'http://127.0.0.1:5173,'
+        'http://localhost:5174,'
+        'http://127.0.0.1:5174,'
+        'http://localhost:5175,'
+        'http://127.0.0.1:5175',
     ).split(',')
     if origin.strip()
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}):5173$',
+]
 
 # Static files
 STATIC_URL = '/static/'
 
-STATICFILES_DIRS = [
-    BASE_DIR.parent / 'frontend' / 'static',  # If your assets are in frontend/static/
-    # If your folder structure is just frontend/css/ and frontend/js/, use this instead:
-    # BASE_DIR.parent / 'frontend', 
-]
+LEGACY_FRONTEND_STATIC = BASE_DIR.parent / 'frontend' / 'static'
+STATICFILES_DIRS = [LEGACY_FRONTEND_STATIC] if LEGACY_FRONTEND_STATIC.exists() else []
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 

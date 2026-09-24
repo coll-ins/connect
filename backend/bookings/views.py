@@ -133,7 +133,7 @@ def initialize_paystack_payment(request, booking_id):
         'currency': 'KES',
         'callback_url': request.data.get(
             'callback_url',
-            'http://localhost:5500/payment-success.html'
+            f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')}/passenger/payment/{booking.id}"
         ),
         'metadata': {
             'booking_id': booking.id,
@@ -198,6 +198,218 @@ def initialize_paystack_payment(request, booking_id):
         },
         status=status.HTTP_200_OK
     )
+
+
+# ============================================================
+# PAYSTACK M-PESA CHARGE
+# ============================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def initialize_mpesa_payment(request, booking_id):
+    """Send a Paystack M-PESA STK push to the passenger's saved phone."""
+    try:
+        booking = Booking.objects.select_related('user', 'trip').get(
+            id=booking_id,
+            user=request.user,
+        )
+    except Booking.DoesNotExist:
+        return Response({'error': 'Booking not found'}, status=404)
+
+    if booking.status in ('cancelled', 'completed', 'no_show'):
+        return Response({'error': 'This booking cannot be paid for.'}, status=400)
+
+    if trip_has_departed(booking.trip):
+        return Response({'error': 'This trip has already departed.'}, status=400)
+
+    phone = booking.user.phone_number
+    if not phone:
+        return Response(
+            {'error': 'Your account does not have a phone number.'},
+            status=400,
+        )
+
+    existing = Payment.objects.filter(booking=booking).first()
+    if existing and existing.status == 'confirmed':
+        return Response({'error': 'This booking has already been paid for.'}, status=400)
+
+    # A new M-PESA charge replaces an abandoned pending digital attempt.
+    amount_in_cents = int(booking.total_amount * Decimal('100'))
+    headers = {
+        'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
+        'Content-Type': 'application/json',
+    }
+    payload = {
+        'email': request.user.email or f'user_{request.user.id}@connect.local',
+        'amount': amount_in_cents,
+        'currency': 'KES',
+        'mobile_money': {
+            'phone': phone,
+            'provider': 'mpesa',
+        },
+        'metadata': {
+            'booking_id': booking.id,
+            'user_id': request.user.id,
+            'channel': 'mpesa',
+        },
+    }
+
+    try:
+        gateway_response = requests.post(
+            'https://api.paystack.co/charge',
+            json=payload,
+            headers=headers,
+            timeout=30,
+        )
+    except requests.RequestException:
+        return Response(
+            {'error': 'Unable to connect to Paystack.'},
+            status=502,
+        )
+
+    try:
+        result = gateway_response.json()
+    except ValueError:
+        return Response({'error': 'Invalid response from Paystack.'}, status=502)
+
+    if gateway_response.status_code != 200 or not result.get('status'):
+        return Response(
+            {'error': result.get('message', 'Unable to start M-PESA payment.')},
+            status=400,
+        )
+
+    data = result.get('data') or {}
+    reference = data.get('reference')
+    if not reference:
+        return Response({'error': 'Paystack did not return a payment reference.'}, status=502)
+
+    Payment.objects.update_or_create(
+        booking=booking,
+        defaults={
+            'provider_reference': reference,
+            'amount': booking.total_amount,
+            'method': 'digital',
+            'status': 'pending',
+            'settlement_status': 'not_ready',
+        },
+    )
+
+    return Response(
+        {
+            'booking_id': booking.id,
+            'reference': reference,
+            'status': data.get('status', 'pay_offline'),
+            'display_text': data.get(
+                'display_text',
+                'Please check your phone and complete the M-PESA authorization.',
+            ),
+            'phone': phone,
+            'amount': str(booking.total_amount),
+        },
+        status=200,
+    )
+
+
+# ============================================================
+# PAYMENT STATUS / VERIFY
+# ============================================================
+
+def _mark_payment_confirmed(payment, paystack_amount):
+    expected_amount = int(payment.amount * Decimal('100'))
+    if int(paystack_amount) != expected_amount:
+        payment.status = 'failed'
+        payment.save(update_fields=['status'])
+        return False
+
+    payment.status = 'confirmed'
+    payment.settlement_status = 'not_ready'
+    payment.confirmed_at = timezone.now()
+    payment.save(update_fields=['status', 'settlement_status', 'confirmed_at'])
+
+    booking = payment.booking
+    if booking.status not in ('cancelled', 'completed', 'no_show'):
+        booking.status = 'confirmed'
+        booking.save(update_fields=['status'])
+    return True
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def payment_status(request, booking_id):
+    try:
+        payment = Payment.objects.select_related('booking').get(
+            booking_id=booking_id,
+            booking__user=request.user,
+        )
+    except Payment.DoesNotExist:
+        return Response({
+            'booking_id': booking_id,
+            'payment_status': 'unpaid',
+            'payment_method': None,
+        })
+
+    return Response({
+        'booking_id': booking_id,
+        'payment_id': payment.id,
+        'payment_status': payment.status,
+        'payment_method': payment.method,
+        'settlement_status': payment.settlement_status,
+        'reference': payment.provider_reference,
+        'amount': str(payment.amount),
+        'confirmed_at': payment.confirmed_at,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_paystack_payment(request, booking_id):
+    """Verify a Paystack transaction after a hosted checkout return."""
+    try:
+        payment = Payment.objects.select_related('booking').get(
+            booking_id=booking_id,
+            booking__user=request.user,
+        )
+    except Payment.DoesNotExist:
+        return Response({'error': 'Payment not found.'}, status=404)
+
+    if payment.status == 'confirmed':
+        return Response({'payment_status': 'confirmed', 'booking_status': payment.booking.status})
+
+    if not payment.provider_reference:
+        return Response({'error': 'No Paystack reference exists for this booking.'}, status=400)
+
+    headers = {'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'}
+    try:
+        gateway_response = requests.get(
+            f"https://api.paystack.co/transaction/verify/{payment.provider_reference}",
+            headers=headers,
+            timeout=30,
+        )
+    except requests.RequestException:
+        return Response({'error': 'Unable to connect to Paystack.'}, status=502)
+
+    try:
+        result = gateway_response.json()
+    except ValueError:
+        return Response({'error': 'Invalid response from Paystack.'}, status=502)
+
+    data = result.get('data') or {}
+    if gateway_response.status_code != 200 or not result.get('status'):
+        return Response(
+            {'error': result.get('message', 'Payment verification failed.')},
+            status=400,
+        )
+
+    if data.get('status') == 'success':
+        with transaction.atomic():
+            payment = Payment.objects.select_for_update().select_related('booking').get(pk=payment.pk)
+            _mark_payment_confirmed(payment, data.get('amount', 0))
+        return Response({'payment_status': payment.status, 'booking_status': payment.booking.status})
+
+    return Response({
+        'payment_status': data.get('status', payment.status),
+        'message': data.get('gateway_response') or data.get('message') or 'Payment is still pending.',
+    })
 
 
 # ============================================================
@@ -817,36 +1029,44 @@ def get_my_bookings(request):
 
 @api_view(['GET'])
 def get_all_bookings(request):
-    if (
-        not request.user.is_authenticated
-        or not request.user.is_staff
-    ):
-        return Response(
-            {'error': 'Admin authorization required'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+    if not request.user.is_authenticated:
+        return Response({'error': 'Login required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    bookings = (
-        Booking.objects
-        .all()
-        .select_related('user', 'trip__route', 'payment')
-    )
+    company_id = request.query_params.get('company_id')
+    if request.user.is_superuser or request.user.role == 'platform_admin':
+        bookings = Booking.objects.all()
+        if company_id:
+            bookings = bookings.filter(route__company_id=company_id)
+    elif request.user.role == 'company_admin' and request.user.company_id:
+        bookings = Booking.objects.filter(route__company_id=request.user.company_id)
+        if company_id and str(company_id) != str(request.user.company_id):
+            return Response({'error': 'You cannot view another company.'}, status=403)
+    elif request.user.is_staff:
+        bookings = Booking.objects.all()
+        if company_id:
+            bookings = bookings.filter(route__company_id=company_id)
+    else:
+        return Response({'error': 'Admin authorization required'}, status=403)
+
+    bookings = bookings.select_related('user', 'route__company', 'trip__driver', 'payment').order_by('-created_at')
 
     data = [{
         'booking_id': b.id,
         'booking_number': b.booking_number,
         'user': b.user.username,
+        'user_phone': b.user.phone_number,
+        'company_id': b.route.company_id,
+        'company_name': b.route.company.name,
         'trip_id': b.trip.id if b.trip else None,
+        'driver_id': b.driver_id,
+        'driver_name': b.driver.name if b.driver else None,
         'route_name': b.route.name,
         'pickup_location': b.pickup_location,
         'seats': b.seats,
         'total_amount': str(b.total_amount),
         'status': b.status,
-        'payment_status': (
-            b.payment.status
-            if hasattr(b, 'payment')
-            else 'unpaid'
-        ),
+        'payment_status': b.payment.status if hasattr(b, 'payment') else 'unpaid',
+        'payment_method': b.payment.method if hasattr(b, 'payment') else None,
         'created_at': b.created_at,
     } for b in bookings]
 
@@ -1424,39 +1644,40 @@ def set_stage_departure(request, booking_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_driver_bookings(request, driver_id):
-    if (
-        not request.user.is_authenticated
-        or not request.user.is_staff
-    ):
-        return Response(
-            {'error': 'Staff authorization required'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+    driver = Driver.objects.select_related('company').filter(id=driver_id).first()
+    if not driver:
+        return Response({'error': 'Driver not found'}, status=404)
 
-    bookings = (
-        Booking.objects
-        .filter(
-            driver_id=driver_id,
-            status__in=['pending', 'confirmed']
-        )
-        .select_related(
-            'user',
-            'route',
-            'trip'
-        )
+    user = request.user
+    allowed = (
+        user.is_superuser
+        or user.is_staff
+        or (user.role == 'driver' and user.phone_number == driver.phone_number)
+        or can_manage_company(user, driver.company)
     )
+    if not allowed:
+        return Response({'error': 'Not authorized for this driver.'}, status=403)
+
+    bookings = Booking.objects.filter(
+        driver_id=driver_id,
+        status__in=['pending', 'confirmed'],
+    ).select_related('user', 'route', 'trip', 'payment').order_by('trip__departure_at')
 
     data = [{
         'booking_id': b.id,
         'booking_number': b.booking_number,
         'passenger': b.user.username,
+        'passenger_phone': b.user.phone_number,
         'route': b.route.name,
+        'pickup_location': b.pickup_location,
         'seats': b.seats,
-        'status': b.status
+        'status': b.status,
+        'payment_status': b.payment.status if hasattr(b, 'payment') else 'unpaid',
+        'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
+        'trip_id': b.trip_id,
+        'departure_at': b.trip.departure_at if b.trip else None,
     } for b in bookings]
 
-    return Response(
-        data,
-        status=status.HTTP_200_OK
-    )
+    return Response(data, status=status.HTTP_200_OK)

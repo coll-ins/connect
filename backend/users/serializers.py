@@ -1,30 +1,48 @@
 import re
 
 from rest_framework import serializers
+
 from .models import CustomUser
 
 
 class UserSerializer(serializers.ModelSerializer):
-    username = serializers.CharField()
+    username = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'phone_number', 'location', 'password']
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = [
+            'id',
+            'username',
+            'email',
+            'phone_number',
+            'location',
+            'role',
+            'company',
+            'password',
+        ]
+        extra_kwargs = {
+            'password': {'write_only': True, 'min_length': 6},
+            'email': {'required': False, 'allow_blank': True},
+            'role': {'read_only': True},
+            'company': {'read_only': True},
+        }
 
     def create(self, validated_data):
-        username = validated_data.pop('username').strip()
+        phone = validated_data['phone_number']
+        raw_username = validated_data.pop('username', '').strip()
+        username = raw_username or phone.replace('+', 'user_')
         username = re.sub(r'[^A-Za-z0-9@.+_-]+', '_', username).strip('_') or 'user'
+
         base_username = username
         suffix = 1
         while CustomUser.objects.filter(username=username).exists():
             suffix += 1
             username = f'{base_username}_{suffix}'
 
-        user = CustomUser.objects.create_user(
+        return CustomUser.objects.create_user(
             username=username,
-            phone_number=validated_data['phone_number'],
-            location=validated_data['location'],
-            password=validated_data['password']
+            email=validated_data.get('email', ''),
+            phone_number=phone,
+            location=validated_data.get('location', ''),
+            password=validated_data['password'],
         )
-        return user

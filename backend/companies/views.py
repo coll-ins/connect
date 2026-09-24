@@ -3,6 +3,7 @@ from django.db import transaction
 from django.db.models import Sum, Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -51,11 +52,16 @@ def get_routes(request, company_id=None, *args, **kwargs):
 def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     """
     Fetch trips filtered by URL kwargs (company_id)
-    or query parameters (?route_id=X).
+    or query parameters (?company_id=X or ?company=X).
     """
     queryset = Trip.objects.all()
 
-    comp_id = company_id or request.query_params.get('company_id')
+    # Support both 'company_id' and 'company' query parameters
+    comp_id = (
+        company_id 
+        or request.query_params.get('company_id') 
+        or request.query_params.get('company')
+    )
     if comp_id:
         queryset = queryset.filter(route__company_id=comp_id)
 
@@ -65,7 +71,6 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
 
     serializer = TripSerializer(queryset, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 @api_view(['GET'])
 def get_trip_details(request, trip_id, *args, **kwargs):
@@ -251,25 +256,27 @@ def create_trip(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    if not departure_at:
+    departure = parse_datetime(str(departure_at))
+    if departure is None:
         return Response(
-            {'error': 'departure_at is required.'},
+            {'error': 'departure_at must be a valid ISO datetime.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    if timezone.is_naive(departure):
+        departure = timezone.make_aware(departure, timezone.get_current_timezone())
+    if departure <= timezone.now():
+        return Response(
+            {'error': 'departure_at must be in the future.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    try:
-        with transaction.atomic():
-            trip = Trip.objects.create(
-                route=route,
-                driver=driver,
-                departure_at=departure_at,
-                capacity=capacity,
-                status='scheduled',
-            )
-    except Exception:
-        return Response(
-            {'error': 'Unable to create trip.'},
-            status=status.HTTP_400_BAD_REQUEST
+    with transaction.atomic():
+        trip = Trip.objects.create(
+            route=route,
+            driver=driver,
+            departure_at=departure,
+            capacity=capacity,
+            status='scheduled',
         )
 
     return Response(

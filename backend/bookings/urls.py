@@ -17,6 +17,9 @@ urlpatterns = [
 
     # Payment & webhook
     path('payments/<int:booking_id>/paystack/', views.initialize_paystack_payment, name='initialize-paystack-payment'),
+    path('payments/<int:booking_id>/mpesa/', views.initialize_mpesa_payment, name='initialize-mpesa-payment'),
+    path('payments/<int:booking_id>/status/', views.payment_status, name='payment-status'),
+    path('payments/<int:booking_id>/verify/', views.verify_paystack_payment, name='verify-paystack-payment'),
     path('payments/<int:booking_id>/cash/', views.initialize_cash_payment, name='initialize-cash-payment'),
     path('payments/<int:booking_id>/cash/confirm/', views.confirm_cash_payment, name='confirm-cash-payment'),
     path('webhooks/paystack/', views.paystack_webhook, name='paystack-webhook'),
