@@ -55,7 +55,9 @@ def _can_view_driver(user, driver):
         )
 
     if getattr(user, 'role', None) == 'driver':
-        return user.phone_number == driver.phone_number
+        return bool(driver.phone_number) and (
+            user.phone_number == driver.phone_number
+        )
 
     return False
 
@@ -394,7 +396,9 @@ def _can_manage_driver_location(request, driver):
         return True
 
     if user.role == 'driver':
-        return user.phone_number == driver.phone_number
+        return bool(driver.phone_number) and (
+            user.phone_number == driver.phone_number
+        )
 
     return can_manage_company(user, driver.company)
 
