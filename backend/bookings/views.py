@@ -1,3 +1,4 @@
+from django.db.models import Q
 import hmac
 import hashlib
 import json
@@ -3152,10 +3153,10 @@ def auditor_receipt_search(request):
     )
 
     bookings = bookings.filter(
-        models.Q(booking_number__icontains=search)
-        | models.Q(payment__provider_reference__icontains=search)
-        | models.Q(user__username__icontains=search)
-        | models.Q(user__phone_number__icontains=search)
+        Q(booking_number__icontains=search)
+        | Q(payment__provider_reference__icontains=search)
+        | Q(user__username__icontains=search)
+        | Q(user__phone_number__icontains=search)
     )
 
     records = []
@@ -3440,8 +3441,8 @@ def passenger_records(request):
 
     if search:
         bookings = bookings.filter(
-            models.Q(booking_number__icontains=search)
-            | models.Q(payment__provider_reference__icontains=search)
+            Q(booking_number__icontains=search)
+            | Q(payment__provider_reference__icontains=search)
         )
 
     records = []
