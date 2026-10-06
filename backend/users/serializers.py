@@ -7,6 +7,9 @@ from .models import CustomUser
 
 class UserSerializer(serializers.ModelSerializer):
     username = serializers.CharField(required=False, allow_blank=True)
+    name = serializers.CharField(
+        required=False, allow_blank=True, write_only=True, max_length=150
+    )
 
     class Meta:
         model = CustomUser
@@ -19,6 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
             'role',
             'company',
             'password',
+            'name',
         ]
         extra_kwargs = {
             'password': {'write_only': True, 'min_length': 6},
@@ -39,12 +43,17 @@ class UserSerializer(serializers.ModelSerializer):
             suffix += 1
             username = f'{base_username}_{suffix}'
 
+        full_name = ' '.join(validated_data.pop('name', '').split())
+        first_name, _, last_name = full_name.partition(' ')
+
         return CustomUser.objects.create_user(
             username=username,
             email=validated_data.get('email', ''),
             phone_number=phone,
             location=validated_data.get('location', ''),
             password=validated_data['password'],
+            first_name=first_name,
+            last_name=last_name,
         )
 
 

@@ -26,7 +26,7 @@ def serialize_session_user(user):
     company = getattr(user, 'company', None)
     return {
         'id': user.id,
-        'name': user.username,
+        'name': user.display_name,
         'username': user.username,
         'email': user.email,
         'phone': user.phone_number,

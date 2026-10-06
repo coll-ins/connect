@@ -29,6 +29,18 @@ class CustomUser(AbstractUser):
 
 
     @property
+    def display_name(self):
+        """Real name if set; phone number for auto-generated usernames;
+        otherwise the username."""
+        import re
+        full = self.get_full_name().strip()
+        if full:
+            return full
+        if re.fullmatch(r'(user|driver)_\+?\d+', self.username or ''):
+            return self.phone_number or self.username
+        return self.username
+
+    @property
     def integrity_score(self):
         """
         Percentage of confirmed bookings actually boarded, out of

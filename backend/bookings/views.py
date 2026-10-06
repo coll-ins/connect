@@ -3167,10 +3167,7 @@ def auditor_receipt_search(request):
         hold = getattr(booking, 'financial_hold', None)
         resolution = getattr(booking, 'incident_resolution', None)
 
-        passenger_name = (
-            booking.user.get_full_name()
-            or booking.user.username
-        )
+        passenger_name = booking.user.display_name
 
         activity = [
             {
