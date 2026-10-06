@@ -27,6 +27,8 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -41,6 +43,7 @@ INSTALLED_APPS = [
     'companies',
     'bookings',
     'drivers',
+    'buses',
     'wallets'
 ]
 
@@ -75,6 +78,23 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'connect.wsgi.application'
+ASGI_APPLICATION = 'connect.asgi.application'
+
+# Live-location push. In-memory works for one server process only.
+# Set REDIS_URL (e.g. redis://127.0.0.1:6379) to share it across processes.
+import os as _os
+_REDIS_URL = _os.environ.get('REDIS_URL')
+if _REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [_REDIS_URL]},
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
+    }
 
 # Flexible database configuration (SQLite locally, dynamic URL in production)
 DATABASES = {
@@ -100,7 +120,8 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '20/minute',
-        'user': '100/minute',
+        'user': '300/minute',
+        'driver_location': '60/minute',
         'boarding_verify': '5/minute',
     }
 }
@@ -181,3 +202,15 @@ if not PAYSTACK_SECRET_KEY:
     # Force Django to look back at the admin dashboard upon successful admin panel auth
 LOGIN_REDIRECT_URL = '/admin/'
 LOGOUT_REDIRECT_URL = '/admin/'
+
+
+# --- production security ---
+# Only active when DEBUG is off (i.e. on the live server).
+if not DEBUG:
+    # Trust the reverse proxy's HTTPS header (nginx etc.).
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # Start low; raise to a year once HTTPS is confirmed working.
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '3600'))

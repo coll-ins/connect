@@ -1,3 +1,6 @@
+from datetime import timedelta
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
@@ -6,6 +9,10 @@ from django.utils import timezone
 from companies.models import Trip
 from bookings.models import Booking, Payment
 from bookings.services import settle_booking_fault
+
+
+# Passengers are only treated as no-shows this long after departure.
+GRACE_PERIOD = timedelta(minutes=15)
 
 
 class Command(BaseCommand):
@@ -31,6 +38,7 @@ class Command(BaseCommand):
 
         trips_processed = 0
         bookings_settled = 0
+        bookings_incident_affected = 0
         bookings_expired = 0
         refunds_retried = 0
 
@@ -48,7 +56,24 @@ class Command(BaseCommand):
                     .filter(status="confirmed")
                 )
 
+                # Inside the grace period the trip is marked departed,
+                # but nobody is settled as a no-show yet.
+                if trip.departure_at > now - GRACE_PERIOD:
+                    unboarded = unboarded.none()
+
+                active_incident_exists = trip.incidents.filter(
+                    status__in=["reported", "investigating"],
+                ).exists()
+
                 for booking in unboarded:
+                    # An active trip incident means the passenger was
+                    # prevented from boarding by a company/trip event.
+                    # Do not classify the passenger as a no-show or
+                    # apply an integrity penalty.
+                    if active_incident_exists:
+                        bookings_incident_affected += 1
+                        continue
+
                     try:
                         settle_booking_fault(
                             booking,
@@ -82,6 +107,8 @@ class Command(BaseCommand):
             status="confirmed",
             booking__status="no_show",
             refund_status__in=["not_requested", "failed"],
+            # A 50% refund must reach Paystack's KES 5 minimum.
+            amount__gte=Decimal("10.00"),
         )
 
         for payment in stuck_refunds:
@@ -101,6 +128,8 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Processed {trips_processed} departed trip(s), "
                 f"settled {bookings_settled} no-show booking(s), "
+                f"protected {bookings_incident_affected} "
+                f"incident-affected booking(s), "
                 f"expired {bookings_expired} abandoned pending booking(s), "
                 f"retried {refunds_retried} refund(s)."
             )

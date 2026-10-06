@@ -15,7 +15,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from bookings.models import Booking, Payment, BoardingEvent
+from bookings.models import Booking, Payment, BoardingEvent, Incident, BookingHold, IncidentResolution
 from companies.models import Company, Route, Trip
 from drivers.models import Driver
 from wallets.models import Wallet
@@ -71,6 +71,64 @@ class BookingsAppTests(APITestCase):
         except Exception:
             return reverse(fallback_name, kwargs=kwargs)
 
+    def test_active_incident_does_not_create_passenger_no_show(self):
+        from django.core.management import call_command
+
+        Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.driver.company.user
+            if getattr(self.driver.company, "user", None)
+            else None,
+            incident_type="breakdown",
+            description="Bus broke down before departure.",
+            status="reported",
+        )
+
+        self.passenger.no_show_count = 0
+        self.passenger.save(update_fields=["no_show_count"])
+
+        self.trip.departure_at = timezone.now() - timezone.timedelta(minutes=20)
+        self.trip.save(update_fields=["departure_at"])
+
+        call_command("process_noshows")
+
+        self.booking.refresh_from_db()
+        self.passenger.refresh_from_db()
+
+        self.assertEqual(
+            self.booking.status,
+            "confirmed",
+        )
+
+        self.assertEqual(
+            self.passenger.no_show_count,
+            0,
+        )
+
+    def test_departed_trip_without_incident_creates_passenger_no_show(self):
+        from django.core.management import call_command
+
+        self.passenger.no_show_count = 0
+        self.passenger.save(update_fields=["no_show_count"])
+
+        self.trip.departure_at = timezone.now() - timezone.timedelta(minutes=20)
+        self.trip.save(update_fields=["departure_at"])
+
+        call_command("process_noshows")
+
+        self.booking.refresh_from_db()
+        self.passenger.refresh_from_db()
+
+        self.assertEqual(
+            self.booking.status,
+            "no_show",
+        )
+
+        self.assertEqual(
+            self.passenger.no_show_count,
+            1,
+        )
+
     def test_list_user_bookings(self):
         self.client.force_authenticate(user=self.passenger)
         url = reverse("bookings:get-my-bookings")
@@ -99,6 +157,65 @@ class BookingsAppTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["booking_number"], "BK9999")
+
+    def test_booking_detail_company_staff_same_company(self):
+        company_user = User.objects.create_user(
+            username="company_auditor",
+            password="password123",
+            phone_number="+254700000010",
+            company=self.company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=company_user)
+
+        url = reverse(
+            "bookings:get-booking-detail",
+            kwargs={"booking_id": self.booking.id},
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_booking_detail_company_staff_other_company_forbidden(self):
+        other_company = Company.objects.create(
+            name="Other Company",
+        )
+
+        company_user = User.objects.create_user(
+            username="other_company_auditor",
+            password="password123",
+            phone_number="+254700000011",
+            company=other_company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=company_user)
+
+        url = reverse(
+            "bookings:get-booking-detail",
+            kwargs={"booking_id": self.booking.id},
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_booking_detail_other_passenger_forbidden(self):
+        other_passenger = User.objects.create_user(
+            username="other_passenger",
+            password="password123",
+            phone_number="+254700000012",
+        )
+
+        self.client.force_authenticate(user=other_passenger)
+
+        url = reverse(
+            "bookings:get-booking-detail",
+            kwargs={"booking_id": self.booking.id},
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_cancel_booking(self):
         self.client.force_authenticate(user=self.passenger)
@@ -192,6 +309,135 @@ class BookingsAppTests(APITestCase):
         self.booking.trip.refresh_from_db()
         self.assertEqual(self.booking.trip.driver, self.driver)
 
+    def test_assign_driver_by_company_manager(self):
+        manager = User.objects.create_user(
+            username="assignment_manager",
+            password="password123",
+            phone_number="+254700000020",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:assign-driver",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"driver_id": self.driver.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.driver, self.driver)
+
+    def test_assign_driver_by_company_operator(self):
+        operator = User.objects.create_user(
+            username="assignment_operator",
+            password="password123",
+            phone_number="+254700000021",
+            company=self.company,
+            role="company_operator",
+        )
+
+        self.client.force_authenticate(user=operator)
+
+        url = reverse(
+            "bookings:assign-driver",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"driver_id": self.driver.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.driver, self.driver)
+
+    def test_assign_driver_by_company_auditor_forbidden(self):
+        auditor = User.objects.create_user(
+            username="assignment_auditor",
+            password="password123",
+            phone_number="+254700000022",
+            company=self.company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=auditor)
+
+        url = reverse(
+            "bookings:assign-driver",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"driver_id": self.driver.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_assign_driver_by_passenger_forbidden(self):
+        passenger = User.objects.create_user(
+            username="assignment_passenger",
+            password="password123",
+            phone_number="+254700000023",
+        )
+
+        self.client.force_authenticate(user=passenger)
+
+        url = reverse(
+            "bookings:assign-driver",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"driver_id": self.driver.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_assign_driver_by_manager_from_other_company_forbidden(self):
+        other_company = Company.objects.create(
+            name="Other Assignment Company",
+            areas_served="Other Area",
+        )
+
+        manager = User.objects.create_user(
+            username="other_company_manager",
+            password="password123",
+            phone_number="+254700000024",
+            company=other_company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:assign-driver",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"driver_id": self.driver.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_verify_boarding_by_staff(self):
         operator_user = User.objects.create_user(
             username="operator_user",
@@ -248,6 +494,137 @@ class BookingsAppTests(APITestCase):
         self.booking.user.refresh_from_db()
         self.assertEqual(self.booking.user.boarded_count, 1)
 
+    def _prepare_boarding_test(self):
+        self.booking.status = "confirmed"
+        self.booking.verification_pin = "1234"
+        self.booking.save()
+
+        Payment.objects.create(
+            booking=self.booking,
+            provider_reference="BOARDING_ROLE_PAY",
+            amount=self.booking.total_amount,
+            method="digital",
+            status="confirmed",
+        )
+
+        return reverse(
+            "bookings:verify-boarding",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+    def test_verify_boarding_company_manager(self):
+        url = self._prepare_boarding_test()
+
+        manager = User.objects.create_user(
+            username="boarding_manager",
+            password="password123",
+            phone_number="+254700000060",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        response = self.client.post(
+            url,
+            {"boarding_pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_verify_boarding_company_operator(self):
+        url = self._prepare_boarding_test()
+
+        operator = User.objects.create_user(
+            username="boarding_operator",
+            password="password123",
+            phone_number="+254700000061",
+            company=self.company,
+            role="company_operator",
+        )
+
+        self.client.force_authenticate(user=operator)
+
+        response = self.client.post(
+            url,
+            {"boarding_pin": "1234"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_verify_boarding_company_auditor_forbidden(self):
+        url = self._prepare_boarding_test()
+
+        auditor = User.objects.create_user(
+            username="boarding_auditor",
+            password="password123",
+            phone_number="+254700000062",
+            company=self.company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=auditor)
+
+        response = self.client.post(
+            url,
+            {"boarding_pin": "1234"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_verify_boarding_other_company_manager_forbidden(self):
+        url = self._prepare_boarding_test()
+
+        other_company = Company.objects.create(
+            name="Other Boarding Company",
+            areas_served="Other Area",
+        )
+
+        manager = User.objects.create_user(
+            username="other_boarding_manager",
+            password="password123",
+            phone_number="+254700000063",
+            company=other_company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        response = self.client.post(
+            url,
+            {"boarding_pin": "1234"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_verify_boarding_random_staff_forbidden(self):
+        url = self._prepare_boarding_test()
+
+        staff_user = User.objects.create_user(
+            username="random_boarding_staff",
+            password="password123",
+            phone_number="+254700000064",
+            is_staff=True,
+        )
+
+        self.client.force_authenticate(user=staff_user)
+
+        response = self.client.post(
+            url,
+            {"boarding_pin": "1234"},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
     def test_update_passenger_location(self):
         self.client.force_authenticate(user=self.passenger)
         url = reverse("bookings:update-passenger-location", kwargs={"booking_id": self.booking.id})
@@ -261,13 +638,148 @@ class BookingsAppTests(APITestCase):
         response = self.client.post(url, {"minutes": 15}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_cancel_booking_company_fault(self):
-        staff_user = User.objects.create_user(
-            username="admin_staff",
+    def test_set_stage_departure_company_manager(self):
+        manager = User.objects.create_user(
+            username="stage_manager",
             password="password123",
+            phone_number="+254700000040",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:set-stage-departure",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"minutes": 15},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_set_stage_departure_company_operator(self):
+        operator = User.objects.create_user(
+            username="stage_operator",
+            password="password123",
+            phone_number="+254700000041",
+            company=self.company,
+            role="company_operator",
+        )
+
+        self.client.force_authenticate(user=operator)
+
+        url = reverse(
+            "bookings:set-stage-departure",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"minutes": 20},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_set_stage_departure_company_auditor_forbidden(self):
+        auditor = User.objects.create_user(
+            username="stage_auditor",
+            password="password123",
+            phone_number="+254700000042",
+            company=self.company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=auditor)
+
+        url = reverse(
+            "bookings:set-stage-departure",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"minutes": 20},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_set_stage_departure_other_company_manager_forbidden(self):
+        other_company = Company.objects.create(
+            name="Other Stage Company",
+            areas_served="Other Area",
+        )
+
+        manager = User.objects.create_user(
+            username="other_stage_manager",
+            password="password123",
+            phone_number="+254700000043",
+            company=other_company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:set-stage-departure",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"minutes": 20},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_set_stage_departure_random_staff_forbidden(self):
+        staff_user = User.objects.create_user(
+            username="random_stage_staff",
+            password="password123",
+            phone_number="+254700000044",
             is_staff=True,
         )
+
         self.client.force_authenticate(user=staff_user)
+
+        url = reverse(
+            "bookings:set-stage-departure",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"minutes": 20},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_cancel_booking_company_fault(self):
+        manager = User.objects.create_user(
+            username="company_cancel_manager",
+            password="password123",
+            phone_number="+254700000030",
+            company=self.company,
+            role="company_manager",
+        )
+        self.client.force_authenticate(user=manager)
 
         wallet, _ = Wallet.objects.get_or_create(user=self.booking.user)
         wallet.held_balance = self.booking.total_amount
@@ -284,6 +796,106 @@ class BookingsAppTests(APITestCase):
         url = reverse("bookings:cancel-booking", kwargs={"booking_id": self.booking.id})
         response = self.client.post(url, {"fault_party": "company"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_cancel_booking_company_operator(self):
+        operator = User.objects.create_user(
+            username="company_cancel_operator",
+            password="password123",
+            phone_number="+254700000031",
+            company=self.company,
+            role="company_operator",
+        )
+
+        self.client.force_authenticate(user=operator)
+
+        url = reverse(
+            "bookings:cancel-booking",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"fault_party": "company"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_cancel_booking_company_auditor_forbidden(self):
+        auditor = User.objects.create_user(
+            username="company_cancel_auditor",
+            password="password123",
+            phone_number="+254700000032",
+            company=self.company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=auditor)
+
+        url = reverse(
+            "bookings:cancel-booking",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"fault_party": "company"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cancel_booking_other_company_manager_forbidden(self):
+        other_company = Company.objects.create(
+            name="Other Cancellation Company",
+            areas_served="Other Area",
+        )
+
+        manager = User.objects.create_user(
+            username="other_cancel_manager",
+            password="password123",
+            phone_number="+254700000033",
+            company=other_company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:cancel-booking",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"fault_party": "company"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cancel_booking_random_staff_forbidden(self):
+        staff_user = User.objects.create_user(
+            username="random_staff",
+            password="password123",
+            phone_number="+254700000034",
+            is_staff=True,
+        )
+
+        self.client.force_authenticate(user=staff_user)
+
+        url = reverse(
+            "bookings:cancel-booking",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(
+            url,
+            {"fault_party": "company"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_resolve_url_fallback(self):
         resolved = self._resolve_url("bookings:non-existent-url", "bookings:get-my-bookings")
@@ -467,12 +1079,14 @@ class BookingsAppTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_confirm_cash_payment_wrong_method(self):
-        staff_user = User.objects.create_user(
-            username="cash_staff",
+        operator = User.objects.create_user(
+            username="cash_operator",
             password="password123",
-            is_staff=True,
+            phone_number="+254700000050",
+            company=self.company,
+            role="company_operator",
         )
-        self.client.force_authenticate(user=staff_user)
+        self.client.force_authenticate(user=operator)
 
         Payment.objects.create(
             booking=self.booking,
@@ -485,6 +1099,165 @@ class BookingsAppTests(APITestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_confirm_cash_payment_company_manager(self):
+        payment = Payment.objects.create(
+            booking=self.booking,
+            provider_reference="CASH_MANAGER",
+            amount=self.booking.total_amount,
+            method="cash",
+            status="pending",
+        )
+
+        manager = User.objects.create_user(
+            username="cash_manager",
+            password="password123",
+            phone_number="+254700000051",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:confirm-cash-payment",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, "confirmed")
+
+    def test_confirm_cash_payment_company_operator(self):
+        payment = Payment.objects.create(
+            booking=self.booking,
+            provider_reference="CASH_OPERATOR",
+            amount=self.booking.total_amount,
+            method="cash",
+            status="pending",
+        )
+
+        operator = User.objects.create_user(
+            username="cash_operator_valid",
+            password="password123",
+            phone_number="+254700000052",
+            company=self.company,
+            role="company_operator",
+        )
+
+        self.client.force_authenticate(user=operator)
+
+        url = reverse(
+            "bookings:confirm-cash-payment",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, "confirmed")
+
+    def test_confirm_cash_payment_company_auditor_forbidden(self):
+        Payment.objects.create(
+            booking=self.booking,
+            provider_reference="CASH_AUDITOR",
+            amount=self.booking.total_amount,
+            method="cash",
+            status="pending",
+        )
+
+        auditor = User.objects.create_user(
+            username="cash_auditor",
+            password="password123",
+            phone_number="+254700000053",
+            company=self.company,
+            role="company_auditor",
+        )
+
+        self.client.force_authenticate(user=auditor)
+
+        url = reverse(
+            "bookings:confirm-cash-payment",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_confirm_cash_payment_other_company_manager_forbidden(self):
+        Payment.objects.create(
+            booking=self.booking,
+            provider_reference="CASH_OTHER_COMPANY",
+            amount=self.booking.total_amount,
+            method="cash",
+            status="pending",
+        )
+
+        other_company = Company.objects.create(
+            name="Other Cash Company",
+            areas_served="Other Area",
+        )
+
+        manager = User.objects.create_user(
+            username="other_cash_manager",
+            password="password123",
+            phone_number="+254700000054",
+            company=other_company,
+            role="company_manager",
+        )
+
+        self.client.force_authenticate(user=manager)
+
+        url = reverse(
+            "bookings:confirm-cash-payment",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_confirm_cash_payment_random_staff_forbidden(self):
+        Payment.objects.create(
+            booking=self.booking,
+            provider_reference="CASH_RANDOM_STAFF",
+            amount=self.booking.total_amount,
+            method="cash",
+            status="pending",
+        )
+
+        staff_user = User.objects.create_user(
+            username="random_cash_staff",
+            password="password123",
+            phone_number="+254700000055",
+            is_staff=True,
+        )
+
+        self.client.force_authenticate(user=staff_user)
+
+        url = reverse(
+            "bookings:confirm-cash-payment",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+        response = self.client.post(url)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
     @patch("bookings.services.requests.post")
     def test_passenger_fault_requests_50_percent_paystack_refund(
         self,
@@ -496,6 +1269,12 @@ class BookingsAppTests(APITestCase):
             amount=Decimal("800.00"),
             method="digital",
             status="confirmed",
+        )
+
+        BookingHold.objects.create(
+            booking=self.booking,
+            amount=Decimal("800.00"),
+            status="held",
         )
 
         mock_post.return_value.status_code = 200
@@ -536,6 +1315,25 @@ class BookingsAppTests(APITestCase):
             "12345",
         )
 
+        hold = BookingHold.objects.get(
+            booking=self.booking,
+        )
+
+        self.assertEqual(
+            hold.amount,
+            Decimal("800.00"),
+        )
+
+        self.assertEqual(
+            hold.refunded_amount,
+            Decimal("400.00"),
+        )
+
+        self.assertEqual(
+            hold.status,
+            "held",
+        )
+
         mock_post.assert_called_once()
 
         call_kwargs = mock_post.call_args.kwargs
@@ -548,6 +1346,101 @@ class BookingsAppTests(APITestCase):
         self.assertEqual(
             call_kwargs["json"]["amount"],
             40000,
+        )
+
+
+    @patch("bookings.services.requests.post")
+    def test_company_fault_requests_full_paystack_refund(
+        self,
+        mock_post,
+    ):
+        payment = Payment.objects.create(
+            booking=self.booking,
+            provider_reference="PAYSTACK_REF_FULL_800",
+            amount=Decimal("800.00"),
+            method="digital",
+            status="confirmed",
+        )
+
+        BookingHold.objects.create(
+            booking=self.booking,
+            amount=Decimal("800.00"),
+            status="held",
+        )
+
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            "status": True,
+            "data": {
+                "id": 67890,
+                "status": "processed",
+            },
+        }
+
+        from bookings.services import settle_booking_fault
+
+        refund_amount = settle_booking_fault(
+            self.booking,
+            "company",
+        )
+
+        self.assertEqual(
+            refund_amount,
+            Decimal("800.00"),
+        )
+
+        payment.refresh_from_db()
+
+        self.assertEqual(
+            payment.refund_amount,
+            Decimal("800.00"),
+        )
+
+        self.assertEqual(
+            payment.refund_status,
+            "processed",
+        )
+
+        self.assertEqual(
+            payment.refund_reference,
+            "67890",
+        )
+
+        hold = BookingHold.objects.get(
+            booking=self.booking,
+        )
+
+        self.assertEqual(
+            hold.amount,
+            Decimal("800.00"),
+        )
+
+        self.assertEqual(
+            hold.refunded_amount,
+            Decimal("800.00"),
+        )
+
+        self.assertEqual(
+            hold.status,
+            "refunded",
+        )
+
+        self.assertIsNotNone(
+            hold.refunded_at,
+        )
+
+        mock_post.assert_called_once()
+
+        call_kwargs = mock_post.call_args.kwargs
+
+        self.assertEqual(
+            call_kwargs["json"]["transaction"],
+            "PAYSTACK_REF_FULL_800",
+        )
+
+        self.assertEqual(
+            call_kwargs["json"]["amount"],
+            80000,
         )
 
 
@@ -721,3 +1614,842 @@ class ConcurrentLastSeatTests(TransactionTestCase):
             .count()
         )
         self.assertEqual(successful_bookings, 1)
+
+
+class IncidentManagementTests(APITestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Incident Express",
+        )
+
+        self.other_company = Company.objects.create(
+            name="Other Incident Company",
+        )
+
+        self.passenger = User.objects.create_user(
+            username="incident_passenger",
+            password="password123",
+            phone_number="+254700001001",
+        )
+
+        self.manager = User.objects.create_user(
+            username="incident_manager",
+            password="password123",
+            phone_number="+254700001002",
+            role="company_manager",
+            company=self.company,
+        )
+
+        self.operator = User.objects.create_user(
+            username="incident_operator",
+            password="password123",
+            phone_number="+254700001003",
+            role="company_operator",
+            company=self.company,
+        )
+
+        self.auditor = User.objects.create_user(
+            username="incident_auditor",
+            password="password123",
+            phone_number="+254700001004",
+            role="company_auditor",
+            company=self.company,
+        )
+
+        self.other_manager = User.objects.create_user(
+            username="other_incident_manager",
+            password="password123",
+            phone_number="+254700001005",
+            role="company_manager",
+            company=self.other_company,
+        )
+
+        self.driver_user = User.objects.create_user(
+            username="incident_driver",
+            password="password123",
+            phone_number="+254711001001",
+            role="driver",
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Incident Driver",
+            phone_number="+254711001001",
+            bus_number="KXX 001X",
+        )
+
+        self.other_driver = Driver.objects.create(
+            company=self.other_company,
+            name="Other Incident Driver",
+            phone_number="+254711001002",
+            bus_number="KYY 002Y",
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="Incident Route",
+            start_point="CBD",
+            end_point="Rongai",
+            price=Decimal("500.00"),
+        )
+
+        self.other_route = Route.objects.create(
+            company=self.other_company,
+            name="Other Incident Route",
+            start_point="CBD",
+            end_point="Thika",
+            price=Decimal("600.00"),
+        )
+
+        self.trip = Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=3),
+            capacity=14,
+        )
+
+        self.other_trip = Trip.objects.create(
+            route=self.other_route,
+            driver=self.other_driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=3),
+            capacity=14,
+        )
+
+    def incident_list_url(self):
+        return reverse("bookings:incident-list")
+
+    def report_incident_url(self):
+        return reverse("bookings:report-incident")
+
+    def incident_detail_url(self, incident_id):
+        return reverse(
+            "bookings:incident-detail",
+            kwargs={"incident_id": incident_id},
+        )
+
+    def report_payload(self, trip_id=None):
+        return {
+            "trip_id": trip_id or self.trip.id,
+            "incident_type": "breakdown",
+            "description": "Bus broke down before departure.",
+        }
+
+    def test_company_manager_can_report_incident(self):
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertEqual(
+            response.data["trip"],
+            self.trip.id,
+        )
+        self.assertEqual(
+            response.data["reported_by"],
+            self.manager.id,
+        )
+
+        incident = Incident.objects.get(id=response.data["id"])
+        self.assertEqual(
+            incident.trip.route.company_id,
+            self.company.id,
+        )
+
+    def test_company_operator_can_report_incident(self):
+        self.client.force_authenticate(user=self.operator)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertEqual(
+            response.data["reported_by"],
+            self.operator.id,
+        )
+
+    def test_driver_can_report_incident_for_assigned_trip(self):
+        self.client.force_authenticate(user=self.driver_user)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+    def test_driver_cannot_report_incident_for_other_driver_trip(self):
+        self.client.force_authenticate(user=self.driver_user)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(self.other_trip.id),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_auditor_cannot_report_incident(self):
+        self.client.force_authenticate(user=self.auditor)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_passenger_cannot_report_incident(self):
+        self.client.force_authenticate(user=self.passenger)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_other_company_manager_cannot_report_incident(self):
+        self.client.force_authenticate(user=self.other_manager)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            self.report_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_company_staff_can_list_own_company_incidents(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.operator,
+            incident_type="road_blocked",
+            description="Road blocked near stage.",
+        )
+
+        self.client.force_authenticate(user=self.auditor)
+
+        response = self.client.get(
+            self.incident_list_url(),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            len(response.data),
+            1,
+        )
+        self.assertEqual(
+            response.data[0]["id"],
+            incident.id,
+        )
+
+    def test_company_staff_cannot_list_other_company_incidents(self):
+        Incident.objects.create(
+            trip=self.other_trip,
+            reported_by=self.other_manager,
+            incident_type="breakdown",
+            description="Other company breakdown.",
+        )
+
+        self.client.force_authenticate(user=self.auditor)
+
+        response = self.client.get(
+            self.incident_list_url(),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data,
+            [],
+        )
+
+    def test_other_company_manager_cannot_view_incident_detail(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.manager,
+            incident_type="accident",
+            description="Incident on company route.",
+        )
+
+        self.client.force_authenticate(user=self.other_manager)
+
+        response = self.client.get(
+            self.incident_detail_url(incident.id),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_driver_can_view_incident_for_assigned_trip(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.driver_user,
+            incident_type="breakdown",
+            description="Engine problem.",
+        )
+
+        self.client.force_authenticate(user=self.driver_user)
+
+        response = self.client.get(
+            self.incident_detail_url(incident.id),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data["id"],
+            incident.id,
+        )
+
+    def test_driver_cannot_view_incident_for_other_driver(self):
+        incident = Incident.objects.create(
+            trip=self.other_trip,
+            reported_by=self.other_manager,
+            incident_type="breakdown",
+            description="Other company's breakdown.",
+        )
+
+        self.client.force_authenticate(user=self.driver_user)
+
+        response = self.client.get(
+            self.incident_detail_url(incident.id),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_company_manager_can_update_incident(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.operator,
+            incident_type="breakdown",
+            description="Initial report.",
+        )
+
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.patch(
+            self.incident_detail_url(incident.id),
+            {
+                "status": "investigating",
+                "description": "Manager is investigating the breakdown.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data["status"],
+            "investigating",
+        )
+
+        incident.refresh_from_db()
+
+        self.assertEqual(
+            incident.status,
+            "investigating",
+        )
+        self.assertEqual(
+            incident.description,
+            "Manager is investigating the breakdown.",
+        )
+
+    def test_company_operator_cannot_update_incident(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.operator,
+            incident_type="breakdown",
+            description="Initial report.",
+        )
+
+        self.client.force_authenticate(user=self.operator)
+
+        response = self.client.patch(
+            self.incident_detail_url(incident.id),
+            {"status": "resolved"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_company_auditor_cannot_update_incident(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.operator,
+            incident_type="breakdown",
+            description="Initial report.",
+        )
+
+        self.client.force_authenticate(user=self.auditor)
+
+        response = self.client.patch(
+            self.incident_detail_url(incident.id),
+            {"status": "resolved"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_other_company_manager_cannot_update_incident(self):
+        incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.manager,
+            incident_type="breakdown",
+            description="Initial report.",
+        )
+
+        self.client.force_authenticate(user=self.other_manager)
+
+        response = self.client.patch(
+            self.incident_detail_url(incident.id),
+            {"status": "resolved"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        incident.refresh_from_db()
+
+        self.assertEqual(
+            incident.status,
+            "reported",
+        )
+
+    def test_passenger_cannot_view_incident_list(self):
+        self.client.force_authenticate(user=self.passenger)
+
+        response = self.client.get(
+            self.incident_list_url(),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_invalid_incident_type_rejected(self):
+        self.client.force_authenticate(user=self.operator)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            {
+                "trip_id": self.trip.id,
+                "incident_type": "fake_incident",
+                "description": "Invalid incident.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_missing_incident_description_rejected(self):
+        self.client.force_authenticate(user=self.operator)
+
+        response = self.client.post(
+            self.report_incident_url(),
+            {
+                "trip_id": self.trip.id,
+                "incident_type": "breakdown",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class IncidentResolutionTests(APITestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Resolution Express",
+        )
+
+        self.other_company = Company.objects.create(
+            name="Other Resolution Company",
+        )
+
+        self.passenger = User.objects.create_user(
+            username="resolution_passenger",
+            password="password123",
+            phone_number="+254700002001",
+        )
+
+        self.other_passenger = User.objects.create_user(
+            username="other_resolution_passenger",
+            password="password123",
+            phone_number="+254700002002",
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Resolution Driver",
+            phone_number="+254711002001",
+            bus_number="KZZ 001Z",
+        )
+
+        self.other_driver = Driver.objects.create(
+            company=self.company,
+            name="Replacement Driver",
+            phone_number="+254711002002",
+            bus_number="KZZ 002Z",
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="CBD - Rongai",
+            start_point="CBD",
+            end_point="Rongai",
+            price=Decimal("500.00"),
+        )
+
+        self.other_route = Route.objects.create(
+            company=self.company,
+            name="CBD - Thika",
+            start_point="CBD",
+            end_point="Thika",
+            price=Decimal("600.00"),
+        )
+
+        self.trip = Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=2),
+            capacity=14,
+        )
+
+        self.replacement_trip = Trip.objects.create(
+            route=self.route,
+            driver=self.other_driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=5),
+            capacity=14,
+        )
+
+        self.other_route_trip = Trip.objects.create(
+            route=self.other_route,
+            driver=self.other_driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=5),
+            capacity=14,
+        )
+
+        self.booking = Booking.objects.create(
+            user=self.passenger,
+            route=self.route,
+            trip=self.trip,
+            driver=self.driver,
+            pickup_location="CBD",
+            seats=2,
+            total_amount=Decimal("1000.00"),
+            status="confirmed",
+        )
+
+        self.incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.passenger,
+            incident_type="breakdown",
+            description="Vehicle broke down before departure.",
+            status="reported",
+        )
+
+        self.payment = Payment.objects.create(
+            booking=self.booking,
+            provider_reference="RESOLUTION-PAY-001",
+            amount=Decimal("1000.00"),
+            method="digital",
+            status="confirmed",
+        )
+
+        self.hold = BookingHold.objects.create(
+            booking=self.booking,
+            amount=Decimal("1000.00"),
+            status="held",
+        )
+
+    def resolve_url(self):
+        return reverse(
+            "bookings:resolve-incident-booking",
+            kwargs={"booking_id": self.booking.id},
+        )
+
+    def test_passenger_can_reschedule_without_second_payment(self):
+        self.client.force_authenticate(user=self.passenger)
+
+        booking_id = self.booking.id
+        booking_number = self.booking.booking_number
+        payment_id = self.payment.id
+        hold_id = self.hold.id
+
+        response = self.client.post(
+            self.resolve_url(),
+            {
+                "resolution": "reschedule",
+                "replacement_trip_id": self.replacement_trip.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.booking.refresh_from_db()
+        self.payment.refresh_from_db()
+        self.hold.refresh_from_db()
+
+        self.assertEqual(self.booking.id, booking_id)
+        self.assertEqual(self.booking.booking_number, booking_number)
+        self.assertEqual(self.booking.trip_id, self.replacement_trip.id)
+        self.assertEqual(self.booking.driver_id, self.other_driver.id)
+        self.assertEqual(self.booking.status, "confirmed")
+
+        self.assertEqual(self.payment.id, payment_id)
+        self.assertEqual(self.payment.amount, Decimal("1000.00"))
+        self.assertEqual(self.payment.status, "confirmed")
+
+        self.assertEqual(self.hold.id, hold_id)
+        self.assertEqual(self.hold.amount, Decimal("1000.00"))
+        self.assertEqual(self.hold.status, "held")
+
+        self.assertEqual(
+            Booking.objects.filter(
+                user=self.passenger
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            Payment.objects.filter(
+                booking=self.booking
+            ).count(),
+            1,
+        )
+
+        resolution = IncidentResolution.objects.get(
+            booking=self.booking
+        )
+
+        self.assertEqual(resolution.resolution, "reschedule")
+        self.assertEqual(resolution.status, "completed")
+        self.assertEqual(
+            resolution.replacement_trip_id,
+            self.replacement_trip.id,
+        )
+
+        self.assertTrue(
+            response.data["payment_unchanged"]
+        )
+
+    def test_reschedule_rejects_different_route(self):
+        self.client.force_authenticate(user=self.passenger)
+
+        response = self.client.post(
+            self.resolve_url(),
+            {
+                "resolution": "reschedule",
+                "replacement_trip_id": self.other_route_trip.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.booking.refresh_from_db()
+
+        self.assertEqual(
+            self.booking.trip_id,
+            self.trip.id,
+        )
+
+        self.assertFalse(
+            IncidentResolution.objects.filter(
+                booking=self.booking
+            ).exists()
+        )
+
+    def test_passenger_can_request_full_incident_refund_for_cash_payment(self):
+        self.payment.delete()
+
+        payment = Payment.objects.create(
+            booking=self.booking,
+            provider_reference="CASH-RESOLUTION-001",
+            amount=Decimal("1000.00"),
+            method="cash",
+            status="confirmed",
+        )
+
+        self.client.force_authenticate(user=self.passenger)
+
+        response = self.client.post(
+            self.resolve_url(),
+            {
+                "resolution": "refund",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.booking.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(
+            self.booking.status,
+            "cancelled",
+        )
+
+        self.assertEqual(
+            response.data["refund_amount"],
+            "1000.00",
+        )
+
+        self.assertEqual(
+            payment.refund_amount,
+            Decimal("1000.00"),
+        )
+
+        resolution = IncidentResolution.objects.get(
+            booking=self.booking
+        )
+
+        self.assertEqual(
+            resolution.resolution,
+            "refund",
+        )
+        self.assertEqual(
+            resolution.status,
+            "completed",
+        )
+        self.assertEqual(
+            resolution.refund_amount,
+            Decimal("1000.00"),
+        )
+
+    def test_passenger_cannot_resolve_someone_elses_booking(self):
+        self.booking.user = self.other_passenger
+        self.booking.save(update_fields=["user"])
+
+        self.client.force_authenticate(user=self.passenger)
+
+        response = self.client.post(
+            self.resolve_url(),
+            {
+                "resolution": "reschedule",
+                "replacement_trip_id": self.replacement_trip.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        self.assertFalse(
+            IncidentResolution.objects.filter(
+                booking=self.booking
+            ).exists()
+        )
+
+    def test_cannot_resolve_same_booking_twice(self):
+        self.client.force_authenticate(user=self.passenger)
+
+        first_response = self.client.post(
+            self.resolve_url(),
+            {
+                "resolution": "reschedule",
+                "replacement_trip_id": self.replacement_trip.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            first_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        second_response = self.client.post(
+            self.resolve_url(),
+            {
+                "resolution": "reschedule",
+                "replacement_trip_id": self.trip.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            second_response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertEqual(
+            IncidentResolution.objects.filter(
+                booking=self.booking
+            ).count(),
+            1,
+        )

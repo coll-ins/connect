@@ -1,0 +1,1647 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Activity,
+  BarChart3,
+  Bus,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  DollarSign,
+  Gauge,
+  LayoutDashboard,
+  LogOut,
+  Plus,
+  RefreshCw,
+  Route,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { apiRequest } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+
+const money = (value) =>
+  `KES ${Number(value || 0).toLocaleString('en-KE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const date = (value) =>
+  value
+    ? new Date(value).toLocaleString('en-KE', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+
+const list = (value) =>
+  Array.isArray(value)
+    ? value
+    : value?.results || value?.data || [];
+
+const emptyRoute = {
+  name: '',
+  start_point: '',
+  end_point: '',
+  price: '',
+  company_id: '',
+};
+
+const emptyDriver = {
+  name: '',
+  phone_number: '',
+  bus_number: '',
+  company: '',
+};
+
+const emptyTrip = {
+  route_id: '',
+  driver_id: '',
+  departure_at: '',
+  capacity: 14,
+  company_id: '',
+};
+
+function SideLink({ to, icon: Icon, children, end = false }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `pa-link ${isActive ? 'active' : ''}`
+      }
+    >
+      <Icon size={18} />
+      <span>{children}</span>
+    </NavLink>
+  );
+}
+
+function PlatformShell({ user, logout, children }) {
+  return (
+    <div className="pa-shell">
+      <aside className="pa-sidebar">
+        <div className="pa-brand">
+          <div className="pa-brand-mark">C</div>
+          <div>
+            <strong>CONNECT</strong>
+            <small>Platform Control</small>
+          </div>
+        </div>
+
+        <div className="pa-admin-card">
+          <div className="pa-admin-icon">
+            <ShieldCheck size={18} />
+          </div>
+          <div>
+            <strong>Platform Admin</strong>
+            <span>Global access</span>
+          </div>
+        </div>
+
+        <nav className="pa-nav">
+          <p className="pa-nav-label">CONTROL</p>
+
+          <SideLink to="/platform-admin" icon={LayoutDashboard} end>
+            Overview
+          </SideLink>
+
+          <SideLink to="/platform-admin/companies" icon={Building2}>
+            Companies
+          </SideLink>
+
+          <SideLink to="/platform-admin/routes" icon={Route}>
+            Routes
+          </SideLink>
+
+          <SideLink to="/platform-admin/trips" icon={CalendarDays}>
+            Trips
+          </SideLink>
+
+          <SideLink to="/platform-admin/drivers" icon={Bus}>
+            Drivers
+          </SideLink>
+
+          <SideLink to="/platform-admin/operators" icon={Users}>
+            Operators
+          </SideLink>
+
+          <SideLink to="/platform-admin/bookings" icon={ClipboardList}>
+            Bookings
+          </SideLink>
+
+          <p className="pa-nav-label">INSIGHTS</p>
+
+          <SideLink to="/platform-admin/users" icon={UserRound}>
+            Users
+          </SideLink>
+
+          <SideLink to="/platform-admin/reports" icon={BarChart3}>
+            Reports
+          </SideLink>
+
+          <SideLink to="/platform-admin/revenue" icon={DollarSign}>
+            Revenue
+          </SideLink>
+
+          <p className="pa-nav-label">SYSTEM</p>
+
+          <SideLink to="/platform-admin/settings" icon={Settings}>
+            Settings
+          </SideLink>
+        </nav>
+
+        <button className="pa-logout" onClick={logout}>
+          <LogOut size={18} />
+          Logout
+        </button>
+      </aside>
+
+      <div className="pa-main">
+        <header className="pa-topbar">
+          <div>
+            <span className="pa-overline">GLOBAL OPERATIONS</span>
+            <h2>Platform administration</h2>
+          </div>
+
+          <div className="pa-user">
+            <div className="pa-avatar">
+              {(user?.username || 'A').slice(0, 1).toUpperCase()}
+            </div>
+            <div>
+              <strong>{user?.username || 'Administrator'}</strong>
+              <span>Platform Admin</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="pa-content">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div className="pa-modal-backdrop">
+      <div className="pa-modal">
+        <div className="pa-modal-head">
+          <div>
+            <span className="pa-overline">PLATFORM ACTION</span>
+            <h3>{title}</h3>
+          </div>
+
+          <button className="pa-icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, detail }) {
+  return (
+    <div className="pa-stat">
+      <div className="pa-stat-icon">
+        <Icon size={20} />
+      </div>
+
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        {detail && <small>{detail}</small>}
+      </div>
+    </div>
+  );
+}
+
+export default function PlatformAdminDashboard() {
+  const { user, logout } = useAuth();
+
+const location = useLocation();
+
+const section =
+  location.pathname
+    .replace('/platform-admin', '')
+    .split('/')
+    .filter(Boolean)[0] || 'overview';
+    
+  const [companies, setCompanies] = useState([]);
+  const [routes, setRoutes] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [bookings, setBookings] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const [routeForm, setRouteForm] = useState(emptyRoute);
+  const [driverForm, setDriverForm] = useState(emptyDriver);
+  const [tripForm, setTripForm] = useState(emptyTrip);
+
+  const [editingRoute, setEditingRoute] = useState(null);
+  const [editingDriver, setEditingDriver] = useState(null);
+
+  const [showRouteForm, setShowRouteForm] = useState(false);
+  const [showDriverForm, setShowDriverForm] = useState(false);
+  const [showTripForm, setShowTripForm] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+
+  const clearMessages = () => {
+    setError('');
+    setSuccess('');
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const [
+        companiesData,
+        routesData,
+        driversData,
+        tripsData,
+        bookingsData,
+      ] = await Promise.all([
+        apiRequest('/companies/'),
+        apiRequest('/companies/routes/'),
+        apiRequest('/drivers/'),
+        apiRequest('/companies/trips/'),
+        apiRequest('/bookings/all/'),
+      ]);
+
+      setCompanies(list(companiesData));
+      setRoutes(list(routesData));
+      setDrivers(list(driversData));
+      setTrips(list(tripsData));
+      setBookings(list(bookingsData));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const companyMap = useMemo(
+    () =>
+      Object.fromEntries(
+        companies.map((company) => [company.id, company])
+      ),
+    [companies]
+  );
+
+  const companyName = (id) =>
+    companyMap[id]?.name || `Company #${id || '—'}`;
+
+  const openCreateRoute = () => {
+    clearMessages();
+    setEditingRoute(null);
+    setRouteForm(emptyRoute);
+    setShowRouteForm(true);
+  };
+
+  const openEditRoute = (route) => {
+    clearMessages();
+    setEditingRoute(route);
+    setRouteForm({
+      name: route.name || '',
+      start_point: route.start_point || '',
+      end_point: route.end_point || '',
+      price: route.price || '',
+      company_id: route.company || route.company_id || '',
+    });
+    setShowRouteForm(true);
+  };
+
+  const saveRoute = async (event) => {
+    event.preventDefault();
+    clearMessages();
+    setSaving(true);
+
+    try {
+      if (editingRoute) {
+        await apiRequest(
+          `/companies/routes/${editingRoute.id}/`,
+          {
+            method: 'PATCH',
+            body: {
+              name: routeForm.name,
+              start_point: routeForm.start_point,
+              end_point: routeForm.end_point,
+              price: Number(routeForm.price),
+            },
+          }
+        );
+
+        setSuccess('Route updated successfully.');
+      } else {
+        await apiRequest('/companies/routes/create/', {
+          method: 'POST',
+          body: {
+            company_id: Number(routeForm.company_id),
+            name: routeForm.name,
+            start_point: routeForm.start_point,
+            end_point: routeForm.end_point,
+            price: Number(routeForm.price),
+          },
+        });
+
+        setSuccess('Route created successfully.');
+      }
+
+      setShowRouteForm(false);
+      setEditingRoute(null);
+      setRouteForm(emptyRoute);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteRoute = async (route) => {
+    if (!window.confirm(`Delete route "${route.name}"?`)) {
+      return;
+    }
+
+    clearMessages();
+
+    try {
+      await apiRequest(`/companies/routes/${route.id}/`, {
+        method: 'DELETE',
+      });
+
+      setSuccess('Route deleted successfully.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openCreateDriver = () => {
+    clearMessages();
+    setEditingDriver(null);
+    setDriverForm(emptyDriver);
+    setShowDriverForm(true);
+  };
+
+  const openEditDriver = (driver) => {
+    clearMessages();
+    setEditingDriver(driver);
+
+    setDriverForm({
+      name: driver.name || '',
+      phone_number: driver.phone_number || '',
+      bus_number: driver.bus_number || '',
+      company: driver.company || '',
+    });
+
+    setShowDriverForm(true);
+  };
+
+  const saveDriver = async (event) => {
+    event.preventDefault();
+    clearMessages();
+    setSaving(true);
+
+    try {
+      if (editingDriver) {
+        await apiRequest(
+          `/drivers/${editingDriver.id}/`,
+          {
+            method: 'PATCH',
+            body: {
+              name: driverForm.name,
+              phone_number: driverForm.phone_number,
+              bus_number: driverForm.bus_number,
+            },
+          }
+        );
+
+        setSuccess('Driver updated successfully.');
+      } else {
+        await apiRequest('/drivers/', {
+          method: 'POST',
+          body: {
+            name: driverForm.name,
+            phone_number: driverForm.phone_number,
+            bus_number: driverForm.bus_number,
+            company: Number(driverForm.company),
+          },
+        });
+
+        setSuccess('Driver added successfully.');
+      }
+
+      setShowDriverForm(false);
+      setEditingDriver(null);
+      setDriverForm(emptyDriver);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteDriver = async (driver) => {
+    if (!window.confirm(`Delete driver "${driver.name}"?`)) {
+      return;
+    }
+
+    clearMessages();
+
+    try {
+      await apiRequest(`/drivers/${driver.id}/`, {
+        method: 'DELETE',
+      });
+
+      setSuccess('Driver deleted successfully.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const createTrip = async (event) => {
+    event.preventDefault();
+    clearMessages();
+    setSaving(true);
+
+    try {
+      const selectedRoute = routes.find(
+        (route) => String(route.id) === String(tripForm.route_id)
+      );
+
+      const companyId =
+        tripForm.company_id ||
+        selectedRoute?.company ||
+        selectedRoute?.company_id;
+
+      if (!companyId) {
+        throw new Error('Select a company for the trip.');
+      }
+
+      await apiRequest('/companies/trips/create/', {
+        method: 'POST',
+        body: {
+          company_id: Number(companyId),
+          route_id: Number(tripForm.route_id),
+          driver_id: Number(tripForm.driver_id),
+          departure_at: new Date(
+            tripForm.departure_at
+          ).toISOString(),
+          capacity: Number(tripForm.capacity),
+        },
+      });
+
+      setSuccess('Trip created successfully.');
+      setShowTripForm(false);
+      setTripForm(emptyTrip);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateTripStatus = async (trip, status) => {
+    clearMessages();
+
+    try {
+      await apiRequest(
+        `/companies/trips/${trip.id}/status/`,
+        {
+          method: 'POST',
+          body: { status },
+        }
+      );
+
+      setSuccess('Trip status updated.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const assignDriver = async (bookingId, driverId) => {
+    if (!driverId) {
+      return;
+    }
+
+    clearMessages();
+
+    try {
+      await apiRequest(
+        `/bookings/${bookingId}/assign-driver/`,
+        {
+          method: 'POST',
+          body: {
+            driver_id: Number(driverId),
+          },
+        }
+      );
+
+      setSuccess('Driver assigned successfully.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const activeBookings = bookings.filter(
+    (booking) =>
+      !['completed', 'cancelled'].includes(
+        String(booking.status || '').toLowerCase()
+      )
+  );
+
+  const revenue = bookings.reduce(
+    (total, booking) =>
+      total + Number(
+        booking.total_amount ||
+        booking.amount ||
+        0
+      ),
+    0
+  );
+
+  const pageTitle = {
+    overview: 'Global overview',
+    companies: 'Companies',
+    routes: 'Routes',
+    trips: 'Trips',
+    drivers: 'Drivers',
+    bookings: 'Bookings',
+    revenue: 'Revenue',
+  }[section];
+
+  return (
+    <PlatformShell user={user} logout={logout}>
+      <div className="pa-page-head">
+        <div>
+          <span className="pa-overline">
+            PLATFORM ADMINISTRATION
+          </span>
+          <h1>{pageTitle}</h1>
+          <p>
+            Global access across every CONNECT company and operation.
+          </p>
+        </div>
+
+        <button
+          className="pa-button secondary"
+          onClick={load}
+          disabled={loading}
+        >
+          <RefreshCw size={17} />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="pa-alert error">
+          <span>{error}</span>
+          <button onClick={() => setError('')}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {success && (
+        <div className="pa-alert success">
+          <CheckCircle2 size={17} />
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="pa-loading">
+          <RefreshCw className="spin" size={22} />
+          Loading global platform data...
+        </div>
+      ) : (
+        <>
+          {section === 'overview' && (
+            <>
+              <div className="pa-stat-grid">
+                <StatCard
+                  icon={Building2}
+                  label="Companies"
+                  value={companies.length}
+                  detail="Registered operators"
+                />
+
+                <StatCard
+                  icon={Route}
+                  label="Routes"
+                  value={routes.length}
+                  detail="Network routes"
+                />
+
+                <StatCard
+                  icon={CalendarDays}
+                  label="Trips"
+                  value={trips.length}
+                  detail="All departures"
+                />
+
+                <StatCard
+                  icon={Bus}
+                  label="Drivers"
+                  value={drivers.length}
+                  detail="All operators"
+                />
+
+                <StatCard
+                  icon={ClipboardList}
+                  label="Bookings"
+                  value={bookings.length}
+                  detail="Global bookings"
+                />
+
+                <StatCard
+                  icon={DollarSign}
+                  label="Booking value"
+                  value={money(revenue)}
+                  detail="Across loaded bookings"
+                />
+              </div>
+
+              <div className="pa-quick-grid">
+                <button
+                  className="pa-action-card"
+                  onClick={openCreateRoute}
+                >
+                  <Route size={22} />
+                  <strong>Create route</strong>
+                  <span>Add a route to any company</span>
+                  <ChevronRight size={17} />
+                </button>
+
+                <button
+                  className="pa-action-card"
+                  onClick={openCreateDriver}
+                >
+                  <Bus size={22} />
+                  <strong>Add driver</strong>
+                  <span>Register a company driver</span>
+                  <ChevronRight size={17} />
+                </button>
+
+                <button
+                  className="pa-action-card"
+                  onClick={() => {
+                    setSection('trips');
+                    setShowTripForm(true);
+                  }}
+                >
+                  <CalendarDays size={22} />
+                  <strong>Create trip</strong>
+                  <span>Schedule a company departure</span>
+                  <ChevronRight size={17} />
+                </button>
+              </div>
+
+              <div className="pa-grid-2">
+                <div className="pa-panel">
+                  <div className="pa-panel-head">
+                    <div>
+                      <span className="pa-overline">
+                        NETWORK
+                      </span>
+                      <h3>Companies</h3>
+                    </div>
+
+                    <span className="pa-count">
+                      {companies.length}
+                    </span>
+                  </div>
+
+                  <div className="pa-company-list">
+                    {companies.slice(0, 8).map((company) => (
+                      <div
+                        className="pa-company-row"
+                        key={company.id}
+                      >
+                        <div className="pa-company-avatar">
+                          {(company.name || 'C')
+                            .slice(0, 1)
+                            .toUpperCase()}
+                        </div>
+
+                        <div>
+                          <strong>{company.name}</strong>
+                          <span>
+                            {company.areas_served || 'Transport operator'}
+                          </span>
+                        </div>
+
+                        <span className="pa-company-id">
+                          #{company.id}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pa-panel">
+                  <div className="pa-panel-head">
+                    <div>
+                      <span className="pa-overline">
+                        OPERATIONS
+                      </span>
+                      <h3>Latest trips</h3>
+                    </div>
+                  </div>
+
+                  <div className="pa-trip-list">
+                    {trips.slice(0, 7).map((trip) => (
+                      <div className="pa-trip-row" key={trip.id}>
+                        <div>
+                          <strong>
+                            {trip.route_details?.name ||
+                              trip.route_name ||
+                              'Route'}
+                          </strong>
+
+                          <span>
+                            {trip.company_name ||
+                              companyName(
+                                trip.route_details?.company
+                              )}
+                          </span>
+                        </div>
+
+                        <div className="pa-trip-meta">
+                          <span>
+                            {date(trip.departure_at)}
+                          </span>
+                          <span className="pa-badge">
+                            {trip.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {section === 'companies' && (
+            <div className="pa-panel">
+              <div className="pa-panel-head">
+                <div>
+                  <span className="pa-overline">
+                    GLOBAL NETWORK
+                  </span>
+                  <h3>All companies</h3>
+                </div>
+              </div>
+
+              <div className="pa-company-grid">
+                {companies.map((company) => (
+                  <div className="pa-company-card" key={company.id}>
+                    <div className="pa-company-avatar large">
+                      {(company.name || 'C')
+                        .slice(0, 1)
+                        .toUpperCase()}
+                    </div>
+
+                    <div>
+                      <h3>{company.name}</h3>
+                      <p>
+                        {company.description ||
+                          'Transport operator'}
+                      </p>
+                      <span>
+                        {company.areas_served || '—'}
+                      </span>
+                    </div>
+
+                    <div className="pa-company-footer">
+                      Company #{company.id}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pa-info-box">
+                Company creation/editing requires a dedicated backend
+                endpoint. The existing backend currently exposes global
+                company listing but not company mutation.
+              </div>
+            </div>
+          )}
+
+          {section === 'routes' && (
+            <div className="pa-panel">
+              <div className="pa-panel-head">
+                <div>
+                  <span className="pa-overline">
+                    GLOBAL NETWORK
+                  </span>
+                  <h3>Routes</h3>
+                </div>
+
+                <button
+                  className="pa-button primary"
+                  onClick={openCreateRoute}
+                >
+                  <Plus size={17} />
+                  Create route
+                </button>
+              </div>
+
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Route</th>
+                      <th>Company</th>
+                      <th>Price</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {routes.map((route) => (
+                      <tr key={route.id}>
+                        <td>
+                          <strong>{route.name}</strong>
+                          <small>
+                            {route.start_point} → {route.end_point}
+                          </small>
+                        </td>
+
+                        <td>
+                          {companyName(
+                            route.company ||
+                              route.company_id
+                          )}
+                        </td>
+
+                        <td>
+                          {money(route.price)}
+                        </td>
+
+                        <td>
+                          <div className="pa-row-actions">
+                            <button
+                              className="pa-small-button"
+                              onClick={() =>
+                                openEditRoute(route)
+                              }
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              className="pa-small-button danger"
+                              onClick={() =>
+                                deleteRoute(route)
+                              }
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {section === 'drivers' && (
+            <div className="pa-panel">
+              <div className="pa-panel-head">
+                <div>
+                  <span className="pa-overline">
+                    FLEET MANAGEMENT
+                  </span>
+                  <h3>Drivers</h3>
+                </div>
+
+                <button
+                  className="pa-button primary"
+                  onClick={openCreateDriver}
+                >
+                  <Plus size={17} />
+                  Add driver
+                </button>
+              </div>
+
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Driver</th>
+                      <th>Bus</th>
+                      <th>Company</th>
+                      <th>Availability</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {drivers.map((driver) => (
+                      <tr key={driver.id}>
+                        <td>
+                          <strong>{driver.name}</strong>
+                          <small>{driver.phone_number}</small>
+                        </td>
+
+                        <td>{driver.bus_number}</td>
+
+                        <td>
+                          {driver.company_name ||
+                            companyName(driver.company)}
+                        </td>
+
+                        <td>
+                          <span className="pa-badge">
+                            {driver.is_available
+                              ? 'Available'
+                              : 'Unavailable'}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div className="pa-row-actions">
+                            <button
+                              className="pa-small-button"
+                              onClick={() =>
+                                openEditDriver(driver)
+                              }
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              className="pa-small-button danger"
+                              onClick={() =>
+                                deleteDriver(driver)
+                              }
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {section === 'trips' && (
+            <div className="pa-panel">
+              <div className="pa-panel-head">
+                <div>
+                  <span className="pa-overline">
+                    GLOBAL OPERATIONS
+                  </span>
+                  <h3>Trips</h3>
+                </div>
+
+                <button
+                  className="pa-button primary"
+                  onClick={() => {
+                    clearMessages();
+                    setTripForm(emptyTrip);
+                    setShowTripForm(true);
+                  }}
+                >
+                  <Plus size={17} />
+                  Create trip
+                </button>
+              </div>
+
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Route</th>
+                      <th>Company</th>
+                      <th>Departure</th>
+                      <th>Driver</th>
+                      <th>Capacity</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {trips.map((trip) => (
+                      <tr key={trip.id}>
+                        <td>
+                          <strong>
+                            {trip.route_details?.name ||
+                              trip.route_name ||
+                              'Route'}
+                          </strong>
+                        </td>
+
+                        <td>
+                          {trip.company_name ||
+                            companyName(
+                              trip.route_details?.company
+                            )}
+                        </td>
+
+                        <td>
+                          {date(trip.departure_at)}
+                        </td>
+
+                        <td>
+                          {trip.driver_name || 'Unassigned'}
+                        </td>
+
+                        <td>{trip.capacity || '—'}</td>
+
+                        <td>
+                          <select
+                            className="pa-select compact"
+                            value={trip.status || 'scheduled'}
+                            onChange={(event) =>
+                              updateTripStatus(
+                                trip,
+                                event.target.value
+                              )
+                            }
+                          >
+                            <option value="scheduled">
+                              Scheduled
+                            </option>
+                            <option value="boarding">
+                              Boarding
+                            </option>
+                            <option value="departed">
+                              Departed
+                            </option>
+                            <option value="completed">
+                              Completed
+                            </option>
+                            <option value="cancelled">
+                              Cancelled
+                            </option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {section === 'bookings' && (
+            <div className="pa-panel">
+              <div className="pa-panel-head">
+                <div>
+                  <span className="pa-overline">
+                    GLOBAL BOOKINGS
+                  </span>
+                  <h3>Bookings</h3>
+                </div>
+              </div>
+
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Booking</th>
+                      <th>Passenger</th>
+                      <th>Company</th>
+                      <th>Amount</th>
+                      <th>Payment</th>
+                      <th>Driver</th>
+                      <th>Assign</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {bookings.map((booking) => (
+                      <tr key={booking.booking_id}>
+                        <td>
+                          <strong>
+                            {booking.booking_number}
+                          </strong>
+                        </td>
+
+                        <td>
+                          {booking.user}
+                          <small>
+                            {booking.user_phone}
+                          </small>
+                        </td>
+
+                        <td>{booking.company_name || '—'}</td>
+
+                        <td>
+                          {money(booking.total_amount)}
+                        </td>
+
+                        <td>
+                          {booking.payment_status || '—'}
+                        </td>
+
+                        <td>
+                          {booking.driver_name ||
+                            'Unassigned'}
+                        </td>
+
+                        <td>
+                          <select
+                            className="pa-select compact"
+                            defaultValue=""
+                            onChange={(event) =>
+                              assignDriver(
+                                booking.booking_id,
+                                event.target.value
+                              )
+                            }
+                          >
+                            <option value="">
+                              Assign driver
+                            </option>
+
+                            {drivers
+                              .filter(
+                                (driver) =>
+                                  !booking.company_id ||
+                                  String(driver.company) ===
+                                    String(booking.company_id)
+                              )
+                              .map((driver) => (
+                                <option
+                                  key={driver.id}
+                                  value={driver.id}
+                                >
+                                  {driver.name}
+                                </option>
+                              ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {section === 'revenue' && (
+            <div className="pa-grid-2">
+              <div className="pa-panel">
+                <div className="pa-panel-head">
+                  <div>
+                    <span className="pa-overline">
+                      GLOBAL FINANCIAL VIEW
+                    </span>
+                    <h3>Revenue overview</h3>
+                  </div>
+                </div>
+
+                <div className="pa-revenue-number">
+                  {money(revenue)}
+                </div>
+
+                <p className="pa-muted">
+                  Booking value represented by the currently
+                  loaded global booking records.
+                </p>
+              </div>
+
+              <div className="pa-panel">
+                <div className="pa-panel-head">
+                  <div>
+                    <span className="pa-overline">
+                      ACTIVITY
+                    </span>
+                    <h3>Booking activity</h3>
+                  </div>
+                </div>
+
+                <div className="pa-mini-stats">
+                  <div>
+                    <span>Total bookings</span>
+                    <strong>{bookings.length}</strong>
+                  </div>
+
+                  <div>
+                    <span>Active</span>
+                    <strong>{activeBookings.length}</strong>
+                  </div>
+
+                  <div>
+                    <span>Companies</span>
+                    <strong>{companies.length}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {showRouteForm && (
+        <Modal
+          title={
+            editingRoute
+              ? 'Edit route'
+              : 'Create route'
+          }
+          onClose={() => setShowRouteForm(false)}
+        >
+          <form className="pa-form" onSubmit={saveRoute}>
+            {!editingRoute && (
+              <label>
+                Company
+                <select
+                  className="pa-select"
+                  value={routeForm.company_id}
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      company_id: event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select company
+                  </option>
+
+                  {companies.map((company) => (
+                    <option
+                      key={company.id}
+                      value={company.id}
+                    >
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <label>
+              Route name
+              <input
+                className="pa-input"
+                value={routeForm.name}
+                onChange={(event) =>
+                  setRouteForm({
+                    ...routeForm,
+                    name: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <div className="pa-form-grid">
+              <label>
+                Start point
+                <input
+                  className="pa-input"
+                  value={routeForm.start_point}
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      start_point: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                End point
+                <input
+                  className="pa-input"
+                  value={routeForm.end_point}
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      end_point: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </label>
+            </div>
+
+            <label>
+              Price
+              <input
+                className="pa-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={routeForm.price}
+                onChange={(event) =>
+                  setRouteForm({
+                    ...routeForm,
+                    price: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <button
+              className="pa-button primary full"
+              type="submit"
+              disabled={saving}
+            >
+              {saving
+                ? 'Saving...'
+                : editingRoute
+                  ? 'Save changes'
+                  : 'Create route'}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {showDriverForm && (
+        <Modal
+          title={
+            editingDriver
+              ? 'Edit driver'
+              : 'Add driver'
+          }
+          onClose={() => setShowDriverForm(false)}
+        >
+          <form className="pa-form" onSubmit={saveDriver}>
+            {!editingDriver && (
+              <label>
+                Company
+                <select
+                  className="pa-select"
+                  value={driverForm.company}
+                  onChange={(event) =>
+                    setDriverForm({
+                      ...driverForm,
+                      company: event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select company
+                  </option>
+
+                  {companies.map((company) => (
+                    <option
+                      key={company.id}
+                      value={company.id}
+                    >
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <label>
+              Driver name
+              <input
+                className="pa-input"
+                value={driverForm.name}
+                onChange={(event) =>
+                  setDriverForm({
+                    ...driverForm,
+                    name: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <label>
+              Phone number
+              <input
+                className="pa-input"
+                value={driverForm.phone_number}
+                onChange={(event) =>
+                  setDriverForm({
+                    ...driverForm,
+                    phone_number: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <label>
+              Bus number
+              <input
+                className="pa-input"
+                value={driverForm.bus_number}
+                onChange={(event) =>
+                  setDriverForm({
+                    ...driverForm,
+                    bus_number: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <button
+              className="pa-button primary full"
+              type="submit"
+              disabled={saving}
+            >
+              {saving
+                ? 'Saving...'
+                : editingDriver
+                  ? 'Save changes'
+                  : 'Add driver'}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {showTripForm && (
+        <Modal
+          title="Create trip"
+          onClose={() => setShowTripForm(false)}
+        >
+          <form className="pa-form" onSubmit={createTrip}>
+            <label>
+              Company
+              <select
+                className="pa-select"
+                value={tripForm.company_id}
+                onChange={(event) =>
+                  setTripForm({
+                    ...tripForm,
+                    company_id: event.target.value,
+                    route_id: '',
+                    driver_id: '',
+                  })
+                }
+                required
+              >
+                <option value="">
+                  Select company
+                </option>
+
+                {companies.map((company) => (
+                  <option
+                    key={company.id}
+                    value={company.id}
+                  >
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Route
+              <select
+                className="pa-select"
+                value={tripForm.route_id}
+                onChange={(event) =>
+                  setTripForm({
+                    ...tripForm,
+                    route_id: event.target.value,
+                  })
+                }
+                required
+              >
+                <option value="">
+                  Select route
+                </option>
+
+                {routes
+                  .filter(
+                    (route) =>
+                      !tripForm.company_id ||
+                      String(
+                        route.company ||
+                          route.company_id
+                      ) ===
+                        String(tripForm.company_id)
+                  )
+                  .map((route) => (
+                    <option
+                      key={route.id}
+                      value={route.id}
+                    >
+                      {route.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <label>
+              Driver
+              <select
+                className="pa-select"
+                value={tripForm.driver_id}
+                onChange={(event) =>
+                  setTripForm({
+                    ...tripForm,
+                    driver_id: event.target.value,
+                  })
+                }
+                required
+              >
+                <option value="">
+                  Select driver
+                </option>
+
+                {drivers
+                  .filter(
+                    (driver) =>
+                      !tripForm.company_id ||
+                      String(driver.company) ===
+                        String(tripForm.company_id)
+                  )
+                  .map((driver) => (
+                    <option
+                      key={driver.id}
+                      value={driver.id}
+                    >
+                      {driver.name} • {driver.bus_number}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <label>
+              Departure
+              <input
+                className="pa-input"
+                type="datetime-local"
+                value={tripForm.departure_at}
+                onChange={(event) =>
+                  setTripForm({
+                    ...tripForm,
+                    departure_at: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <label>
+              Capacity
+              <input
+                className="pa-input"
+                type="number"
+                min="1"
+                max="100"
+                value={tripForm.capacity}
+                onChange={(event) =>
+                  setTripForm({
+                    ...tripForm,
+                    capacity: event.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+
+            <button
+              className="pa-button primary full"
+              type="submit"
+              disabled={saving}
+            >
+              {saving ? 'Creating...' : 'Create trip'}
+            </button>
+          </form>
+        </Modal>
+      )}
+    </PlatformShell>
+  );
+}

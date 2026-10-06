@@ -1,0 +1,137 @@
+import os, sys, json, math, time, random, bisect, argparse
+sys.path.insert(0, os.getcwd())
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'connect.settings')
+import django
+django.setup()
+from django.conf import settings
+from django.utils import timezone
+from rest_framework.test import APIClient
+from bookings.models import Booking
+from drivers.models import Driver
+
+ap = argparse.ArgumentParser()
+ap.add_argument('--booking', type=int, required=True)
+ap.add_argument('--driver', type=int)
+ap.add_argument('--speed', type=float, default=60, help='km/h')
+ap.add_argument('--tick', type=float, default=2)
+ap.add_argument('--dwell', type=float, default=15)
+ap.add_argument('--start-km', type=float, default=0)
+ap.add_argument('--geometry', help='json file fallback')
+a = ap.parse_args()
+
+def find_coords(x):
+    if isinstance(x, str):
+        try: x = json.loads(x)
+        except Exception: return None
+    if isinstance(x, list) and len(x) > 1 and isinstance(x[0], (list, tuple)) \
+            and isinstance(x[0][0], (int, float)):
+        return x
+    if isinstance(x, dict):
+        for k in ('coordinates', 'geometry'):
+            if k in x:
+                r = find_coords(x[k])
+                if r: return r
+    return None
+
+def walk(o):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if 'geometry' in k or k == 'coordinates':
+                c = find_coords(v)
+                if c and len(c) > 10: return c
+            r = walk(v)
+            if r: return r
+    elif isinstance(o, list):
+        for v in o:
+            r = walk(v)
+            if r: return r
+    return None
+
+# fetch live data as the booking's passenger
+settings.ALLOWED_HOSTS = list(settings.ALLOWED_HOSTS) + ['testserver']
+booking = Booking.objects.get(id=a.booking)
+user = None
+for attr in ('passenger', 'user', 'customer', 'rider'):
+    u = getattr(booking, attr, None)
+    if u is not None and hasattr(u, 'pk'):
+        user = u
+        break
+if user is None:
+    from django.contrib.auth import get_user_model
+    user = get_user_model().objects.filter(is_superuser=True).first()
+client = APIClient()
+client.force_authenticate(user=user)
+r = client.get(f'/api/bookings/{a.booking}/live-location/')
+if r.status_code != 200:
+    sys.exit(f'live-location returned {r.status_code}: {r.content[:300]}')
+live = r.json()
+
+raw = json.load(open(a.geometry)) if a.geometry else walk(live)
+if not raw:
+    sys.exit('No route geometry in live response. Re-run with --geometry file.json')
+pts = [(c[0], c[1]) for c in raw]
+if abs(pts[0][0]) > abs(pts[0][1]):          # [lng, lat] -> (lat, lng)
+    pts = [(p[1], p[0]) for p in pts]
+
+def hav(p, q):
+    R = 6371.0
+    dl, dg = math.radians(q[0] - p[0]), math.radians(q[1] - p[1])
+    x = math.sin(dl / 2) ** 2 + math.cos(math.radians(p[0])) * \
+        math.cos(math.radians(q[0])) * math.sin(dg / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(x))
+
+cum = [0.0]
+for i in range(1, len(pts)):
+    cum.append(cum[-1] + hav(pts[i - 1], pts[i]))
+total = cum[-1]
+
+def at(s):
+    s = max(0, min(total, s))
+    i = min(max(bisect.bisect_right(cum, s) - 1, 0), len(pts) - 2)
+    seg = cum[i + 1] - cum[i]
+    t = (s - cum[i]) / seg if seg else 0
+    return (pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t,
+            pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t)
+
+stops = []
+for st in live.get('stages') or []:
+    lat = st.get('latitude', st.get('lat'))
+    lng = st.get('longitude', st.get('lng', st.get('lon')))
+    if lat is None or lng is None: continue
+    j = min(range(len(pts)), key=lambda k: hav(pts[k], (float(lat), float(lng))))
+    stops.append((cum[j], st.get('name', 'stage')))
+stops.sort()
+
+driver_id = a.driver or (live.get('driver') or {}).get('id')
+if not driver_id:
+    sys.exit('Driver id not in live response. Pass --driver ID')
+
+def post(s):
+    lat, lng = at(s)
+    lat += random.gauss(0, 0.000045)   # ~5 m noise
+    lng += random.gauss(0, 0.000045)
+    Driver.objects.filter(id=driver_id).update(
+        latitude=lat, longitude=lng, location_updated_at=timezone.now())
+
+print(f'route {total:.1f} km, {len(pts)} pts, driver {driver_id}')
+for s_, n in stops: print(f'  stage {n} at {s_:.2f} km')
+
+s = a.start_km
+visited = set()
+v = a.speed / 3600
+while s < total:
+    slow = any(0 < st[0] - s < 0.15 and i not in visited for i, st in enumerate(stops))
+    s += v * (0.4 if slow else 1) * a.tick
+    for i, (ss, name) in enumerate(stops):
+        if i not in visited and s >= ss:
+            s = ss
+            visited.add(i)
+            print(f'STOP at {name} for {a.dwell}s')
+            for _ in range(int(a.dwell / a.tick)):
+                post(s)
+                time.sleep(a.tick)
+    post(s)
+    print(f'{s:.2f}/{total:.2f} km', end='\r')
+    time.sleep(a.tick)
+post(total)
+print('\ntrip complete')

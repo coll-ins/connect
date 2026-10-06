@@ -1,24 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
-function dashboardPath(user) {
-  if (!user) return '/login';
-
-  switch (user.role) {
-    case 'platform_admin':
-      return '/platform-admin';
-
-    case 'company_admin':
-      return '/company-admin';
-
-    case 'driver':
-      return '/driver';
-
-    case 'passenger':
-    default:
-      return '/passenger';
-  }
-}
+import { dashboardPath } from '../utils/roleRoutes';
 
 export default function ProtectedRoute({ allowedRoles, children }) {
   const { user, booting } = useAuth();

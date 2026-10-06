@@ -46,3 +46,51 @@ class UserSerializer(serializers.ModelSerializer):
             location=validated_data.get('location', ''),
             password=validated_data['password'],
         )
+
+
+class CompanyStaffSerializer(serializers.ModelSerializer):
+    """
+    Serializer for company-managed staff.
+
+    Company and sensitive Django permission fields are controlled
+    by the server and are never accepted from the client.
+    """
+
+    company_name = serializers.CharField(
+        source='company.name',
+        read_only=True
+    )
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            'id',
+            'username',
+            'email',
+            'phone_number',
+            'location',
+            'role',
+            'company',
+            'company_name',
+            'is_active',
+        ]
+        read_only_fields = [
+            'id',
+            'company',
+            'company_name',
+        ]
+
+    def validate_role(self, value):
+        allowed_roles = {
+            'company_manager',
+            'company_auditor',
+            'company_operator',
+        }
+
+        if value not in allowed_roles:
+            raise serializers.ValidationError(
+                'Staff role must be company_manager, '
+                'company_auditor, or company_operator.'
+            )
+
+        return value

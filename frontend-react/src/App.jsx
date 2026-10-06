@@ -1,66 +1,69 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { useEffect } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+
 import PassengerDashboard from './pages/passenger/PassengerDashboard';
+import PassengerMapPage from './pages/passenger/PassengerMapPage';
 import PaymentReturn from './pages/passenger/PaymentReturn';
-import DriverDashboard from './pages/driver/DriverDashboard';
-import CompanyAdminDashboard from './pages/company-admin/CompanyAdminDashboard';
+import {
+  PassengerBookings,
+  PassengerWallet,
+  PassengerPayments,
+  PassengerProfile,
+  PassengerRecords,
+  PassengerSeats,
+  PassengerHelp,
+} from './pages/passenger/PassengerPages';
+
+import DriverPortal from "./pages/driver/DriverPortal.jsx";
+import DriverLiveLocation from "./pages/driver/DriverLiveLocation.jsx";
+import CompanyManagerRoutes from './pages/company-manager/CompanyManagerRoutes';
+import CompanyAuditorDashboard from './pages/company-auditor/CompanyAuditorDashboard';
+import CompanyOperatorDashboard from './pages/company-operator/CompanyOperatorDashboard';
 import PlatformAdminDashboard from './pages/platform-admin/PlatformAdminDashboard';
 
-function dashboardPath(user) {
-  if (!user) return '/login';
-
-  switch (user.role) {
-    case 'platform_admin':
-      return '/platform-admin';
-
-    case 'company_admin':
-      return '/company-admin';
-
-    case 'driver':
-      return '/driver';
-
-    case 'passenger':
-    default:
-      return '/passenger';
-  }
-}
-
-function Home() {
-  const { user, booting } = useAuth();
-
-  if (booting) {
-    return <div className="loading-screen">Loading CONNECT…</div>;
-  }
-
-  return <Navigate to={dashboardPath(user)} replace />;
+function PassengerRoutes() {
+  return (
+    <ProtectedRoute allowedRoles={['passenger']}>
+      <Routes>
+        <Route index element={<PassengerDashboard />} />
+        <Route path="schedules" element={<PassengerDashboard initialJourneyStep="companies" />} />
+        <Route path="map" element={<PassengerMapPage />} />
+        <Route path="bookings" element={<PassengerBookings />} />
+        <Route path="wallet" element={<PassengerWallet />} />
+        <Route path="payments" element={<PassengerPayments />} />
+        <Route path="receipts" element={<PassengerRecords mode="receipts" />} />
+        <Route path="history" element={<PassengerRecords mode="history" />} />
+        <Route path="seats" element={<PassengerSeats />} />
+        <Route path="help" element={<PassengerHelp />} />
+        <Route path="profile" element={<PassengerProfile />} />
+        <Route path="payment/:bookingId" element={<PaymentReturn />} />
+      </Routes>
+    </ProtectedRoute>
+  );
 }
 
 function AppRoutes() {
+  const location = useLocation();
+
+
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
-
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
-
       <Route path="/signup" element={<Signup />} />
 
-      <Route
-        path="/passenger/payment/:bookingId"
-        element={
-          <ProtectedRoute allowedRoles={['passenger']}>
-            <PaymentReturn />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/passenger/*" element={<PassengerRoutes />} />
 
       <Route
-        path="/passenger/*"
+        path="/driver/location"
         element={
-          <ProtectedRoute allowedRoles={['passenger']}>
-            <PassengerDashboard />
+          <ProtectedRoute allowedRoles={["driver"]}>
+            <DriverLiveLocation />
           </ProtectedRoute>
         }
       />
@@ -68,17 +71,35 @@ function AppRoutes() {
       <Route
         path="/driver/*"
         element={
-          <ProtectedRoute allowedRoles={['driver']}>
-            <DriverDashboard />
+          <ProtectedRoute allowedRoles={["driver"]}>
+            <DriverPortal />
           </ProtectedRoute>
         }
       />
 
       <Route
-        path="/company-admin/*"
+        path="/company-manager/*"
         element={
-          <ProtectedRoute allowedRoles={['company_admin']}>
-            <CompanyAdminDashboard />
+          <ProtectedRoute allowedRoles={['company_manager']}>
+            <CompanyManagerRoutes />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/company-auditor/*"
+        element={
+          <ProtectedRoute allowedRoles={['company_auditor']}>
+            <CompanyAuditorDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/company-operator/*"
+        element={
+          <ProtectedRoute allowedRoles={['company_operator']}>
+            <CompanyOperatorDashboard />
           </ProtectedRoute>
         }
       />

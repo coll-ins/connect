@@ -95,9 +95,11 @@ class PaymentChannelTests(TestCase):
         self.booking.status = 'confirmed'
         self.booking.driver = self.driver
         self.booking.save(update_fields=['status', 'driver'])
+        self.trip.status = 'boarding'
+        self.trip.save(update_fields=['status'])
         self.client.force_authenticate(user=driver_user)
         response = self.client.get(
             reverse('bookings:get-driver-bookings', kwargs={'driver_id': self.driver.id})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data['bookings']), 1)

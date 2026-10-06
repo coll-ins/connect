@@ -11,27 +11,34 @@ function getStoredUser() {
   }
 }
 
+const KNOWN_ROLES = [
+  'platform_admin',
+  'company_manager',
+  'company_auditor',
+  'company_operator',
+  'driver',
+  'passenger',
+];
+
 function normalizeRole(role, isSuperuser = false) {
   if (isSuperuser) return 'platform_admin';
 
-  const value = String(role || 'passenger')
+  const value = String(role || '')
     .trim()
     .toLowerCase()
     .replace(/-/g, '_')
     .replace(/\s+/g, '_');
 
-  if (value === 'platform_admin' || value === 'admin' || value === 'superadmin') {
-    return 'platform_admin';
-  }
+  if (value === 'admin' || value === 'superadmin') return 'platform_admin';
+  if (value === 'companymanager') return 'company_manager';
+  if (value === 'companyauditor') return 'company_auditor';
+  if (value === 'companyoperator') return 'company_operator';
 
-  if (value === 'company_admin' || value === 'companyadmin') {
-    return 'company_admin';
-  }
+  if (KNOWN_ROLES.includes(value)) return value;
 
-  if (value === 'driver') {
-    return 'driver';
-  }
-
+  // Do NOT silently default to 'passenger' here - that hid the bug last time.
+  // Surface it loudly so a backend/frontend role mismatch is caught immediately.
+  console.error(`[CONNECT] Unrecognized role from backend: "${role}". Falling back to passenger.`);
   return 'passenger';
 }
 

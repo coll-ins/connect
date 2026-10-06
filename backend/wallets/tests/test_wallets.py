@@ -38,5 +38,5 @@ class WalletsAppTests(APITestCase):
     def test_wallet_detail_unauthenticated(self):
         url = reverse("my-wallet")
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         

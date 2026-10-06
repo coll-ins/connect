@@ -62,6 +62,7 @@ class CompanyFunctionViewsTests(APITestCase):
           password="password123",
           phone_number="0733333333",
           company=self.company,
+          role="company_auditor",
       )
 
       self.list_url = reverse("get_companies")
@@ -200,8 +201,8 @@ class CompanyFunctionViewsTests(APITestCase):
       )
 
 
-  def test_create_trip_company_admin_own_company(self):
-      self.company_user.role = "company_admin"
+  def test_create_trip_company_manager_own_company(self):
+      self.company_user.role = "company_manager"
       self.company_user.save(update_fields=["role"])
 
       self.client.force_authenticate(user=self.company_user)
@@ -228,8 +229,8 @@ class CompanyFunctionViewsTests(APITestCase):
       )
 
 
-  def test_create_trip_company_admin_cannot_manage_other_company(self):
-      self.company_user.role = "company_admin"
+  def test_create_trip_company_manager_cannot_manage_other_company(self):
+      self.company_user.role = "company_manager"
       self.company_user.save(update_fields=["role"])
 
       self.client.force_authenticate(user=self.company_user)
@@ -337,3 +338,842 @@ class CompanyFunctionViewsTests(APITestCase):
           response.status_code,
           status.HTTP_400_BAD_REQUEST
       )
+
+  def test_create_route_manager_own_company_allowed(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_route")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "name": "CBD-Rongai",
+              "start_point": "CBD",
+              "end_point": "Rongai",
+              "price": "150.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_201_CREATED
+      )
+      self.assertEqual(
+          response.data["company"],
+          self.company.pk
+      )
+      self.assertEqual(
+          response.data["name"],
+          "CBD-Rongai"
+      )
+
+
+  def test_create_route_manager_other_company_forbidden(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_route")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.other_company.pk,
+              "name": "Other Route",
+              "start_point": "Nairobi",
+              "end_point": "Kisumu",
+              "price": "500.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_create_route_auditor_forbidden(self):
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_route")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "name": "Auditor Route",
+              "start_point": "CBD",
+              "end_point": "Westlands",
+              "price": "100.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_create_route_operator_forbidden(self):
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_route")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "name": "Operator Route",
+              "start_point": "CBD",
+              "end_point": "Kasarani",
+              "price": "120.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_create_route_passenger_forbidden(self):
+      self.client.force_authenticate(user=self.user)
+
+      url = reverse("create_route")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "name": "Passenger Route",
+              "start_point": "CBD",
+              "end_point": "Karen",
+              "price": "200.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_create_route_superuser_any_company_allowed(self):
+      self.client.force_authenticate(user=self.admin_user)
+
+      url = reverse("create_route")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.other_company.pk,
+              "name": "Global Route",
+              "start_point": "Nairobi",
+              "end_point": "Mombasa",
+              "price": "1000.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_201_CREATED
+      )
+      self.assertEqual(
+          response.data["company"],
+          self.other_company.pk
+      )
+
+
+  def test_edit_route_manager_own_company_allowed(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {
+              "name": "Nairobi-Kisumu",
+              "price": "1200.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_200_OK
+      )
+
+      self.route.refresh_from_db()
+
+      self.assertEqual(
+          self.route.name,
+          "Nairobi-Kisumu"
+      )
+      self.assertEqual(
+          self.route.price,
+          Decimal("1200.00")
+      )
+      self.assertEqual(
+          self.route.company_id,
+          self.company.pk
+      )
+
+
+  def test_edit_route_manager_cannot_change_company(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {
+              "company": self.other_company.pk,
+              "name": "Attempted Transfer",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_200_OK
+      )
+
+      self.route.refresh_from_db()
+
+      self.assertEqual(
+          self.route.company_id,
+          self.company.pk
+      )
+      self.assertEqual(
+          self.route.name,
+          "Attempted Transfer"
+      )
+
+
+  def test_edit_route_other_company_manager_forbidden(self):
+      other_manager = User.objects.create_user(
+          username="othermanager",
+          password="password123",
+          phone_number="0744444444",
+          company=self.other_company,
+          role="company_manager",
+      )
+
+      self.client.force_authenticate(user=other_manager)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {
+              "name": "Unauthorized Edit",
+              "price": "999.00",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_edit_route_auditor_forbidden(self):
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {
+              "name": "Auditor Edit",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_edit_route_operator_forbidden(self):
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {
+              "name": "Operator Edit",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_edit_route_passenger_forbidden(self):
+      self.client.force_authenticate(user=self.user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {
+              "name": "Passenger Edit",
+          },
+          format="json",
+      )
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_delete_route_manager_own_company_allowed(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      route = Route.objects.create(
+          company=self.company,
+          name="Delete Me",
+          start_point="CBD",
+          end_point="Embakasi",
+          price=Decimal("100.00"),
+      )
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": route.pk}
+      )
+
+      response = self.client.delete(url)
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_200_OK
+      )
+
+      self.assertFalse(
+          Route.objects.filter(pk=route.pk).exists()
+      )
+
+
+  def test_delete_route_auditor_forbidden(self):
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.delete(url)
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_delete_route_operator_forbidden(self):
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.delete(url)
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_delete_route_other_company_manager_forbidden(self):
+      other_manager = User.objects.create_user(
+          username="otherdeletemanager",
+          password="password123",
+          phone_number="0755555555",
+          company=self.other_company,
+          role="company_manager",
+      )
+
+      self.client.force_authenticate(user=other_manager)
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": self.route.pk}
+      )
+
+      response = self.client.delete(url)
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_403_FORBIDDEN
+      )
+
+
+  def test_delete_route_superuser_any_company_allowed(self):
+      self.client.force_authenticate(user=self.admin_user)
+
+      route = Route.objects.create(
+          company=self.other_company,
+          name="Superuser Delete",
+          start_point="CBD",
+          end_point="Thika",
+          price=Decimal("80.00"),
+      )
+
+      url = reverse(
+          "manage_route",
+          kwargs={"route_id": route.pk}
+      )
+
+      response = self.client.delete(url)
+
+      self.assertEqual(
+          response.status_code,
+          status.HTTP_200_OK
+      )
+
+      self.assertFalse(
+          Route.objects.filter(pk=route.pk).exists()
+      )
+
+  def test_create_trip_company_auditor_forbidden(self):
+      self.company_user.role = "company_auditor"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 30,
+          },
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_create_trip_company_operator_forbidden(self):
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse("create_trip")
+
+      response = self.client.post(
+          url,
+          {
+              "company_id": self.company.pk,
+              "route_id": self.route.pk,
+              "driver_id": self.driver.pk,
+              "departure_at": (
+                  timezone.now() + timezone.timedelta(hours=2)
+              ).isoformat(),
+              "capacity": 30,
+          },
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_update_trip_status_company_manager_own_company_allowed(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "update_trip_status",
+          kwargs={"trip_id": self.trip.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {"status": "boarding"},
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+      self.trip.refresh_from_db()
+      self.assertEqual(self.trip.status, "boarding")
+
+
+  def test_update_trip_status_company_operator_own_company_allowed(self):
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "update_trip_status",
+          kwargs={"trip_id": self.trip.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {"status": "boarding"},
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+      self.trip.refresh_from_db()
+      self.assertEqual(self.trip.status, "boarding")
+
+
+  def test_update_trip_status_company_auditor_forbidden(self):
+      self.company_user.role = "company_auditor"
+      self.company_user.save(update_fields=["role"])
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "update_trip_status",
+          kwargs={"trip_id": self.trip.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {"status": "boarding"},
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_update_trip_status_passenger_forbidden(self):
+      self.client.force_authenticate(user=self.user)
+
+      url = reverse(
+          "update_trip_status",
+          kwargs={"trip_id": self.trip.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {"status": "boarding"},
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_update_trip_status_manager_other_company_forbidden(self):
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+
+      other_driver = Driver.objects.create(
+          name="Other Driver",
+          phone_number="0799999999",
+          bus_number="KXX 999X",
+          company=self.other_company,
+      )
+
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="CBD",
+          end_point="Kisumu",
+          price=Decimal("500.00"),
+      )
+
+      other_trip = Trip.objects.create(
+          route=other_route,
+          driver=other_driver,
+          departure_at=timezone.now(),
+          capacity=40,
+          status="scheduled",
+      )
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "update_trip_status",
+          kwargs={"trip_id": other_trip.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {"status": "boarding"},
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_update_trip_status_operator_other_company_forbidden(self):
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+
+      other_driver = Driver.objects.create(
+          name="Other Driver",
+          phone_number="0788888888",
+          bus_number="KYY 888Y",
+          company=self.other_company,
+      )
+
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="CBD",
+          end_point="Nakuru",
+          price=Decimal("600.00"),
+      )
+
+      other_trip = Trip.objects.create(
+          route=other_route,
+          driver=other_driver,
+          departure_at=timezone.now(),
+          capacity=40,
+          status="scheduled",
+      )
+
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "update_trip_status",
+          kwargs={"trip_id": other_trip.pk}
+      )
+
+      response = self.client.patch(
+          url,
+          {"status": "boarding"},
+          format="json",
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_get_trips_company_staff_cannot_access_other_company(self):
+      other_driver = Driver.objects.create(
+          name="Other Driver",
+          phone_number="0777777777",
+          bus_number="KZZ 777Z",
+          company=self.other_company,
+      )
+
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="CBD",
+          end_point="Nakuru",
+          price=Decimal("600.00"),
+      )
+
+      other_trip = Trip.objects.create(
+          route=other_route,
+          driver=other_driver,
+          departure_at=timezone.now(),
+          capacity=40,
+          status="scheduled",
+      )
+
+      self.company_user.role = "company_manager"
+      self.company_user.save(update_fields=["role"])
+      self.client.force_authenticate(user=self.company_user)
+
+      response = self.client.get(
+          f"{self.trips_url}?company_id={self.other_company.pk}"
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+      self.assertEqual(
+          response.data["error"],
+          "You cannot access trips from another company."
+      )
+
+
+  def test_get_trips_company_staff_only_sees_own_company(self):
+      other_driver = Driver.objects.create(
+          name="Other Driver",
+          phone_number="0776666666",
+          bus_number="KYY 666Y",
+          company=self.other_company,
+      )
+
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="CBD",
+          end_point="Thika",
+          price=Decimal("400.00"),
+      )
+
+      other_trip = Trip.objects.create(
+          route=other_route,
+          driver=other_driver,
+          departure_at=timezone.now(),
+          capacity=40,
+          status="scheduled",
+      )
+
+      self.company_user.role = "company_auditor"
+      self.company_user.save(update_fields=["role"])
+      self.client.force_authenticate(user=self.company_user)
+
+      response = self.client.get(self.trips_url)
+
+      self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+      returned_ids = [trip["id"] for trip in response.data]
+
+      self.assertIn(self.trip.pk, returned_ids)
+      self.assertNotIn(other_trip.pk, returned_ids)
+
+
+  def test_get_trip_details_company_staff_cannot_access_other_company(self):
+      other_driver = Driver.objects.create(
+          name="Other Driver",
+          phone_number="0775555555",
+          bus_number="KXX 555X",
+          company=self.other_company,
+      )
+
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="CBD",
+          end_point="Machakos",
+          price=Decimal("700.00"),
+      )
+
+      other_trip = Trip.objects.create(
+          route=other_route,
+          driver=other_driver,
+          departure_at=timezone.now(),
+          capacity=40,
+          status="scheduled",
+      )
+
+      self.company_user.role = "company_operator"
+      self.company_user.save(update_fields=["role"])
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "get_trip_details",
+          kwargs={"trip_id": other_trip.pk}
+      )
+
+      response = self.client.get(url)
+
+      self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+  def test_get_trip_details_company_staff_can_access_own_company(self):
+      self.company_user.role = "company_auditor"
+      self.company_user.save(update_fields=["role"])
+      self.client.force_authenticate(user=self.company_user)
+
+      url = reverse(
+          "get_trip_details",
+          kwargs={"trip_id": self.trip.pk}
+      )
+
+      response = self.client.get(url)
+
+      self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+  def test_get_trips_superuser_can_access_any_company(self):
+      other_driver = Driver.objects.create(
+          name="Other Driver",
+          phone_number="0774444444",
+          bus_number="KWW 444W",
+          company=self.other_company,
+      )
+
+      other_route = Route.objects.create(
+          company=self.other_company,
+          name="Other Route",
+          start_point="CBD",
+          end_point="Kitengela",
+          price=Decimal("350.00"),
+      )
+
+      other_trip = Trip.objects.create(
+          route=other_route,
+          driver=other_driver,
+          departure_at=timezone.now(),
+          capacity=40,
+          status="scheduled",
+      )
+
+      self.client.force_authenticate(user=self.admin_user)
+
+      response = self.client.get(
+          f"{self.trips_url}?company_id={self.other_company.pk}"
+      )
+
+      self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+      returned_ids = [trip["id"] for trip in response.data]
+      self.assertIn(other_trip.pk, returned_ids)
+

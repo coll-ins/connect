@@ -6,7 +6,9 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('passenger', 'Passenger'),
         ('driver', 'Driver'),
-        ('company_admin', 'Company Admin'),
+        ('company_manager', 'Company Manager'),
+        ('company_auditor', 'Company Auditor'),
+        ('company_operator', 'Company Operator'),
         ('platform_admin', 'Platform Admin'),
     ]
 

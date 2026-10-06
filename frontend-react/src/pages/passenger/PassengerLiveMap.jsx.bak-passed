@@ -1,0 +1,968 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  useMap,
+} from 'react-leaflet';
+import L from 'leaflet';
+import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
+import { apiRequest } from '../../api';
+import './PassengerLiveMap.css';
+
+function normalizePosition(value) {
+  if (!value) return null;
+
+  const latitude = Number(value.latitude ?? value.lat);
+  const longitude = Number(value.longitude ?? value.lng ?? value.lon);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return [latitude, longitude];
+}
+
+function routePositions(geometry) {
+  const coordinates = geometry?.coordinates;
+
+  if (!Array.isArray(coordinates)) return [];
+
+  return coordinates
+    .map((point) => {
+      if (!Array.isArray(point) || point.length < 2) return null;
+
+      const lng = Number(point[0]);
+      const lat = Number(point[1]);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+      return [lat, lng];
+    })
+    .filter(Boolean);
+}
+
+
+function haversineKm(a, b) {
+  if (!a || !b) return null;
+
+  const R = 6371;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLon = ((b[1] - a[1]) * Math.PI) / 180;
+  const lat1 = (a[0] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180;
+
+  const value =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+
+  return R * 2 * Math.atan2(
+    Math.sqrt(value),
+    Math.sqrt(1 - value)
+  );
+}
+
+function nearestRouteIndex(position, positions) {
+  if (!position || !positions.length) return -1;
+
+  let nearest = 0;
+  let best = Infinity;
+
+  positions.forEach((point, index) => {
+    const distance = haversineKm(position, point);
+
+    if (distance != null && distance < best) {
+      best = distance;
+      nearest = index;
+    }
+  });
+
+  return nearest;
+}
+
+function routeDistanceKm(positions, startIndex, endIndex) {
+  if (
+    positions.length < 2 ||
+    startIndex < 0 ||
+    endIndex < 0
+  ) {
+    return 0;
+  }
+
+  const start = Math.min(startIndex, endIndex);
+  const end = Math.max(startIndex, endIndex);
+
+  let total = 0;
+
+  for (let i = start; i < end; i += 1) {
+    total += haversineKm(
+      positions[i],
+      positions[i + 1]
+    ) || 0;
+  }
+
+  return total;
+}
+
+function formatDistance(km) {
+  if (km == null || !Number.isFinite(km)) return '—';
+
+  if (km < 1) {
+    return `${Math.max(0, Math.round(km * 1000))} m`;
+  }
+
+  return `${km.toFixed(km < 10 ? 1 : 0)} km`;
+}
+
+function formatEta(minutes) {
+  if (minutes == null || !Number.isFinite(minutes)) return '—';
+
+  if (minutes <= 1) return '1 min';
+
+  return `${Math.round(minutes)} min`;
+}
+
+function MapResize() {
+  const map = useMap();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [map]);
+
+  return null;
+}
+
+function MapRoute({ positions }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!positions || positions.length < 2) return;
+
+    const bounds = L.latLngBounds(positions);
+
+    if (!bounds.isValid()) return;
+
+    map.fitBounds(bounds, {
+      padding: [70, 180],
+      maxZoom: 14,
+      animate: false,
+    });
+  }, [map, positions]);
+
+  return null;
+}
+
+function MapFollow({ position }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!position) return;
+
+    map.flyTo(position, Math.max(map.getZoom(), 15), {
+      animate: true,
+      duration: 0.8,
+    });
+  }, [map, position]);
+
+  return null;
+}
+
+function createVehicleIcon() {
+  return L.divIcon({
+    className: 'passenger-vehicle-marker',
+    html: `
+      <div class="passenger-vehicle-marker__outer">
+        <div class="passenger-vehicle-marker__pulse"></div>
+        <div class="passenger-vehicle-marker__vehicle">
+          <div class="vehicle-window vehicle-window--front"></div>
+          <div class="vehicle-window vehicle-window--back"></div>
+          <div class="vehicle-light vehicle-light--left"></div>
+          <div class="vehicle-light vehicle-light--right"></div>
+        </div>
+      </div>
+    `,
+    iconSize: [58, 58],
+    iconAnchor: [29, 29],
+    popupAnchor: [0, -30],
+  });
+}
+
+function createPassengerIcon() {
+  return L.divIcon({
+    className: 'passenger-location-marker',
+    html: `
+      <div class="passenger-location-marker__wrap">
+        <div class="passenger-location-marker__shadow"></div>
+        <div class="passenger-location-marker__pin">
+          <div class="passenger-location-marker__core"></div>
+        </div>
+      </div>
+    `,
+    iconSize: [58, 70],
+    iconAnchor: [29, 63],
+    popupAnchor: [0, -58],
+  });
+}
+
+const vehicleIcon = createVehicleIcon();
+const passengerIcon = createPassengerIcon();
+
+const stageDotIcon = L.divIcon({
+  className: 'connect-stage-dot',
+  html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #475569;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+function createPickupIcon(label) {
+  const safe = String(label || 'Pickup')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  return L.divIcon({
+    className: 'connect-pickup-pin',
+    html: `
+      <div style="display:flex;flex-direction:column;align-items:center;width:200px">
+        <div style="width:46px;height:46px;border-radius:50%;background:#dc2626;border:4px solid #fff;box-shadow:0 0 0 4px rgba(220,38,38,.3),0 5px 14px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center">
+          <div style="width:14px;height:14px;border-radius:50%;background:#fff"></div>
+        </div>
+        <div style="margin-top:8px;padding:6px 12px;border-radius:9px;background:#fff;border:2px solid #111827;color:#111827;font:900 13px Arial,sans-serif;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.3)">${safe}</div>
+      </div>
+    `,
+    iconSize: [200, 90],
+    iconAnchor: [100, 23],
+    popupAnchor: [0, -23],
+  });
+}
+
+export default function PassengerLiveMap({
+  bookingId,
+  routeGeometry: bookingRouteGeometry = null,
+  pickup: bookingPickup = null,
+  onBack,
+}) {
+  const [live, setLive] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [following, setFollowing] = useState(false);
+  const driverHistoryRef = useRef([]);
+  const pickupAlertSentRef = useRef(false);
+
+
+  const loadLive = useCallback(async () => {
+    if (!bookingId) {
+      setLoading(false);
+      setError('No active trip selected.');
+      return;
+    }
+
+    try {
+      const data = await apiRequest(
+        `/bookings/${bookingId}/live-location/`
+      );
+
+      const nextDriver = normalizePosition(data?.driver);
+      const now = Date.now();
+
+      if (nextDriver) {
+        driverHistoryRef.current = [
+          ...driverHistoryRef.current.filter(
+            (item) => now - item.time < 15 * 60 * 1000
+          ),
+          {
+            position: nextDriver,
+            time: now,
+          },
+        ].slice(-8);
+      }
+
+      setLive({ ...data, _fetchedAt: now });
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to load live trip location.');
+    } finally {
+      setLoading(false);
+    }
+  }, [bookingId]);
+
+  useEffect(() => {
+    loadLive();
+
+    const timer = window.setInterval(loadLive, 10000);
+
+    return () => window.clearInterval(timer);
+  }, [loadLive]);
+
+  useEffect(() => {
+    if (!bookingId || !navigator.geolocation) {
+      return undefined;
+    }
+
+    let active = true;
+    let lastSent = 0;
+
+    const sendLocation = (position) => {
+      if (!active) return;
+
+      const now = Date.now();
+
+      if (now - lastSent < 10000) {
+        return;
+      }
+
+      lastSent = now;
+
+      apiRequest(`/bookings/${bookingId}/location/`, {
+        method: 'POST',
+        body: {
+          latitude: Number(
+            position.coords.latitude.toFixed(6)
+          ),
+          longitude: Number(
+            position.coords.longitude.toFixed(6)
+          ),
+        },
+      }).catch(() => {});
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      sendLocation,
+      () => {},
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 10000,
+      }
+    );
+
+    const watchId = navigator.geolocation.watchPosition(
+      sendLocation,
+      () => {},
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 10000,
+      }
+    );
+
+    return () => {
+      active = false;
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [bookingId]);
+
+  const driverPosition = useMemo(
+    () => normalizePosition(live?.driver),
+    [live]
+  );
+
+  const passengerPosition = useMemo(
+    () => normalizePosition(live?.passenger),
+    [live]
+  );
+
+  const geometry = useMemo(() => {
+    const source =
+      bookingRouteGeometry ||
+      live?.route_geometry ||
+      live?.active_trip?.route_geometry ||
+      live?.active_trip?.route?.geometry ||
+      live?.trip?.route_geometry ||
+      live?.trip?.route?.geometry ||
+      live?.route_geometry?.geometry ||
+      live?.route?.geometry ||
+      live?.route?.route_geometry;
+
+    return routePositions(source);
+  }, [bookingRouteGeometry, live]);
+
+
+  const stages = useMemo(
+    () => (Array.isArray(live?.stages) ? live.stages : []),
+    [live],
+  );
+
+  const pickupStage = useMemo(() => {
+    const candidates = [live?.pickup, bookingPickup].filter(Boolean);
+
+    const located = candidates.find(
+      (item) => item.latitude != null && item.longitude != null,
+    );
+
+    if (located) return located;
+
+    const wanted = String(
+      candidates.find((item) => item.name)?.name || '',
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!wanted) return null;
+
+    return (
+      stages.find(
+        (stage) =>
+          String(stage.name || '').trim().toLowerCase() === wanted,
+      ) || null
+    );
+  }, [live, bookingPickup, stages]);
+
+  const pickupPosition = useMemo(
+    () => normalizePosition(pickupStage),
+    [pickupStage],
+  );
+
+  const pickupIcon = useMemo(
+    () => createPickupIcon(pickupStage?.name),
+    [pickupStage],
+  );
+
+  const driverRouteIndex = useMemo(
+    () => nearestRouteIndex(driverPosition, geometry),
+    [driverPosition, geometry]
+  );
+
+  const pickupRouteIndex = useMemo(
+    () => nearestRouteIndex(pickupPosition, geometry),
+    [pickupPosition, geometry]
+  );
+
+  const destinationRouteIndex = geometry.length - 1;
+
+  const busGapKm = useMemo(
+    () =>
+      driverRouteIndex >= 0
+        ? haversineKm(driverPosition, geometry[driverRouteIndex])
+        : null,
+    [driverPosition, geometry, driverRouteIndex],
+  );
+
+  const busOffRoute = busGapKm != null && busGapKm > 1.5;
+
+  const locationAgeMin = useMemo(() => {
+    const updated = live?.driver?.location_updated_at;
+
+    if (!updated || !live?._fetchedAt) return null;
+
+    const time = Date.parse(updated);
+
+    if (!Number.isFinite(time)) return null;
+
+    return Math.max(0, (live._fetchedAt - time) / 60000);
+  }, [live]);
+
+  const busStale = locationAgeMin != null && locationAgeMin > 10;
+  const busUnreliable = busOffRoute || busStale;
+
+  const ageText =
+    locationAgeMin == null
+      ? ''
+      : locationAgeMin < 60
+        ? `${Math.round(locationAgeMin)} min`
+        : locationAgeMin < 2880
+          ? `${Math.round(locationAgeMin / 60)} h`
+          : `${Math.round(locationAgeMin / 1440)} days`;
+
+  let busStatus = 'Driver location is live';
+
+  if (!driverPosition) {
+    busStatus = 'Waiting for driver location';
+  } else if (busStale) {
+    busStatus = `Last seen ${ageText} ago`;
+  } else if (busOffRoute) {
+    busStatus = `Bus is ${formatDistance(busGapKm)} from the route`;
+  }
+
+  const remainingRoute = useMemo(() => {
+    if (
+      geometry.length < 2 ||
+      driverRouteIndex < 0
+    ) {
+      return [];
+    }
+
+    const targetIndex =
+      pickupRouteIndex >= driverRouteIndex
+        ? pickupRouteIndex
+        : destinationRouteIndex;
+
+    return geometry.slice(
+      Math.max(driverRouteIndex, 0),
+      targetIndex + 1,
+    );
+  }, [
+    geometry,
+    driverRouteIndex,
+    pickupRouteIndex,
+    destinationRouteIndex,
+  ]);
+
+  const distanceToPickupKm = useMemo(() => {
+    if (
+      geometry.length < 2 ||
+      driverRouteIndex < 0 ||
+      pickupRouteIndex < 0
+    ) {
+      return null;
+    }
+
+    if (pickupRouteIndex <= driverRouteIndex) {
+      return 0;
+    }
+
+    return routeDistanceKm(
+      geometry,
+      driverRouteIndex,
+      pickupRouteIndex
+    );
+  }, [
+    geometry,
+    driverRouteIndex,
+    pickupRouteIndex,
+  ]);
+
+  const distanceToDestinationKm = useMemo(() => {
+    if (
+      geometry.length < 2 ||
+      driverRouteIndex < 0
+    ) {
+      return null;
+    }
+
+    return routeDistanceKm(
+      geometry,
+      driverRouteIndex,
+      destinationRouteIndex
+    );
+  }, [
+    geometry,
+    driverRouteIndex,
+    destinationRouteIndex,
+  ]);
+
+  const remainingDistanceKm = busUnreliable ? null : distanceToPickupKm;
+
+  const driverSpeedKmh = useMemo(() => {
+    const history = driverHistoryRef.current;
+
+    if (history.length < 2) {
+      return 25;
+    }
+
+    const first = history[0];
+    const last = history[history.length - 1];
+
+    const elapsedHours =
+      (last.time - first.time) / 3600000;
+
+    if (elapsedHours <= 0) {
+      return 25;
+    }
+
+    const distance = haversineKm(
+      first.position,
+      last.position
+    );
+
+    if (!distance || distance < 0.02) {
+      return 25;
+    }
+
+    const speed = distance / elapsedHours;
+
+    return Math.min(Math.max(speed, 8), 80);
+  }, [driverPosition]);
+
+  const etaMinutes = useMemo(() => {
+    if (
+      remainingDistanceKm == null ||
+      !Number.isFinite(remainingDistanceKm)
+    ) {
+      return null;
+    }
+
+    return (remainingDistanceKm / driverSpeedKmh) * 60;
+  }, [remainingDistanceKm, driverSpeedKmh]);
+
+  const center =
+    driverPosition ||
+    passengerPosition ||
+    geometry[0] ||
+    [-1.286389, 36.817223];
+
+  const routeName =
+    live?.route_name ||
+    live?.trip?.route_name ||
+    live?.route?.name ||
+    'Your trip';
+
+  const busNumber =
+    live?.driver?.bus_number ||
+    live?.driver?.vehicle_registration ||
+    live?.driver?.bus_registration ||
+    live?.trip?.vehicle_registration ||
+    'Vehicle';
+
+  const driverName = live?.driver?.name || null;
+  const driverPhone = live?.driver?.phone || null;
+  const showPickupLeg =
+    Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable;
+
+  const pickup =
+    pickupStage?.name ||
+    live?.pickup?.name ||
+    bookingPickup?.name ||
+    live?.pickup_stage_name ||
+    live?.pickup_location ||
+    live?.booking?.pickup_stage_name ||
+    live?.booking?.pickup_location ||
+    'Pickup point';
+
+  const distance =
+    live?.distance_km != null
+      ? live.distance_km < 1
+        ? `${Math.round(live.distance_km * 1000)} m`
+        : `${live.distance_km.toFixed(1)} km`
+      : null;
+
+
+  useEffect(() => {
+    if (!Number.isFinite(etaMinutes) || etaMinutes <= 0) {
+      return;
+    }
+
+    if (etaMinutes > 10 || pickupAlertSentRef.current) {
+      return;
+    }
+
+    pickupAlertSentRef.current = true;
+
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window
+    ) {
+      const notify = () => {
+        new Notification('CONNECT — Your bus is close', {
+          body: `Your bus is approximately ${Math.max(
+            1,
+            Math.round(etaMinutes)
+          )} minutes from your pickup stage.`,
+        });
+      };
+
+      if (Notification.permission === 'granted') {
+        notify();
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted') notify();
+        }).catch(() => {});
+      }
+    }
+  }, [etaMinutes]);
+
+  return (
+    <div
+      className="passenger-live-map"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100dvh',
+        minHeight: '100dvh',
+        zIndex: 9999,
+        overflow: 'hidden',
+        background: '#07111f',
+      }}
+    >
+      <div className="passenger-live-map__canvas">
+        <MapContainer
+          center={center}
+          zoom={15}
+          zoomControl={false}
+          attributionControl
+          className="passenger-live-map__leaflet"
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution="&copy; OpenStreetMap contributors"
+          />
+
+          <MapResize />
+
+          {geometry.length > 1 && (
+            <MapRoute positions={geometry} />
+          )}
+
+          {geometry.length > 1 && (
+            <>
+              <Polyline
+                positions={geometry}
+                pathOptions={{
+                  color: '#ffffff',
+                  weight: 9,
+                  opacity: 0.85,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  interactive: false,
+                }}
+              />
+
+              <Polyline
+                positions={geometry}
+                pathOptions={{
+                  color: '#9db4d3',
+                  weight: 5,
+                  opacity: 0.9,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  interactive: false,
+                }}
+              />
+            </>
+          )}
+
+          {!busUnreliable && remainingRoute.length > 1 && (
+            <>
+              <Polyline
+                positions={remainingRoute}
+                pathOptions={{
+                  color: '#1677ff',
+                  weight: 12,
+                  opacity: 0.22,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  interactive: false,
+                }}
+              />
+
+              <Polyline
+                positions={remainingRoute}
+                pathOptions={{
+                  color: '#1677ff',
+                  weight: 6,
+                  opacity: 0.98,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  interactive: false,
+                }}
+              />
+            </>
+          )}
+
+          {busOffRoute && driverPosition && geometry[driverRouteIndex] && (
+            <Polyline
+              positions={[driverPosition, geometry[driverRouteIndex]]}
+              pathOptions={{
+                color: '#64748b',
+                weight: 3,
+                opacity: 0.8,
+                dashArray: '6 10',
+                interactive: false,
+              }}
+            />
+          )}
+
+          {stages.map((stage) => {
+            const position = normalizePosition(stage);
+
+            if (!position) return null;
+
+            if (
+              pickupStage &&
+              stage.id != null &&
+              stage.id === pickupStage.id
+            ) {
+              return null;
+            }
+
+            return (
+              <Marker
+                key={stage.id ?? stage.name}
+                position={position}
+                icon={stageDotIcon}
+              >
+                <Popup>
+                  <strong>
+                    {stage.order}. {stage.name}
+                  </strong>
+                </Popup>
+              </Marker>
+            );
+          })}
+
+          {pickupPosition && (
+            <Marker
+              position={pickupPosition}
+              icon={pickupIcon}
+              zIndexOffset={900}
+            >
+              <Popup>
+                <strong>{pickupStage?.name || 'Pickup stage'}</strong>
+                <br />
+                Your pickup point
+              </Popup>
+            </Marker>
+          )}
+
+          {following && passengerPosition && (
+            <MapFollow position={passengerPosition} />
+          )}
+
+          {driverPosition && (
+            <Marker
+              position={driverPosition}
+              icon={vehicleIcon}
+            >
+              <Popup>
+                <strong>{busNumber}</strong>
+                <br />
+                Your driver
+              </Popup>
+            </Marker>
+          )}
+
+          {passengerPosition && (
+            <Marker
+              position={passengerPosition}
+              icon={passengerIcon}
+            >
+              <Popup>
+                <strong>You</strong>
+                <br />
+                Current location
+              </Popup>
+            </Marker>
+          )}
+        </MapContainer>
+      </div>
+
+      <header className="passenger-live-map__topbar">
+        <button
+          type="button"
+          className="passenger-live-map__back"
+          onClick={onBack}
+          aria-label="Back"
+        >
+          <ArrowLeft size={20} />
+        </button>
+
+        <div className="passenger-live-map__trip-title">
+          <strong>{routeName}</strong>
+          <span>
+            <Radio size={13} />
+            Live trip
+          </span>
+        </div>
+
+        <div className="passenger-live-map__live">
+          <span />
+          LIVE
+        </div>
+      </header>
+
+      <button
+        type="button"
+        className={`passenger-live-map__locate ${
+          following ? 'is-active' : ''
+        }`}
+        onClick={() => setFollowing((value) => !value)}
+        aria-label="Center on my location"
+      >
+        <LocateFixed size={21} />
+      </button>
+
+      {loading && (
+        <div className="passenger-live-map__loading">
+          Loading live trip…
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="passenger-live-map__error">
+          <strong>Live map unavailable</strong>
+          <span>{error}</span>
+          <button type="button" onClick={loadLive}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      <section className="passenger-live-map__sheet">
+        <div className="passenger-live-map__handle" />
+
+        <div className="passenger-live-map__status-row">
+          <div>
+            <span className="passenger-live-map__eyebrow">
+              YOUR TRIP
+            </span>
+            <h1>{routeName}</h1>
+          </div>
+
+          <div className="passenger-live-map__distance">
+            <Navigation size={16} />
+            <strong>
+              {showPickupLeg
+                ? formatDistance(distanceToPickupKm)
+                : (!busUnreliable && distance) || '—'}
+            </strong>
+            <span>{showPickupLeg ? 'to pickup' : 'away'}</span>
+          </div>
+        </div>
+
+        <div className="passenger-live-map__vehicle-card">
+          <div className="passenger-live-map__vehicle-icon">
+            <Navigation size={20} />
+          </div>
+
+          <div className="passenger-live-map__vehicle-info">
+            <strong>{busNumber}</strong>
+            <span>{driverName || 'Driver pending'}</span>
+            <span>
+              {driverPhone ? (
+                <a href={`tel:${driverPhone}`}>{driverPhone}</a>
+              ) : (
+                'Phone not available'
+              )}
+            </span>
+            <span>
+              {busStatus}
+            </span>
+          </div>
+
+          <div className="passenger-live-map__vehicle-live">
+            <span />
+            LIVE
+          </div>
+        </div>
+
+        <div className="passenger-live-map__pickup">
+          <div className="passenger-live-map__pickup-dot" />
+          <div>
+            <span>YOUR PICKUP</span>
+            <strong>{pickup}</strong>
+            <span>
+              {pickupPosition
+                ? (busUnreliable ? 'ETA appears once the bus is on the route' : `${formatEta(etaMinutes)} · ${formatDistance(distanceToPickupKm)}`)
+                : 'This pickup point is not placed on the map'}
+            </span>
+          </div>
+        </div>
+
+        {!passengerPosition && (
+          <div className="passenger-live-map__gps-note">
+            Your location is not available yet. Enable location sharing
+            for a live position on the map.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

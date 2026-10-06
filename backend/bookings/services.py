@@ -123,6 +123,14 @@ def settle_booking_fault(booking, fault_party):
             'Digital payment has no provider reference.'
         )
 
+    # Paystack rejects refunds below KES 5. Record the amount owed
+    # but do not call the gateway (and do not retry forever).
+    if refund_amount < Decimal('5.00'):
+        payment.refund_amount = refund_amount
+        payment.refund_status = 'not_requested'
+        payment.save(update_fields=['refund_amount', 'refund_status'])
+        return refund_amount
+
     amount_in_cents = int(refund_amount * Decimal('100'))
 
     headers = {
@@ -159,8 +167,13 @@ def settle_booking_fault(booking, fault_party):
         ) from exc
 
     if response.status_code != 200:
+        try:
+            _detail = response.json().get('message')
+        except ValueError:
+            _detail = None
         raise ValueError(
-            'Payment provider rejected the refund request.'
+            'Payment provider rejected the refund request'
+            + (f': {_detail}' if _detail else '.')
         )
 
     try:
@@ -180,11 +193,13 @@ def settle_booking_fault(booking, fault_party):
 
     refund_data = response_data.get('data', {})
 
-    payment.refund_amount = refund_amount
-    payment.refund_status = refund_data.get(
+    provider_refund_status = refund_data.get(
         'status',
         'pending'
     )
+
+    payment.refund_amount = refund_amount
+    payment.refund_status = provider_refund_status
 
     # Paystack's refund object has its own ID.
     refund_id = refund_data.get('id')
@@ -200,4 +215,205 @@ def settle_booking_fault(booking, fault_party):
         ]
     )
 
+    # Record the amount allocated to this refund against the
+    # booking's financial hold. The hold is NOT marked fully
+    # refunded here unless the provider confirms a full refund.
+    #
+    # A pending Paystack refund means the refund request was
+    # accepted, not necessarily that the money has already
+    # completed settlement.
+    try:
+        hold = (
+            BookingHold.objects
+            .select_for_update()
+            .get(booking=booking)
+        )
+    except BookingHold.DoesNotExist:
+        hold = None
+
+    if hold is not None:
+        new_refunded_amount = (
+            hold.refunded_amount + refund_amount
+        )
+
+        if new_refunded_amount > hold.amount:
+            raise ValueError(
+                'Refund amount exceeds the booking hold amount.'
+            )
+
+        hold.refunded_amount = new_refunded_amount
+
+        # Only mark the hold fully refunded when the provider
+        # confirms a completed full refund.
+        if (
+            provider_refund_status == 'processed'
+            and new_refunded_amount >= hold.amount
+        ):
+            hold.status = 'refunded'
+            hold.refunded_at = timezone.now()
+
+            hold.save(
+                update_fields=[
+                    'refunded_amount',
+                    'status',
+                    'refunded_at',
+                    'updated_at',
+                ]
+            )
+        else:
+            hold.save(
+                update_fields=[
+                    'refunded_amount',
+                    'updated_at',
+                ]
+            )
+
     return refund_amount
+from django.db import transaction
+from django.utils import timezone
+
+from .models import BookingHold
+
+
+def create_booking_hold(booking):
+    """
+    Create the financial hold for a successfully confirmed payment.
+
+    Idempotent:
+    - If a hold already exists, return it.
+    - Never create two holds for the same booking.
+    """
+    with transaction.atomic():
+        hold, created = BookingHold.objects.get_or_create(
+            booking=booking,
+            defaults={
+                'amount': booking.total_amount,
+                'status': 'held',
+            },
+        )
+
+        if not created:
+            if hold.status == 'held':
+                return hold
+
+            raise ValueError(
+                f'Booking {booking.booking_number} already has '
+                f'a financial hold in status "{hold.status}".'
+            )
+
+        return hold
+
+
+def release_booking_hold(booking):
+    """
+    Mark a booking's held payment as released after boarding.
+
+    Idempotent:
+    - Already released → return the existing hold.
+    """
+    with transaction.atomic():
+        hold = (
+            BookingHold.objects
+            .select_for_update()
+            .get(booking=booking)
+        )
+
+        if hold.status == 'released':
+            return hold
+
+        if hold.status != 'held':
+            raise ValueError(
+                f'Cannot release hold in status "{hold.status}".'
+            )
+
+        hold.status = 'released'
+        hold.released_at = timezone.now()
+        hold.save(
+            update_fields=[
+                'status',
+                'released_at',
+                'updated_at',
+            ]
+        )
+
+        return hold
+
+
+def refund_booking_hold(booking):
+    """
+    Mark a booking's financial hold as refunded.
+
+    The actual Paystack refund remains responsible for moving
+    real money. This function records the internal hold state.
+
+    Idempotent:
+    - Already refunded → return the existing hold.
+    """
+    with transaction.atomic():
+        hold = (
+            BookingHold.objects
+            .select_for_update()
+            .get(booking=booking)
+        )
+
+        if hold.status == 'refunded':
+            return hold
+
+        if hold.status != 'held':
+            raise ValueError(
+                f'Cannot refund hold in status "{hold.status}".'
+            )
+
+        hold.status = 'refunded'
+        hold.refunded_at = timezone.now()
+        hold.save(
+            update_fields=[
+                'status',
+                'refunded_at',
+                'updated_at',
+            ]
+        )
+
+        return hold
+
+
+def settle_unboarded_no_shows(trip):
+    """
+    Called when a trip ends. Confirmed bookings that never boarded become
+    passenger no-shows (50% refund). If the trip has an active incident,
+    those bookings are left for the passenger's refund/reschedule choice.
+    Pending bookings are cancelled.
+
+    Must be called inside transaction.atomic().
+    Returns (settled_count, protected_count).
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+
+    trip.bookings.filter(status='pending').update(status='cancelled')
+
+    confirmed = trip.bookings.filter(status='confirmed')
+
+    if trip.incidents.filter(status__in=['reported', 'investigating']).exists():
+        return 0, confirmed.count()
+
+    settled = 0
+    for booking in confirmed.select_for_update().select_related('user'):
+        try:
+            settle_booking_fault(booking, fault_party='passenger')
+        except ValueError as exc:
+            # Same behaviour as process_noshows: still mark the no-show;
+            # a failed refund is retried by that command.
+            log.warning(
+                'Refund failed for %s: %s', booking.booking_number, exc
+            )
+
+        booking.status = 'no_show'
+        booking.save(update_fields=['status'])
+
+        booking.user.no_show_count += 1
+        booking.user.save(update_fields=['no_show_count'])
+        settled += 1
+
+    return settled, 0

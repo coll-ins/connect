@@ -1,27 +1,122 @@
-def is_platform_admin(user):
-    """
-    Platform-wide admin — can manage any company's data. Superuser
-    counts too, since that's how Django admin access already works
-    and we don't want two disconnected notions of 'admin'.
-    """
-    return bool(
-        user
-        and user.is_authenticated
-        and (user.is_superuser or user.role == 'platform_admin')
-    )
+from rest_framework.permissions import BasePermission
 
 
-def is_company_admin_for(user, company):
+COMPANY_ROLES = {
+    'company_manager',
+    'company_auditor',
+    'company_operator',
+}
+
+
+def can_manage_company(user, company=None):
     """
-    True only if this user is a company_admin AND scoped to this
-    exact company — a company_admin for Supermetro must never pass
-    this check for Latema's data.
+    Check whether a user can manage a company.
+
+    Superusers can manage any company.
+    Company managers can manage only their assigned company.
     """
-    if not (user and user.is_authenticated and company):
+    if not user or not user.is_authenticated:
         return False
-    return user.role == 'company_admin' and user.company_id == company.id
+
+    if user.is_superuser:
+        return True
+
+    if user.role != 'company_manager':
+        return False
+
+    if user.company_id is None:
+        return False
+
+    if company is not None:
+        company_id = getattr(company, 'id', company)
+        return user.company_id == company_id
+
+    return True
 
 
-def can_manage_company(user, company):
-    """The check every company-scoped write endpoint should use."""
-    return is_platform_admin(user) or is_company_admin_for(user, company)
+def can_access_company(user, company_id):
+    """
+    Check whether a user can access a specific company.
+
+    Superusers can access every company.
+    Company staff can access only their own company.
+    """
+    if not user or not user.is_authenticated:
+        return False
+
+    if user.is_superuser:
+        return True
+
+    if user.role not in COMPANY_ROLES:
+        return False
+
+    return user.company_id == company_id
+
+
+class IsCompanyManager(BasePermission):
+    """
+    Allows only a company manager or Django superuser.
+    """
+
+    def has_permission(self, request, view):
+        return can_manage_company(request.user)
+
+
+class IsCompanyAuditor(BasePermission):
+    """
+    Allows only a company auditor or Django superuser.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if user.is_superuser:
+            return True
+
+        return (
+            user.role == 'company_auditor'
+            and user.company_id is not None
+        )
+
+
+class IsCompanyOperator(BasePermission):
+    """
+    Allows only a company operator or Django superuser.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if user.is_superuser:
+            return True
+
+        return (
+            user.role == 'company_operator'
+            and user.company_id is not None
+        )
+
+
+class IsCompanyStaff(BasePermission):
+    """
+    Allows any company Manager, Auditor, or Operator.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if user.is_superuser:
+            return True
+
+        return (
+            user.role in COMPANY_ROLES
+            and user.company_id is not None
+        )

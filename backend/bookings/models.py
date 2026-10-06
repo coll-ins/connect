@@ -34,6 +34,17 @@ class Booking(models.Model):
     verification_pin = models.CharField(max_length=6, default=generate_verification_pin)
     
     pickup_location = models.CharField(max_length=255)
+
+    # New structured pickup point. Nullable so existing bookings continue
+    # working while the system is migrated to recognized pickup stages.
+    pickup_stage = models.ForeignKey(
+        'companies.PickupStage',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bookings',
+    )
+
     seats = models.PositiveIntegerField(default=1)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
@@ -197,3 +208,193 @@ class BoardingEvent(models.Model):
 
     def __str__(self):
         return f"Boarded: {self.booking.booking_number} via {self.method.upper()}"
+
+
+class Incident(models.Model):
+    INCIDENT_TYPE_CHOICES = [
+        ('breakdown', 'Breakdown'),
+        ('accident', 'Accident'),
+        ('road_blocked', 'Road Blocked'),
+        ('stage_issue', 'Stage Issue'),
+        ('other', 'Other'),
+    ]
+
+    STATUS_CHOICES = [
+        ('reported', 'Reported'),
+        ('investigating', 'Investigating'),
+        ('resolved', 'Resolved'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    trip = models.ForeignKey(
+        Trip,
+        on_delete=models.CASCADE,
+        related_name='incidents',
+    )
+
+    reported_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reported_incidents',
+    )
+
+    incident_type = models.CharField(
+        max_length=30,
+        choices=INCIDENT_TYPE_CHOICES,
+    )
+
+    description = models.TextField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='reported',
+    )
+
+    reported_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    def __str__(self):
+        return (
+            f"{self.get_incident_type_display()} - "
+            f"{self.trip.route.name}"
+        )
+
+    class Meta:
+        ordering = ['-reported_at']
+        indexes = [
+            models.Index(fields=['trip', 'status']),
+            models.Index(fields=['reported_at']),
+        ]
+
+
+class BookingHold(models.Model):
+    STATUS_CHOICES = [
+        ('held', 'Held'),
+        ('released', 'Released'),
+        ('refunded', 'Refunded'),
+        ('transferred', 'Transferred'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    booking = models.OneToOneField(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name='financial_hold',
+    )
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    refunded_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='held',
+    )
+
+    held_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    refunded_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    transferred_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    def __str__(self):
+        return (
+            f"{self.booking.booking_number} - "
+            f"{self.amount} - {self.status}"
+        )
+
+class IncidentResolution(models.Model):
+    RESOLUTION_CHOICES = [
+        ('refund', 'Refund'),
+        ('reschedule', 'Reschedule'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    booking = models.OneToOneField(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name='incident_resolution',
+    )
+
+    incident = models.ForeignKey(
+        Incident,
+        on_delete=models.CASCADE,
+        related_name='resolutions',
+    )
+
+    resolution = models.CharField(
+        max_length=20,
+        choices=RESOLUTION_CHOICES,
+    )
+
+    replacement_trip = models.ForeignKey(
+        Trip,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incident_rescheduled_bookings',
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+    )
+
+    refund_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return (
+            f"{self.booking.booking_number} - "
+            f"{self.resolution} ({self.status})"
+        )

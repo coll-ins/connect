@@ -1,17 +1,42 @@
+
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import TemplateView
 from django.http import JsonResponse
 from companies.views import get_trips, get_trip_details
+from connect.system_checks import run_system_checks
 
 def health_check(request):
     return JsonResponse({'status': 'ok', 'service': 'CONNECT API'})
+
+def system_diagnostics(request):
+    if not request.user.is_authenticated:
+        return JsonResponse(
+            {'detail': 'Authentication required.'},
+            status=401
+        )
+
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {'detail': 'Platform administrator access required.'},
+            status=403
+        )
+
+    return JsonResponse(
+        run_system_checks(),
+        status=200
+    )
 
 
 urlpatterns = [
     path('', TemplateView.as_view(template_name='index.html')),
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health-check'),
+    path(
+    'api/system/diagnostics/',
+    system_diagnostics,
+    name='system-diagnostics'
+),
 
     path('api/users/', include('users.urls')),
     path('api/companies/', include('companies.urls')),
@@ -19,6 +44,7 @@ urlpatterns = [
     path('api/trips/<int:trip_id>/', get_trip_details, name='get-trip-details'),
     path('api/bookings/', include('bookings.urls')),
     path('api/drivers/', include('drivers.urls')),
+    path('api/buses/', include('buses.urls')),
     path('api/wallet/', include('wallets.urls')),
 ]
 

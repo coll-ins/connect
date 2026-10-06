@@ -1,0 +1,126 @@
+import { useCallback, useEffect, useState } from 'react';
+import { apiRequest } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+
+const date = v => v ? new Date(v).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+function Shell({ user, logout, children }) {
+  return (
+    <div className="page">
+      <div className="shell">
+        <header className="topbar">
+          <div className="brand">
+            <div className="brand-icon">C</div>
+            <div>CONNECT<small>Today's operations</small></div>
+          </div>
+          <div className="top-actions">
+            <span className="location-chip">🏢 {user?.company_name || 'Company'}</span>
+            <button className="btn btn-ghost" onClick={logout}>Logout</button>
+          </div>
+        </header>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function CompanyOperatorDashboard() {
+  const { user, logout } = useAuth();
+  const id = user?.company_id;
+  const [trips, setTrips] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      const [t, d, b] = await Promise.all([
+        apiRequest(`/companies/${id}/trips/`),
+        apiRequest(`/drivers/?company_id=${id}`),
+        apiRequest(`/bookings/all/?company_id=${id}`),
+      ]);
+      setTrips(t || []);
+      setDrivers(d || []);
+      setBookings(b || []);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const status = async (t, s) => {
+    try {
+      await apiRequest(`/companies/trips/${t.id}/status/`, { method: 'POST', body: { status: s } });
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const assign = async b => {
+    const driverId = prompt(`Driver ID for ${b.booking_number}:`, drivers[0]?.id || '');
+    if (!driverId) return;
+    try {
+      await apiRequest(`/bookings/${b.booking_id}/assign-driver/`, { method: 'POST', body: { driver_id: Number(driverId) } });
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  return (
+    <Shell user={user} logout={logout}>
+      <section className="hero">
+        <p className="eyebrow">COMPANY OPERATOR</p>
+        <h1>Today's trips</h1>
+        <p className="muted">Manage boarding status and assign drivers to passenger bookings.</p>
+      </section>
+
+      {error && <div className="error">{error}</div>}
+
+      <div className="section-title"><h2>Trips</h2></div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead><tr><th>Route</th><th>Departure</th><th>Driver</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            {trips.map(t => (
+              <tr key={t.id}>
+                <td>{t.route_details?.name}</td>
+                <td>{date(t.departure_at)}</td>
+                <td>{t.driver_name}</td>
+                <td><span className="badge badge-blue">{t.status}</span></td>
+                <td>
+                  <select className="select" value={t.status} onChange={e => status(t, e.target.value)}>
+                    <option>scheduled</option><option>boarding</option><option>departed</option>
+                    <option>completed</option><option>cancelled</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="section-title"><h2>Bookings</h2></div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead><tr><th>Booking</th><th>Passenger</th><th>Route</th><th>Payment</th><th>Driver</th><th></th></tr></thead>
+          <tbody>
+            {bookings.map(b => (
+              <tr key={b.booking_id}>
+                <td>{b.booking_number}</td>
+                <td>{b.user}<br /><span className="muted">{b.user_phone}</span></td>
+                <td>{b.route_name}</td>
+                <td>{b.payment_status}</td>
+                <td>{b.driver_name || 'Unassigned'}</td>
+                <td><button className="btn btn-secondary" onClick={() => assign(b)}>Assign</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Shell>
+  );
+}

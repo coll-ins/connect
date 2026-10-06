@@ -1,8 +1,4910 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  BarChart3,
+  Bell,
+  Bus,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  Database,
+  DollarSign,
+  LayoutDashboard,
+  LogOut,
+  Plus,
+  RefreshCw,
+  Route as RouteIcon,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
+import {
+  NavLink,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-const money=v=>`KES ${Number(v||0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;const date=v=>v?new Date(v).toLocaleString('en-KE',{dateStyle:'medium',timeStyle:'short'}):'—';
-function Shell({logout,children}){return <div className="page"><div className="shell"><header className="topbar"><div className="brand"><div className="brand-icon">C</div><div>CONNECT<small>Platform administration</small></div></div><div className="top-actions"><span className="location-chip">🛡 Platform admin</span><button className="btn btn-ghost" onClick={logout}>Logout</button></div></header>{children}</div></div>}
-export default function PlatformAdminDashboard(){const{logout}=useAuth();const[companies,setCompanies]=useState([]),[drivers,setDrivers]=useState([]),[trips,setTrips]=useState([]),[bookings,setBookings]=useState([]),[error,setError]=useState('');const[loading,setLoading]=useState(true);
- const load=useCallback(async()=>{setLoading(true);try{const[c,d,t,b]=await Promise.all([apiRequest('/companies/'),apiRequest('/drivers/'),apiRequest('/companies/trips/'),apiRequest('/bookings/all/')]);setCompanies(c||[]);setDrivers(d||[]);setTrips(t||[]);setBookings(b||[])}catch(e){setError(e.message)}finally{setLoading(false)}},[]);useEffect(()=>{load()},[load]);
- return <Shell logout={logout}><section className="hero"><p className="eyebrow">PLATFORM CONTROL CENTRE</p><h1>Everything in CONNECT, one view.</h1><p className="muted">Monitor operators, vehicles, trips and bookings across the network.</p></section>{error&&<div className="error">{error}</div>}{loading?<div className="empty">Loading platform data…</div>:<><div className="kpi-row" style={{marginTop:16}}>{[['Companies',companies.length],['Drivers',drivers.length],['Trips',trips.length],['Bookings',bookings.length]].map(([l,v])=><div className="card stat" key={l}><div className="stat-label">{l}</div><div className="stat-value">{v}</div></div>)}</div><div className="section-title"><h2>Companies</h2></div><div className="grid grid-3">{companies.map(c=><div className="card" key={c.id}><h3>{c.name}</h3><p className="muted">{c.areas_served}</p><span className="badge badge-blue">Company #{c.id}</span></div>)}</div><div className="section-title"><h2>Drivers</h2></div><div className="table-wrap"><table className="table"><thead><tr><th>Driver</th><th>Bus</th><th>Company</th><th>Availability</th></tr></thead><tbody>{drivers.map(d=><tr key={d.id}><td>{d.name}<br/><span className="muted">{d.phone_number}</span></td><td>{d.bus_number}</td><td>{d.company_name}</td><td>{d.is_available?'Available':'Unavailable'}</td></tr>)}</tbody></table></div><div className="section-title"><h2>Latest bookings</h2></div><div className="table-wrap"><table className="table"><thead><tr><th>Booking</th><th>Passenger</th><th>Company</th><th>Amount</th><th>Payment</th><th>Status</th></tr></thead><tbody>{bookings.slice(0,30).map(b=><tr key={b.booking_id}><td>{b.booking_number}</td><td>{b.user}</td><td>{b.company_name}</td><td>{money(b.total_amount)}</td><td>{b.payment_status}</td><td>{b.status}</td></tr>)}</tbody></table></div><div className="section-title"><h2>Trips</h2><button className="btn btn-ghost" onClick={load}>Refresh</button></div><div className="table-wrap"><table className="table"><thead><tr><th>Route</th><th>Company</th><th>Departure</th><th>Driver</th><th>Status</th></tr></thead><tbody>{trips.map(t=><tr key={t.id}><td>{t.route_details?.name}</td><td>{t.company_name}</td><td>{date(t.departure_at)}</td><td>{t.driver_name}</td><td>{t.status}</td></tr>)}</tbody></table></div></>}</Shell>}
+
+const money = (value) =>
+  `KES ${Number(value || 0).toLocaleString('en-KE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const formatDate = (value) =>
+  value
+    ? new Date(value).toLocaleString('en-KE', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+
+const list = (value) =>
+  Array.isArray(value)
+    ? value
+    : value?.results || value?.data || [];
+
+const emptyCompany = {
+  name: '',
+  description: '',
+  areas_served: '',
+  phone_number: '',
+};
+
+const emptyRoute = {
+  name: '',
+  start_point: '',
+  end_point: '',
+  price: '',
+  company_id: '',
+};
+
+const emptyDriver = {
+  name: '',
+  phone_number: '',
+  password: '',
+  bus_number: '',
+  company: '',
+};
+
+const emptyTrip = {
+  route_id: '',
+  driver_id: '',
+  departure_at: '',
+  capacity: 14,
+  company_id: '',
+};
+
+const emptyOperator = {
+  username: '',
+  email: '',
+  phone_number: '',
+  location: '',
+  role: 'company_manager',
+  company: '',
+  password: '',
+};
+
+function SideLink({ to, icon: Icon, children, end = false }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `pa-link ${isActive ? 'active' : ''}`
+      }
+    >
+      <Icon size={18} />
+      <span>{children}</span>
+    </NavLink>
+  );
+}
+
+function PlatformShell({ logout, children }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const closeMobile = () => setMobileOpen(false);
+
+  return (
+    <div className="pa-shell">
+      <style>{`
+        .pa-shell {
+          min-height: 100vh;
+          display: flex;
+          background:
+            radial-gradient(circle at 10% 10%, rgba(16,185,129,.10), transparent 30%),
+            radial-gradient(circle at 90% 90%, rgba(59,130,246,.08), transparent 35%),
+            #07111f;
+          color: #e8f0f7;
+        }
+
+        .pa-sidebar {
+          width: 255px;
+          min-height: 100vh;
+          position: fixed;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          padding: 22px 16px;
+          display: flex;
+          flex-direction: column;
+          background: rgba(5,15,27,.88);
+          border-right: 1px solid rgba(255,255,255,.08);
+          backdrop-filter: blur(22px);
+          z-index: 20;
+        }
+
+        .pa-brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 6px 8px 22px;
+        }
+
+        .pa-brand-mark {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          display: grid;
+          place-items: center;
+          font-weight: 900;
+          background: linear-gradient(135deg,#10b981,#059669);
+          color: white;
+          box-shadow: 0 8px 25px rgba(16,185,129,.22);
+        }
+
+        .pa-brand strong,
+        .pa-admin-card strong {
+          display: block;
+        }
+
+        .pa-brand small,
+        .pa-admin-card span {
+          color: #8292a5;
+          font-size: 11px;
+        }
+
+        .pa-admin-card {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px;
+          margin-bottom: 18px;
+          border: 1px solid rgba(255,255,255,.08);
+          border-radius: 14px;
+          background: rgba(255,255,255,.035);
+        }
+
+        .pa-admin-icon {
+          width: 34px;
+          height: 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 10px;
+          color: #6ee7b7;
+          background: rgba(16,185,129,.12);
+        }
+
+        .pa-nav {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          overflow-y: auto;
+        }
+
+        .pa-nav-label {
+          margin: 15px 8px 5px;
+          color: #5e7187;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: .12em;
+        }
+
+        .pa-link {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          padding: 10px 11px;
+          border-radius: 10px;
+          color: #91a1b3;
+          text-decoration: none;
+          font-size: 13px;
+          transition: .18s ease;
+        }
+
+        .pa-link:hover {
+          color: #fff;
+          background: rgba(255,255,255,.045);
+        }
+
+        .pa-link.active {
+          color: #fff;
+          background: rgba(16,185,129,.13);
+          box-shadow: inset 3px 0 0 #10b981;
+        }
+
+        .pa-logout {
+          margin-top: auto;
+          border: 1px solid rgba(255,255,255,.08);
+          border-radius: 11px;
+          background: rgba(255,255,255,.035);
+          color: #a7b4c2;
+          padding: 11px;
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          cursor: pointer;
+        }
+
+        .pa-mobile-menu,
+        .pa-mobile-backdrop {
+          display: none;
+        }
+
+        .pa-main {
+          margin-left: 255px;
+          width: calc(100% - 255px);
+          min-height: 100vh;
+        }
+
+        @media (max-width: 800px) {
+          .pa-mobile-menu {
+            display: grid;
+            place-items: center;
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            width: 44px;
+            height: 44px;
+            z-index: 100;
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: 13px;
+            background: rgba(7,17,31,.90);
+            color: #e8f1f7;
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+            backdrop-filter: blur(18px);
+            box-shadow: 0 10px 30px rgba(0,0,0,.28);
+          }
+
+          .pa-mobile-backdrop {
+            display: block;
+            position: fixed;
+            inset: 0;
+            z-index: 110;
+            border: 0;
+            background: rgba(0,0,0,.48);
+            backdrop-filter: blur(2px);
+          }
+
+          .pa-sidebar {
+            width: min(280px, 84vw) !important;
+            min-width: min(280px, 84vw) !important;
+            transform: translateX(-105%);
+            transition: transform .22s ease;
+            z-index: 120;
+            overflow-y: auto;
+          }
+
+          .pa-sidebar.pa-sidebar-open {
+            transform: translateX(0);
+          }
+
+          .pa-main {
+            width: 100% !important;
+            margin-left: 0 !important;
+            min-height: 100vh;
+            padding-top: 62px;
+          }
+
+          .pa-topbar {
+            padding-left: 68px;
+          }
+        }
+
+        @media (max-width: 430px) {
+          .pa-mobile-menu {
+            top: 9px;
+            left: 9px;
+            width: 42px;
+            height: 42px;
+          }
+
+          .pa-topbar {
+            padding-left: 62px;
+          }
+        }
+
+        .pa-topbar {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 19px 30px;
+          background: rgba(7,17,31,.78);
+          border-bottom: 1px solid rgba(255,255,255,.07);
+          backdrop-filter: blur(18px);
+        }
+
+        .pa-overline,
+        .pa-card-eyebrow {
+          color: #5ee7b7;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: .13em;
+        }
+
+        .pa-topbar h2 {
+          margin: 4px 0 0;
+          font-size: 20px;
+        }
+
+        .pa-user {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .pa-user strong,
+        .pa-user span {
+          display: block;
+        }
+
+        .pa-user span {
+          color: #77899c;
+          font-size: 11px;
+        }
+
+        .pa-avatar {
+          width: 36px;
+          height: 36px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: rgba(16,185,129,.16);
+          color: #6ee7b7;
+          font-weight: 800;
+        }
+
+        .pa-content {
+          padding: 28px;
+          max-width: 1500px;
+          margin: auto;
+        }
+
+        .pa-system-status {
+          border: 1px solid rgba(255,255,255,.09);
+          background: rgba(255,255,255,.04);
+          color: #b7c3d0;
+          border-radius: 10px;
+          padding: 8px 11px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+        }
+
+        .pa-system-status.healthy {
+          color: #6ee7b7;
+        }
+
+        .pa-system-status.warning {
+          color: #fbbf24;
+        }
+
+        .pa-system-status.critical {
+          color: #f87171;
+        }
+
+        .pa-status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: currentColor;
+          box-shadow: 0 0 12px currentColor;
+        }
+
+        .pa-page-head,
+        .pa-section-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 20px;
+          margin-bottom: 22px;
+        }
+
+        .pa-page-head h1,
+        .pa-section-heading h3 {
+          margin: 4px 0;
+          font-size: 25px;
+        }
+
+        .pa-page-head p,
+        .pa-section-heading p {
+          margin: 0;
+          color: #7f91a5;
+          font-size: 13px;
+        }
+
+        .pa-page-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+
+        .pa-primary-button,
+        .pa-secondary-button,
+        .pa-danger-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          border-radius: 10px;
+          padding: 10px 14px;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 12px;
+          border: 1px solid transparent;
+        }
+
+        .pa-primary-button {
+          background: #10b981;
+          color: #04150f;
+        }
+
+        .pa-primary-button:hover {
+          background: #34d399;
+        }
+
+        .pa-secondary-button {
+          color: #d3dde7;
+          background: rgba(255,255,255,.045);
+          border-color: rgba(255,255,255,.08);
+        }
+
+        .pa-danger-button {
+          color: #fecaca;
+          background: rgba(239,68,68,.09);
+          border-color: rgba(239,68,68,.2);
+        }
+
+        button:disabled {
+          opacity: .55;
+          cursor: not-allowed;
+        }
+
+        .pa-stat-grid {
+          display: grid;
+          grid-template-columns: repeat(4,minmax(0,1fr));
+          gap: 13px;
+          margin-bottom: 20px;
+        }
+
+        .pa-stat-card,
+        .pa-command-card,
+        .pa-panel,
+        .pa-test-summary > div,
+        .pa-issue-summary-card {
+          border: 1px solid rgba(255,255,255,.08);
+          background: rgba(255,255,255,.035);
+          border-radius: 15px;
+          backdrop-filter: blur(14px);
+        }
+
+        .pa-stat-card {
+          padding: 17px;
+        }
+
+        .pa-stat-card span {
+          display: block;
+          color: #7f91a5;
+          font-size: 11px;
+          margin-bottom: 7px;
+        }
+
+        .pa-stat-card strong {
+          font-size: 24px;
+        }
+
+        .pa-command-grid {
+          display: grid;
+          grid-template-columns: repeat(2,minmax(0,1fr));
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+
+        .pa-command-card {
+          padding: 19px;
+        }
+
+        .pa-command-card-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+        }
+
+        .pa-command-card h3 {
+          margin: 5px 0 0;
+          font-size: 17px;
+        }
+
+        .pa-command-card p {
+          color: #8192a5;
+          line-height: 1.6;
+          font-size: 13px;
+        }
+
+        .pa-command-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 11px;
+          display: grid;
+          place-items: center;
+          background: rgba(16,185,129,.11);
+          color: #6ee7b7;
+        }
+
+        .pa-command-icon.warning {
+          color: #fbbf24;
+          background: rgba(251,191,36,.10);
+        }
+
+        .pa-command-icon.critical {
+          color: #f87171;
+          background: rgba(248,113,113,.10);
+        }
+
+        .pa-command-message {
+          padding: 11px 14px;
+          border: 1px solid rgba(16,185,129,.2);
+          background: rgba(16,185,129,.07);
+          color: #9be8c9;
+          border-radius: 10px;
+          margin-bottom: 16px;
+          font-size: 12px;
+        }
+
+        .pa-two-col {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr;
+          gap: 15px;
+        }
+
+        .pa-panel {
+          padding: 18px;
+          margin-bottom: 15px;
+        }
+
+        .pa-panel-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 15px;
+        }
+
+        .pa-panel-header h3 {
+          margin: 0;
+          font-size: 15px;
+        }
+
+        .pa-panel-header p {
+          margin: 4px 0 0;
+          color: #718399;
+          font-size: 12px;
+        }
+
+        .pa-list {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .pa-list-row,
+        .pa-report-row,
+        .pa-setting-row,
+        .pa-test-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 0;
+          border-bottom: 1px solid rgba(255,255,255,.055);
+        }
+
+        .pa-list-row:last-child,
+        .pa-report-row:last-child,
+        .pa-setting-row:last-child,
+        .pa-test-row:last-child {
+          border-bottom: 0;
+        }
+
+        .pa-list-row strong,
+        .pa-report-row strong,
+        .pa-setting-row strong,
+        .pa-test-row strong {
+          display: block;
+          font-size: 13px;
+        }
+
+        .pa-list-row span,
+        .pa-report-row span,
+        .pa-setting-row span,
+        .pa-test-row span {
+          color: #74869a;
+          font-size: 11px;
+        }
+
+        .pa-table-wrap {
+          overflow-x: auto;
+        }
+
+        .pa-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12px;
+        }
+
+        .pa-table th {
+          text-align: left;
+          color: #718399;
+          font-weight: 700;
+          padding: 11px 10px;
+          border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+
+        .pa-table td {
+          padding: 12px 10px;
+          border-bottom: 1px solid rgba(255,255,255,.055);
+          color: #cbd5df;
+        }
+
+        .pa-table td strong {
+          color: #f1f5f9;
+        }
+
+        .pa-actions {
+          display: flex;
+          gap: 6px;
+          justify-content: flex-end;
+        }
+
+        .pa-icon-button {
+          width: 31px;
+          height: 31px;
+          border: 1px solid rgba(255,255,255,.08);
+          background: rgba(255,255,255,.035);
+          color: #aab8c7;
+          border-radius: 8px;
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+        }
+
+        .pa-icon-button.danger {
+          color: #fca5a5;
+        }
+
+        .pa-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 8px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 800;
+          background: rgba(16,185,129,.1);
+          color: #6ee7b7;
+        }
+
+        .pa-badge.warning {
+          background: rgba(251,191,36,.1);
+          color: #fbbf24;
+        }
+
+        .pa-badge.danger {
+          background: rgba(239,68,68,.1);
+          color: #fca5a5;
+        }
+
+        .pa-badge.muted {
+          background: rgba(148,163,184,.1);
+          color: #94a3b8;
+        }
+
+        .pa-empty-state {
+          min-height: 220px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          color: #8192a5;
+          text-align: center;
+          border: 1px dashed rgba(255,255,255,.1);
+          border-radius: 14px;
+          padding: 25px;
+        }
+
+        .pa-empty-state strong {
+          color: #e5edf5;
+        }
+
+        .pa-form {
+          display: grid;
+          gap: 12px;
+        }
+
+        .pa-form-grid {
+          display: grid;
+          grid-template-columns: repeat(2,minmax(0,1fr));
+          gap: 12px;
+        }
+
+        .pa-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .pa-field.full {
+          grid-column: 1/-1;
+        }
+
+        .pa-field label {
+          color: #91a1b3;
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        .pa-field input,
+        .pa-field select,
+        .pa-field textarea {
+          width: 100%;
+          box-sizing: border-box;
+          border: 1px solid rgba(255,255,255,.09);
+          border-radius: 9px;
+          background: rgba(0,0,0,.18);
+          color: #edf4fa;
+          padding: 10px 11px;
+          outline: none;
+          font: inherit;
+          font-size: 12px;
+        }
+
+        .pa-field textarea {
+          min-height: 82px;
+          resize: vertical;
+        }
+
+        .pa-field input:focus,
+        .pa-field select:focus,
+        .pa-field textarea:focus {
+          border-color: rgba(16,185,129,.5);
+        }
+
+        .pa-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          background: rgba(0,0,0,.62);
+          display: grid;
+          place-items: center;
+          padding: 20px;
+        }
+
+        .pa-modal {
+          width: min(700px,100%);
+          max-height: 90vh;
+          overflow-y: auto;
+          background: #0b1726;
+          border: 1px solid rgba(255,255,255,.1);
+          border-radius: 17px;
+          box-shadow: 0 25px 80px rgba(0,0,0,.5);
+          padding: 22px;
+        }
+
+        .pa-modal-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 18px;
+        }
+
+        .pa-modal-head h3 {
+          margin: 0;
+        }
+
+        .pa-modal-head p {
+          margin: 5px 0 0;
+          color: #718399;
+          font-size: 12px;
+        }
+
+        .pa-modal-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 18px;
+        }
+
+        .pa-error {
+          padding: 11px 13px;
+          margin-bottom: 15px;
+          border-radius: 10px;
+          color: #fecaca;
+          background: rgba(239,68,68,.08);
+          border: 1px solid rgba(239,68,68,.18);
+          font-size: 12px;
+        }
+
+        .pa-issue-summary {
+          display: grid;
+          grid-template-columns: repeat(3,1fr);
+          gap: 13px;
+          margin-bottom: 15px;
+        }
+
+        .pa-issue-summary-card {
+          padding: 17px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .pa-issue-summary-card.critical {
+          color: #f87171;
+        }
+
+        .pa-issue-summary-card.warning {
+          color: #fbbf24;
+        }
+
+        .pa-issue-summary-card.healthy {
+          color: #6ee7b7;
+        }
+
+        .pa-issue-summary-card strong,
+        .pa-issue-summary-card span {
+          display: block;
+        }
+
+        .pa-issue-summary-card strong {
+          color: inherit;
+          font-size: 21px;
+        }
+
+        .pa-issue-summary-card span {
+          color: #718399;
+          font-size: 11px;
+        }
+
+        .pa-issue-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .pa-issue-row {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          text-align: left;
+          padding: 13px;
+          border-radius: 11px;
+          border: 1px solid rgba(255,255,255,.06);
+          background: rgba(255,255,255,.025);
+          color: inherit;
+          cursor: pointer;
+        }
+
+        .pa-issue-row.critical {
+          border-color: rgba(239,68,68,.18);
+        }
+
+        .pa-issue-row.warning {
+          border-color: rgba(251,191,36,.15);
+        }
+
+        .pa-issue-icon {
+          flex: 0 0 auto;
+        }
+
+        .pa-issue-row.critical .pa-issue-icon {
+          color: #f87171;
+        }
+
+        .pa-issue-row.warning .pa-issue-icon {
+          color: #fbbf24;
+        }
+
+        .pa-issue-content {
+          flex: 1;
+        }
+
+        .pa-issue-content strong,
+        .pa-issue-content span {
+          display: block;
+        }
+
+        .pa-issue-content strong {
+          font-size: 13px;
+        }
+
+        .pa-issue-content span {
+          color: #77899c;
+          font-size: 11px;
+          margin-top: 3px;
+        }
+
+        .pa-test-summary {
+          display: grid;
+          grid-template-columns: repeat(4,1fr);
+          gap: 12px;
+          margin-bottom: 15px;
+        }
+
+        .pa-test-summary > div {
+          padding: 16px;
+        }
+
+        .pa-test-summary strong,
+        .pa-test-summary span {
+          display: block;
+        }
+
+        .pa-test-summary strong {
+          font-size: 21px;
+        }
+
+        .pa-test-summary span {
+          color: #718399;
+          font-size: 11px;
+          margin-top: 4px;
+        }
+
+        .pa-test-row {
+          justify-content: flex-start;
+        }
+
+        .pa-test-icon {
+          width: 32px;
+          height: 32px;
+          display: grid;
+          place-items: center;
+          border-radius: 8px;
+          background: rgba(255,255,255,.04);
+        }
+
+        .pa-test-row.passed .pa-test-icon {
+          color: #6ee7b7;
+        }
+
+        .pa-test-row.warning .pa-test-icon {
+          color: #fbbf24;
+        }
+
+        .pa-test-row.failed .pa-test-icon {
+          color: #f87171;
+        }
+
+        .pa-test-row > div:nth-child(2) {
+          flex: 1;
+        }
+
+        .pa-test-status {
+          padding: 4px 8px;
+          border-radius: 999px;
+          font-size: 9px !important;
+          text-transform: uppercase;
+          font-weight: 800;
+          background: rgba(255,255,255,.05);
+        }
+
+        .pa-report-list,
+        .pa-settings-list {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .pa-report-row {
+          padding: 13px 0;
+        }
+
+        .pa-setting-row {
+          padding: 14px 0;
+        }
+
+        .pa-setting-value {
+          color: #6ee7b7 !important;
+        }
+
+        .pa-spin {
+          animation: pa-spin 1s linear infinite;
+        }
+
+        @keyframes pa-spin {
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 1100px) {
+          .pa-stat-grid {
+            grid-template-columns: repeat(2,1fr);
+          }
+
+          .pa-two-col {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 800px) {
+          .pa-sidebar {
+            width: 220px;
+            min-width: 220px;
+          }
+
+          .pa-brand div:last-child,
+          .pa-admin-card > div:last-child,
+          .pa-link span,
+          .pa-nav-label,
+          .pa-logout {
+            display: block;
+          }
+
+          .pa-main {
+            margin-left: 220px;
+            width: calc(100% - 220px);
+          }
+
+          .pa-link {
+            justify-content: flex-start;
+          }
+
+          .pa-command-grid,
+          .pa-issue-summary,
+          .pa-test-summary {
+            grid-template-columns: 1fr;
+          }
+
+          .pa-form-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+
+      <button
+        type="button"
+        className="pa-mobile-menu"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Open navigation"
+      >
+        ☰
+      </button>
+
+      {mobileOpen && (
+        <button
+          type="button"
+          className="pa-mobile-backdrop"
+          onClick={closeMobile}
+          aria-label="Close navigation"
+        />
+      )}
+
+      <aside className={`pa-sidebar ${mobileOpen ? 'pa-sidebar-open' : ''}`}>
+        <div className="pa-brand">
+          <div className="pa-brand-mark">C</div>
+          <div>
+            <strong>CONNECT</strong>
+            <small>Platform Control</small>
+          </div>
+        </div>
+
+        <div className="pa-admin-card">
+          <div className="pa-admin-icon">
+            <ShieldCheck size={18} />
+          </div>
+          <div>
+            <strong>Platform Admin</strong>
+            <span>Global access</span>
+          </div>
+        </div>
+
+        <nav className="pa-nav">
+          <p className="pa-nav-label">CONTROL</p>
+
+          <SideLink to="/platform-admin" icon={LayoutDashboard} end onClick={closeMobile}>
+            Overview
+          </SideLink>
+
+          <SideLink to="/platform-admin/companies" onClick={closeMobile} icon={Building2}>
+            Companies
+          </SideLink>
+
+          <SideLink to="/platform-admin/routes" onClick={closeMobile} icon={RouteIcon}>
+            Routes
+          </SideLink>
+
+          <SideLink to="/platform-admin/trips" onClick={closeMobile} icon={CalendarDays}>
+            Trips
+          </SideLink>
+
+          <SideLink to="/platform-admin/drivers" onClick={closeMobile} icon={Bus}>
+            Drivers
+          </SideLink>
+
+          <SideLink to="/platform-admin/operators" onClick={closeMobile} icon={Users}>
+            Operators
+          </SideLink>
+
+          <SideLink to="/platform-admin/bookings" onClick={closeMobile} icon={ClipboardList}>
+            Bookings
+          </SideLink>
+
+          <p className="pa-nav-label">INSIGHTS</p>
+
+          <SideLink to="/platform-admin/users" onClick={closeMobile} icon={UserRound}>
+            Users
+          </SideLink>
+
+          <SideLink to="/platform-admin/reports" onClick={closeMobile} icon={BarChart3}>
+            Reports
+          </SideLink>
+
+          <SideLink to="/platform-admin/revenue" onClick={closeMobile} icon={DollarSign}>
+            Revenue
+          </SideLink>
+
+          <p className="pa-nav-label">SYSTEM</p>
+
+          <SideLink to="/platform-admin/issues" onClick={closeMobile} icon={AlertTriangle}>
+            Issues
+          </SideLink>
+
+          <SideLink to="/platform-admin/system-tests" onClick={closeMobile} icon={Database}>
+            System Tests
+          </SideLink>
+
+          <SideLink to="/platform-admin/settings" onClick={closeMobile} icon={Settings}>
+            Settings
+          </SideLink>
+        </nav>
+
+        <button
+          className="pa-logout"
+          onClick={() => {
+            closeMobile();
+            logout();
+          }}
+        >
+          <LogOut size={18} />
+          Logout
+        </button>
+      </aside>
+
+      <div className="pa-main">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function PlatformAdminDashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const section =
+    location.pathname
+      .replace('/platform-admin', '')
+      .split('/')
+      .filter(Boolean)[0] || 'overview';
+
+  const [companies, setCompanies] = useState([]);
+  const [routes, setRoutes] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [operators, setOperators] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [commandMessage, setCommandMessage] = useState('');
+
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  const [systemChecks, setSystemChecks] = useState(null);
+  const [systemTestLoading, setSystemTestLoading] = useState(false);
+
+  const [companyModal, setCompanyModal] = useState(false);
+  const [companyForm, setCompanyForm] = useState(emptyCompany);
+  const [companyEditingId, setCompanyEditingId] = useState(null);
+  const [companySaving, setCompanySaving] = useState(false);
+
+  const [routeModal, setRouteModal] = useState(false);
+  const [routeForm, setRouteForm] = useState(emptyRoute);
+  const [routeEditingId, setRouteEditingId] = useState(null);
+  const [routeSaving, setRouteSaving] = useState(false);
+
+  const [driverModal, setDriverModal] = useState(false);
+  const [driverForm, setDriverForm] = useState(emptyDriver);
+  const [driverEditingId, setDriverEditingId] = useState(null);
+  const [driverSaving, setDriverSaving] = useState(false);
+
+  const [tripModal, setTripModal] = useState(false);
+  const [tripForm, setTripForm] = useState(emptyTrip);
+  const [tripSaving, setTripSaving] = useState(false);
+
+  const [operatorModal, setOperatorModal] = useState(false);
+  const [operatorForm, setOperatorForm] = useState(emptyOperator);
+  const [operatorSaving, setOperatorSaving] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setCurrentTime(Date.now()),
+      30000
+    );
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    const results = await Promise.allSettled([
+      apiRequest('/companies/'),
+      apiRequest('/companies/routes/'),
+      apiRequest('/drivers/'),
+      apiRequest('/companies/trips/'),
+      apiRequest('/bookings/all/'),
+      apiRequest('/users/'),
+      apiRequest('/users/company-staff/'),
+    ]);
+
+    const [
+      companiesResult,
+      routesResult,
+      driversResult,
+      tripsResult,
+      bookingsResult,
+      usersResult,
+      operatorsResult,
+    ] = results;
+
+    const errors = [];
+
+    if (companiesResult.status === 'fulfilled') {
+      setCompanies(list(companiesResult.value));
+    } else {
+      errors.push(`Companies: ${companiesResult.reason?.message || 'failed'}`);
+    }
+
+    if (routesResult.status === 'fulfilled') {
+      setRoutes(list(routesResult.value));
+    } else {
+      errors.push(`Routes: ${routesResult.reason?.message || 'failed'}`);
+    }
+
+    if (driversResult.status === 'fulfilled') {
+      setDrivers(list(driversResult.value));
+    } else {
+      errors.push(`Drivers: ${driversResult.reason?.message || 'failed'}`);
+    }
+
+    if (tripsResult.status === 'fulfilled') {
+      setTrips(list(tripsResult.value));
+    } else {
+      errors.push(`Trips: ${tripsResult.reason?.message || 'failed'}`);
+    }
+
+    if (bookingsResult.status === 'fulfilled') {
+      setBookings(list(bookingsResult.value));
+    } else {
+      errors.push(`Bookings: ${bookingsResult.reason?.message || 'failed'}`);
+    }
+
+    if (usersResult.status === 'fulfilled') {
+      setUsers(list(usersResult.value));
+    }
+
+    if (operatorsResult.status === 'fulfilled') {
+      setOperators(list(operatorsResult.value));
+    }
+
+    if (errors.length) {
+      setError(errors.join(' • '));
+    }
+
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const runSystemTests = useCallback(async () => {
+    setSystemTestLoading(true);
+    setCommandMessage('');
+
+    try {
+      const result = await apiRequest('/system/diagnostics/');
+      setSystemChecks(result);
+
+      if (result.status === 'critical') {
+        setCommandMessage(
+          `${result.failed} critical system check${
+            result.failed === 1 ? '' : 's'
+          } failed.`
+        );
+      } else if (result.status === 'warning') {
+        setCommandMessage(
+          `${result.warnings} system warning${
+            result.warnings === 1 ? '' : 's'
+          } detected.`
+        );
+      } else {
+        setCommandMessage('All platform system checks passed.');
+      }
+    } catch (err) {
+      setCommandMessage(
+        err.message || 'Unable to run system diagnostics.'
+      );
+    } finally {
+      setSystemTestLoading(false);
+    }
+  }, []);
+
+  const platformAlerts = useMemo(() => {
+    const alerts = [];
+
+    const scheduledPastTrips = trips.filter((trip) => {
+      const departure = new Date(trip.departure_at).getTime();
+
+      return (
+        String(trip.status).toLowerCase() === 'scheduled' &&
+        Number.isFinite(departure) &&
+        departure < currentTime
+      );
+    });
+
+    scheduledPastTrips.forEach((trip) => {
+      alerts.push({
+        id: `past-trip-${trip.id}`,
+        severity: 'critical',
+        title: 'Trip still scheduled after departure',
+        message: `${
+          trip.route_details?.name ||
+          trip.route_name ||
+          `Trip ${trip.id}`
+        } was scheduled for ${formatDate(trip.departure_at)} but remains scheduled.`,
+        section: 'trips',
+      });
+    });
+
+    const upcomingUnassignedTrips = trips.filter((trip) => {
+      const departure = new Date(trip.departure_at).getTime();
+
+      return (
+        departure > currentTime &&
+        !['completed', 'cancelled', 'departed'].includes(
+          String(trip.status || '').toLowerCase()
+        ) &&
+        !trip.driver &&
+        !trip.driver_name
+      );
+    });
+
+    upcomingUnassignedTrips.forEach((trip) => {
+      alerts.push({
+        id: `unassigned-trip-${trip.id}`,
+        severity: 'warning',
+        title: 'Upcoming trip has no driver',
+        message: `${
+          trip.route_details?.name ||
+          trip.route_name ||
+          `Trip ${trip.id}`
+        } departs ${formatDate(trip.departure_at)} without a driver.`,
+        section: 'trips',
+      });
+    });
+
+    const unassignedBookings = bookings.filter(
+      (booking) =>
+        !booking.driver &&
+        !booking.driver_name &&
+        !['completed', 'cancelled'].includes(
+          String(booking.status || '').toLowerCase()
+        )
+    );
+
+    if (unassignedBookings.length) {
+      alerts.push({
+        id: 'unassigned-bookings',
+        severity: 'warning',
+        title: 'Bookings need driver assignment',
+        message: `${unassignedBookings.length} active booking${
+          unassignedBookings.length === 1 ? '' : 's'
+        } have no assigned driver.`,
+        section: 'bookings',
+      });
+    }
+
+    const usage = bookings.reduce((result, booking) => {
+      const status = String(
+        booking.status || ''
+      ).toLowerCase();
+
+      if (['cancelled', 'completed', 'no_show'].includes(status)) {
+        return result;
+      }
+
+      const tripId =
+        booking.trip_id ??
+        booking.trip;
+
+      if (!tripId) {
+        return result;
+      }
+
+      const seats = Number(booking.seats || 0);
+
+      if (seats > 0) {
+        result[tripId] =
+          (result[tripId] || 0) + seats;
+      }
+
+      return result;
+    }, {});
+
+    trips.forEach((trip) => {
+      const capacity = Number(trip.capacity || 0);
+      const bookedSeats = Number(
+        usage[trip.id] || 0
+      );
+
+      if (
+        capacity > 0 &&
+        bookedSeats > capacity
+      ) {
+        alerts.push({
+          id: `over-capacity-${trip.id}`,
+          severity: 'critical',
+          title: 'Trip is over capacity',
+          message: `Trip ${trip.id} has ${bookedSeats} booked seats but only ${capacity} seats are available.`,
+          section: 'trips',
+        });
+      }
+    });
+
+    trips.forEach((trip) => {
+      if (!trip.driver) {
+        return;
+      }
+
+      const driver = drivers.find(
+        (item) =>
+          String(item.id) ===
+          String(trip.driver)
+      );
+
+      if (!driver) {
+        return;
+      }
+
+      const tripCompany =
+        trip.company ||
+        trip.company_id ||
+        trip.route_details?.company ||
+        trip.route_details?.company_id;
+
+      if (
+        tripCompany &&
+        driver.company &&
+        String(driver.company) !==
+          String(tripCompany)
+      ) {
+        alerts.push({
+          id: `driver-company-${trip.id}`,
+          severity: 'critical',
+          title: 'Driver/company mismatch detected',
+          message: `Trip ${trip.id} appears to have a driver from another company.`,
+          section: 'trips',
+        });
+      }
+    });
+
+    return alerts;
+  }, [trips, bookings, drivers, currentTime]);
+
+  const criticalAlerts = platformAlerts.filter(
+    (alert) => alert.severity === 'critical'
+  );
+
+  const warningAlerts = platformAlerts.filter(
+    (alert) => alert.severity === 'warning'
+  );
+
+  const systemStatus =
+    criticalAlerts.length > 0
+      ? 'critical'
+      : warningAlerts.length > 0
+        ? 'warning'
+        : 'healthy';
+
+  const revenue = bookings.reduce(
+    (total, booking) =>
+      total +
+      Number(
+        booking.total_amount ||
+          booking.amount ||
+          0
+      ),
+    0
+  );
+
+  const activeBookings = bookings.filter(
+    (booking) =>
+      !['completed', 'cancelled'].includes(
+        String(booking.status || '').toLowerCase()
+      )
+  );
+
+  const pageTitle = {
+    overview: 'Global overview',
+    companies: 'Companies',
+    routes: 'Routes',
+    trips: 'Trips',
+    drivers: 'Drivers',
+    operators: 'Operators',
+    bookings: 'Bookings',
+    users: 'Users',
+    reports: 'Reports',
+    revenue: 'Revenue',
+    issues: 'System issues',
+    'system-tests': 'System tests',
+    settings: 'Platform settings',
+  }[section] || 'Global overview';
+
+  const refresh = async () => {
+    await load();
+    setCommandMessage('Platform data refreshed.');
+  };
+
+  const openCreateCompany = () => {
+    setCompanyEditingId(null);
+    setCompanyForm(emptyCompany);
+    setCompanyModal(true);
+  };
+
+  const openEditCompany = (company) => {
+    setCompanyEditingId(company.id);
+    setCompanyForm({
+      name: company.name || '',
+      description: company.description || '',
+      areas_served: company.areas_served || '',
+      phone_number: company.phone_number || '',
+    });
+    setCompanyModal(true);
+  };
+
+  const saveCompany = async (event) => {
+    event.preventDefault();
+    setCompanySaving(true);
+    setError('');
+
+    try {
+      const payload = {
+        name: companyForm.name.trim(),
+        description: companyForm.description,
+        areas_served: companyForm.areas_served,
+        phone_number: companyForm.phone_number,
+      };
+
+      if (companyEditingId) {
+        await apiRequest(
+          `/companies/${companyEditingId}/`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        await apiRequest(
+          '/companies/create/',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          }
+        );
+      }
+
+      setCompanyModal(false);
+      setCommandMessage(
+        companyEditingId
+          ? 'Company updated successfully.'
+          : 'Company created successfully.'
+      );
+
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCompanySaving(false);
+    }
+  };
+
+  const openCreateRoute = () => {
+    setRouteEditingId(null);
+    setRouteForm(emptyRoute);
+    setRouteModal(true);
+  };
+
+  const openEditRoute = (route) => {
+    setRouteEditingId(route.id);
+    setRouteForm({
+      name: route.name || '',
+      start_point: route.start_point || '',
+      end_point: route.end_point || '',
+      price: route.price || '',
+      company_id:
+        route.company ||
+        route.company_id ||
+        '',
+    });
+    setRouteModal(true);
+  };
+
+  const saveRoute = async (event) => {
+    event.preventDefault();
+    setRouteSaving(true);
+    setError('');
+
+    try {
+      const payload = {
+        name: routeForm.name,
+        start_point: routeForm.start_point,
+        end_point: routeForm.end_point,
+        price: routeForm.price,
+        company_id: routeForm.company_id,
+        company: routeForm.company_id,
+      };
+
+      if (routeEditingId) {
+        await apiRequest(
+          `/companies/routes/${routeEditingId}/`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        await apiRequest(
+          '/companies/routes/create/',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          }
+        );
+      }
+
+      setRouteModal(false);
+      setCommandMessage(
+        routeEditingId
+          ? 'Route updated successfully.'
+          : 'Route created successfully.'
+      );
+
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRouteSaving(false);
+    }
+  };
+
+  const deleteRoute = async (route) => {
+    if (
+      !window.confirm(
+        `Delete route "${route.name}"?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await apiRequest(
+        `/companies/routes/${route.id}/`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      setCommandMessage('Route deleted.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openCreateDriver = () => {
+    setDriverEditingId(null);
+    setDriverForm(emptyDriver);
+    setDriverModal(true);
+  };
+
+  const openEditDriver = (driver) => {
+    setDriverEditingId(driver.id);
+    setDriverForm({
+      name: driver.name || '',
+      phone_number: driver.phone_number || '',
+      bus_number: driver.bus_number || '',
+      company:
+        driver.company ||
+        driver.company_id ||
+        '',
+    });
+    setDriverModal(true);
+  };
+
+  const saveDriver = async (event) => {
+    event.preventDefault();
+    setDriverSaving(true);
+    setError('');
+
+    try {
+      const payload = {
+        name: driverForm.name,
+        phone_number: driverForm.phone_number,
+        bus_number: driverForm.bus_number,
+        company: driverForm.company,
+      };
+
+      if (driverEditingId) {
+        await apiRequest(
+          `/drivers/${driverEditingId}/`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        await apiRequest(
+          '/drivers/',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          }
+        );
+      }
+
+      setDriverModal(false);
+      setCommandMessage(
+        driverEditingId
+          ? 'Driver updated successfully.'
+          : 'Driver created successfully.'
+      );
+
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDriverSaving(false);
+    }
+  };
+
+  const deleteDriver = async (driver) => {
+    if (
+      !window.confirm(
+        `Delete driver "${driver.name}"?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await apiRequest(
+        `/drivers/${driver.id}/`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      setCommandMessage('Driver deleted.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openCreateTrip = () => {
+    setTripForm(emptyTrip);
+    setTripModal(true);
+  };
+
+  const createTrip = async (event) => {
+    event.preventDefault();
+    setTripSaving(true);
+    setError('');
+
+    try {
+      const payload = {
+        route_id: tripForm.route_id,
+        route: tripForm.route_id,
+        driver_id: tripForm.driver_id,
+        driver: tripForm.driver_id,
+        departure_at: tripForm.departure_at,
+        capacity: Number(tripForm.capacity),
+        company_id: tripForm.company_id,
+      };
+
+      await apiRequest(
+        '/companies/trips/create/',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+
+      setTripModal(false);
+      setCommandMessage('Trip created successfully.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTripSaving(false);
+    }
+  };
+
+  const updateTripStatus = async (trip, status) => {
+    try {
+      await apiRequest(
+        `/companies/trips/${trip.id}/status/`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ status }),
+        }
+      );
+
+      setCommandMessage(
+        `Trip ${trip.id} changed to ${status}.`
+      );
+
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openCreateOperator = () => {
+    setOperatorForm(emptyOperator);
+    setOperatorModal(true);
+  };
+
+  const saveOperator = async (event) => {
+    event.preventDefault();
+    setOperatorSaving(true);
+    setError('');
+
+    try {
+      const payload = {
+        username: operatorForm.username,
+        email: operatorForm.email,
+        phone_number: operatorForm.phone_number,
+        location: operatorForm.location,
+        role: operatorForm.role,
+        company: operatorForm.company,
+        password: operatorForm.password,
+      };
+
+      await apiRequest(
+        '/users/company-staff/',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+
+      setOperatorModal(false);
+      setCommandMessage(
+        'Company staff account created successfully.'
+      );
+
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOperatorSaving(false);
+    }
+  };
+
+  const companyName = (id) =>
+    companies.find(
+      (company) =>
+        String(company.id) === String(id)
+    )?.name || '—';
+
+  const routeName = (id) =>
+    routes.find(
+      (route) =>
+        String(route.id) === String(id)
+    )?.name || `Route ${id || '—'}`;
+
+  return (
+    <PlatformShell
+      user={user}
+      logout={logout}
+    >
+      <header className="pa-topbar">
+        <div>
+          <span className="pa-overline">
+            GLOBAL OPERATIONS
+          </span>
+          <h2>{pageTitle}</h2>
+        </div>
+
+        <div className="pa-page-actions">
+          <button
+            type="button"
+            className="pa-system-status"
+            onClick={() =>
+              navigate('/platform-admin/issues')
+            }
+          >
+            <span className="pa-status-dot" />
+
+            <span>
+              {systemStatus === 'critical'
+                ? `${criticalAlerts.length} critical issue${
+                    criticalAlerts.length === 1
+                      ? ''
+                      : 's'
+                  }`
+                : systemStatus === 'warning'
+                  ? `${warningAlerts.length} warning${
+                      warningAlerts.length === 1
+                        ? ''
+                        : 's'
+                    }`
+                  : 'System healthy'}
+            </span>
+
+            <ChevronRight size={15} />
+          </button>
+
+          <div className="pa-user">
+            <div className="pa-avatar">
+              {(user?.username || 'A')
+                .slice(0, 1)
+                .toUpperCase()}
+            </div>
+
+            <div>
+              <strong>
+                {user?.username || 'Administrator'}
+              </strong>
+              <span>Platform Admin</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="pa-content">
+        {error && (
+          <div className="pa-error">
+            {error}
+          </div>
+        )}
+
+        {commandMessage && (
+          <div className="pa-command-message">
+            {commandMessage}
+          </div>
+        )}
+
+        <div className="pa-page-head">
+          <div>
+            <span className="pa-card-eyebrow">
+              CONNECT PLATFORM
+            </span>
+
+            <h1>{pageTitle}</h1>
+
+            <p>
+              Global administration across every
+              transport company and operational area.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="pa-secondary-button"
+            onClick={refresh}
+            disabled={loading}
+          >
+            <RefreshCw
+              size={15}
+              className={
+                loading ? 'pa-spin' : ''
+              }
+            />
+            Refresh
+          </button>
+        </div>
+
+        {section === 'overview' && (
+          <>
+            <div className="pa-command-grid">
+              <div className="pa-command-card">
+                <div className="pa-command-card-head">
+                  <div>
+                    <span className="pa-card-eyebrow">
+                      SYSTEM HEALTH
+                    </span>
+
+                    <h3>
+                      {systemStatus === 'healthy'
+                        ? 'System healthy'
+                        : systemStatus === 'critical'
+                          ? 'Critical attention required'
+                          : 'Attention required'}
+                    </h3>
+                  </div>
+
+                  <div
+                    className={`pa-command-icon ${systemStatus}`}
+                  >
+                    {systemStatus === 'healthy' ? (
+                      <CheckCircle2 size={20} />
+                    ) : (
+                      <AlertTriangle size={20} />
+                    )}
+                  </div>
+                </div>
+
+                <p>
+                  {criticalAlerts.length > 0
+                    ? `${criticalAlerts.length} critical issue${
+                        criticalAlerts.length === 1
+                          ? ''
+                          : 's'
+                      } require attention.`
+                    : warningAlerts.length > 0
+                      ? `${warningAlerts.length} warning${
+                          warningAlerts.length === 1
+                            ? ''
+                            : 's'
+                        } detected.`
+                      : 'No active operational issues detected.'}
+                </p>
+
+                <button
+                  type="button"
+                  className="pa-secondary-button"
+                  onClick={() =>
+                    navigate(
+                      '/platform-admin/issues'
+                    )
+                  }
+                >
+                  Open issue workspace
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+
+              <div className="pa-command-card">
+                <div className="pa-command-card-head">
+                  <div>
+                    <span className="pa-card-eyebrow">
+                      DIAGNOSTICS
+                    </span>
+
+                    <h3>
+                      Platform system tests
+                    </h3>
+                  </div>
+
+                  <div className="pa-command-icon">
+                    <Database size={20} />
+                  </div>
+                </div>
+
+                <p>
+                  Check database connectivity and
+                  platform data integrity directly
+                  through the Django backend.
+                </p>
+
+                <button
+                  type="button"
+                  className="pa-primary-button"
+                  onClick={runSystemTests}
+                  disabled={systemTestLoading}
+                >
+                  <RefreshCw
+                    size={15}
+                    className={
+                      systemTestLoading
+                        ? 'pa-spin'
+                        : ''
+                    }
+                  />
+
+                  {systemTestLoading
+                    ? 'Running tests...'
+                    : 'Run System Tests'}
+                </button>
+              </div>
+            </div>
+
+            <div className="pa-stat-grid">
+              <div className="pa-stat-card">
+                <span>Companies</span>
+                <strong>
+                  {companies.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Routes</span>
+                <strong>
+                  {routes.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Trips</span>
+                <strong>
+                  {trips.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Drivers</span>
+                <strong>
+                  {drivers.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Bookings</span>
+                <strong>
+                  {bookings.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Active bookings</span>
+                <strong>
+                  {activeBookings.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Booking value</span>
+                <strong>
+                  {money(revenue)}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Platform alerts</span>
+                <strong>
+                  {platformAlerts.length}
+                </strong>
+              </div>
+            </div>
+
+            <div className="pa-two-col">
+              <div className="pa-panel">
+                <div className="pa-panel-header">
+                  <div>
+                    <h3>Companies</h3>
+                    <p>
+                      Global company directory.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pa-secondary-button"
+                    onClick={() =>
+                      navigate(
+                        '/platform-admin/companies'
+                      )
+                    }
+                  >
+                    View all
+                  </button>
+                </div>
+
+                <div className="pa-list">
+                  {companies.slice(0, 6).map(
+                    (company) => (
+                      <div
+                        className="pa-list-row"
+                        key={company.id}
+                      >
+                        <div>
+                          <strong>
+                            {company.name}
+                          </strong>
+
+                          <span>
+                            {company.areas_served ||
+                              'Transport operator'}
+                          </span>
+                        </div>
+
+                        <span>
+                          {
+                            routes.filter(
+                              (route) =>
+                                String(
+                                  route.company
+                                ) ===
+                                String(
+                                  company.id
+                                )
+                            ).length
+                          } routes
+                        </span>
+                      </div>
+                    )
+                  )}
+
+                  {!companies.length && (
+                    <div className="pa-empty-state">
+                      No companies found.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pa-panel">
+                <div className="pa-panel-header">
+                  <div>
+                    <h3>Latest trips</h3>
+                    <p>
+                      Most recent operational trips.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pa-secondary-button"
+                    onClick={() =>
+                      navigate(
+                        '/platform-admin/trips'
+                      )
+                    }
+                  >
+                    View all
+                  </button>
+                </div>
+
+                <div className="pa-list">
+                  {trips
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        new Date(
+                          b.departure_at
+                        ) -
+                        new Date(
+                          a.departure_at
+                        )
+                    )
+                    .slice(0, 6)
+                    .map((trip) => (
+                      <div
+                        className="pa-list-row"
+                        key={trip.id}
+                      >
+                        <div>
+                          <strong>
+                            {trip.route_details
+                              ?.name ||
+                              trip.route_name ||
+                              `Trip ${trip.id}`}
+                          </strong>
+
+                          <span>
+                            {formatDate(
+                              trip.departure_at
+                            )}
+                          </span>
+                        </div>
+
+                        <span className="pa-badge">
+                          {trip.status ||
+                            'scheduled'}
+                        </span>
+                      </div>
+                    ))}
+
+                  {!trips.length && (
+                    <div className="pa-empty-state">
+                      No trips found.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {platformAlerts.length > 0 && (
+              <div className="pa-panel">
+                <div className="pa-panel-header">
+                  <div>
+                    <h3>
+                      Operational attention
+                    </h3>
+
+                    <p>
+                      Issues detected from current
+                      platform data.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pa-secondary-button"
+                    onClick={() =>
+                      navigate(
+                        '/platform-admin/issues'
+                      )
+                    }
+                  >
+                    Open workspace
+                  </button>
+                </div>
+
+                <div className="pa-issue-list">
+                  {platformAlerts
+                    .slice(0, 5)
+                    .map((alert) => (
+                      <button
+                        type="button"
+                        className={`pa-issue-row ${alert.severity}`}
+                        key={alert.id}
+                        onClick={() =>
+                          navigate(
+                            `/platform-admin/${alert.section}`
+                          )
+                        }
+                      >
+                        <div className="pa-issue-icon">
+                          {alert.severity ===
+                          'critical' ? (
+                            <AlertTriangle
+                              size={18}
+                            />
+                          ) : (
+                            <Bell size={18} />
+                          )}
+                        </div>
+
+                        <div className="pa-issue-content">
+                          <strong>
+                            {alert.title}
+                          </strong>
+
+                          <span>
+                            {alert.message}
+                          </span>
+                        </div>
+
+                        <ChevronRight
+                          size={16}
+                        />
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {section === 'companies' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  GLOBAL DIRECTORY
+                </span>
+
+                <h3>
+                  Transport companies
+                </h3>
+
+                <p>
+                  Create and manage companies
+                  across the CONNECT platform.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={openCreateCompany}
+              >
+                <Plus size={16} />
+                Add Company
+              </button>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Company</th>
+                      <th>Areas served</th>
+                      <th>Routes</th>
+                      <th>Trips</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {companies.map(
+                      (company) => (
+                        <tr key={company.id}>
+                          <td>
+                            <strong>
+                              {company.name}
+                            </strong>
+
+                            <br />
+
+                            <span>
+                              {company.phone_number ||
+                                'No phone'}
+                            </span>
+                          </td>
+
+                          <td>
+                            {company.areas_served ||
+                              '—'}
+                          </td>
+
+                          <td>
+                            {
+                              routes.filter(
+                                (route) =>
+                                  String(
+                                    route.company
+                                  ) ===
+                                  String(
+                                    company.id
+                                  )
+                              ).length
+                            }
+                          </td>
+
+                          <td>
+                            {
+                              trips.filter(
+                                (trip) =>
+                                  String(
+                                    trip.company ||
+                                      trip.company_id ||
+                                      trip.route_details
+                                        ?.company
+                                  ) ===
+                                  String(
+                                    company.id
+                                  )
+                              ).length
+                            }
+                          </td>
+
+                          <td>
+                            <div className="pa-actions">
+                              <button
+                                type="button"
+                                className="pa-icon-button"
+                                onClick={() =>
+                                  openEditCompany(
+                                    company
+                                  )
+                                }
+                                title="Edit company"
+                              >
+                                <Settings
+                                  size={14}
+                                />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {!companies.length && (
+                <div className="pa-empty-state">
+                  <Building2 size={28} />
+                  <strong>
+                    No companies found
+                  </strong>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {section === 'routes' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  NETWORK
+                </span>
+
+                <h3>Routes</h3>
+
+                <p>
+                  Global route configuration.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={openCreateRoute}
+              >
+                <Plus size={16} />
+                Add Route
+              </button>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Route</th>
+                      <th>Company</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Price</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {routes.map(
+                      (route) => (
+                        <tr key={route.id}>
+                          <td>
+                            <strong>
+                              {route.name}
+                            </strong>
+                          </td>
+
+                          <td>
+                            {route.company_name ||
+                              companyName(
+                                route.company
+                              )}
+                          </td>
+
+                          <td>
+                            {route.start_point}
+                          </td>
+
+                          <td>
+                            {route.end_point}
+                          </td>
+
+                          <td>
+                            {money(route.price)}
+                          </td>
+
+                          <td>
+                            <div className="pa-actions">
+                              <button
+                                type="button"
+                                className="pa-icon-button"
+                                onClick={() =>
+                                  openEditRoute(
+                                    route
+                                  )
+                                }
+                              >
+                                <Settings
+                                  size={14}
+                                />
+                              </button>
+
+                              <button
+                                type="button"
+                                className="pa-icon-button danger"
+                                onClick={() =>
+                                  deleteRoute(
+                                    route
+                                  )
+                                }
+                              >
+                                <Trash2
+                                  size={14}
+                                />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'drivers' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  FLEET
+                </span>
+
+                <h3>Drivers</h3>
+
+                <p>
+                  Global driver directory.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={openCreateDriver}
+              >
+                <Plus size={16} />
+                Add Driver
+              </button>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Driver</th>
+                      <th>Phone</th>
+                      <th>Bus</th>
+                      <th>Company</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {drivers.map(
+                      (driver) => (
+                        <tr key={driver.id}>
+                          <td>
+                            <strong>
+                              {driver.name}
+                            </strong>
+                          </td>
+
+                          <td>
+                            {driver.phone_number ||
+                              '—'}
+                          </td>
+
+                          <td>
+                            {driver.bus_number ||
+                              '—'}
+                          </td>
+
+                          <td>
+                            {companyName(
+                              driver.company ||
+                                driver.company_id
+                            )}
+                          </td>
+
+                          <td>
+                            <div className="pa-actions">
+                              <button
+                                type="button"
+                                className="pa-icon-button"
+                                onClick={() =>
+                                  openEditDriver(
+                                    driver
+                                  )
+                                }
+                              >
+                                <Settings
+                                  size={14}
+                                />
+                              </button>
+
+                              <button
+                                type="button"
+                                className="pa-icon-button danger"
+                                onClick={() =>
+                                  deleteDriver(
+                                    driver
+                                  )
+                                }
+                              >
+                                <Trash2
+                                  size={14}
+                                />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'trips' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  OPERATIONS
+                </span>
+
+                <h3>Trips</h3>
+
+                <p>
+                  Global trip schedule and
+                  operational status.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={openCreateTrip}
+              >
+                <Plus size={16} />
+                Create Trip
+              </button>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Route</th>
+                      <th>Company</th>
+                      <th>Driver</th>
+                      <th>Departure</th>
+                      <th>Capacity</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {trips
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(
+                            b.departure_at
+                          ) -
+                          new Date(
+                            a.departure_at
+                          )
+                      )
+                      .map((trip) => (
+                        <tr key={trip.id}>
+                          <td>
+                            <strong>
+                              {trip.route_details
+                                ?.name ||
+                                routeName(
+                                  trip.route
+                                )}
+                            </strong>
+                          </td>
+
+                          <td>
+                            {trip.company_name ||
+                              companyName(
+                                trip.route_details
+                                  ?.company
+                              )}
+                          </td>
+
+                          <td>
+                            {trip.driver_name ||
+                              trip.driver ||
+                              'Unassigned'}
+                          </td>
+
+                          <td>
+                            {formatDate(
+                              trip.departure_at
+                            )}
+                          </td>
+
+                          <td>
+                            {trip.capacity}
+                          </td>
+
+                          <td>
+                            <span
+                              className={`pa-badge ${
+                                String(
+                                  trip.status
+                                ).toLowerCase() ===
+                                'cancelled'
+                                  ? 'danger'
+                                  : String(
+                                        trip.status
+                                      ).toLowerCase() ===
+                                      'scheduled'
+                                    ? ''
+                                    : 'warning'
+                              }`}
+                            >
+                              {trip.status}
+                            </span>
+                          </td>
+
+                          <td>
+                            <select
+                              value={
+                                trip.status || ''
+                              }
+                              onChange={(event) =>
+                                updateTripStatus(
+                                  trip,
+                                  event.target.value
+                                )
+                              }
+                              style={{
+                                background:
+                                  '#0b1726',
+                                color: '#e5edf5',
+                                border:
+                                  '1px solid rgba(255,255,255,.08)',
+                                borderRadius: 8,
+                                padding: '7px',
+                                fontSize: 11,
+                              }}
+                            >
+                              <option value="scheduled">
+                                Scheduled
+                              </option>
+                              <option value="boarding">
+                                Boarding
+                              </option>
+                              <option value="departed">
+                                Departed
+                              </option>
+                              <option value="completed">
+                                Completed
+                              </option>
+                              <option value="cancelled">
+                                Cancelled
+                              </option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'operators' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  COMPANY ACCESS
+                </span>
+
+                <h3>Operators</h3>
+
+                <p>
+                  Manage company managers,
+                  auditors and operators.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={openCreateOperator}
+              >
+                <Plus size={16} />
+                Add Company Staff
+              </button>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Role</th>
+                      <th>Company</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {operators.map(
+                      (operator) => (
+                        <tr key={operator.id}>
+                          <td>
+                            <strong>
+                              {operator.username}
+                            </strong>
+                          </td>
+
+                          <td>
+                            <span className="pa-badge">
+                              {operator.role}
+                            </span>
+                          </td>
+
+                          <td>
+                            {operator.company_name ||
+                              companyName(
+                                operator.company
+                              )}
+                          </td>
+
+                          <td>
+                            {operator.email ||
+                              '—'}
+                          </td>
+
+                          <td>
+                            {operator.phone_number ||
+                              '—'}
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {!operators.length && (
+                <div className="pa-empty-state">
+                  <Users size={28} />
+                  <strong>
+                    No company staff found
+                  </strong>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {section === 'bookings' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  BOOKINGS
+                </span>
+
+                <h3>Global bookings</h3>
+
+                <p>
+                  Platform-wide booking activity.
+                </p>
+              </div>
+            </div>
+
+            <div className="pa-stat-grid">
+              <div className="pa-stat-card">
+                <span>Total</span>
+                <strong>
+                  {bookings.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Active</span>
+                <strong>
+                  {activeBookings.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Completed</span>
+                <strong>
+                  {
+                    bookings.filter(
+                      (booking) =>
+                        String(
+                          booking.status
+                        ).toLowerCase() ===
+                        'completed'
+                    ).length
+                  }
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Booking value</span>
+                <strong>
+                  {money(revenue)}
+                </strong>
+              </div>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Passenger</th>
+                      <th>Trip</th>
+                      <th>Seats</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {bookings.map(
+                      (booking) => (
+                        <tr key={booking.id}>
+                          <td>
+                            #{booking.id}
+                          </td>
+
+                          <td>
+                            <strong>
+                              {booking.passenger_name ||
+                                booking.user_name ||
+                                booking.user ||
+                                'Passenger'}
+                            </strong>
+                          </td>
+
+                          <td>
+                            {booking.trip_id ||
+                              booking.trip ||
+                              '—'}
+                          </td>
+
+                          <td>
+                            {booking.seats ||
+                              1}
+                          </td>
+
+                          <td>
+                            {money(
+                              booking.total_amount ||
+                                booking.amount
+                            )}
+                          </td>
+
+                          <td>
+                            <span className="pa-badge">
+                              {booking.status ||
+                                'unknown'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'users' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  PLATFORM DIRECTORY
+                </span>
+
+                <h3>Users</h3>
+
+                <p>
+                  Global user population across
+                  CONNECT.
+                </p>
+              </div>
+            </div>
+
+            <div className="pa-stat-grid">
+              <div className="pa-stat-card">
+                <span>Total users</span>
+                <strong>
+                  {users.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Passengers</span>
+                <strong>
+                  {
+                    users.filter(
+                      (item) =>
+                        item.role ===
+                        'passenger'
+                    ).length
+                  }
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Drivers</span>
+                <strong>
+                  {
+                    users.filter(
+                      (item) =>
+                        item.role ===
+                        'driver'
+                    ).length
+                  }
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Company staff</span>
+                <strong>
+                  {
+                    users.filter(
+                      (item) =>
+                        [
+                          'company_manager',
+                          'company_auditor',
+                          'company_operator',
+                        ].includes(
+                          item.role
+                        )
+                    ).length
+                  }
+                </strong>
+              </div>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-table-wrap">
+                <table className="pa-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Role</th>
+                      <th>Company</th>
+                      <th>Active</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {users.map(
+                      (item) => (
+                        <tr key={item.id}>
+                          <td>
+                            <strong>
+                              {item.username}
+                            </strong>
+                          </td>
+
+                          <td>
+                            {item.email || '—'}
+                          </td>
+
+                          <td>
+                            {item.phone_number ||
+                              '—'}
+                          </td>
+
+                          <td>
+                            <span className="pa-badge">
+                              {item.role}
+                            </span>
+                          </td>
+
+                          <td>
+                            {item.company_name ||
+                              companyName(
+                                item.company
+                              )}
+                          </td>
+
+                          <td>
+                            <span
+                              className={
+                                item.is_active ===
+                                false
+                                  ? 'pa-badge danger'
+                                  : 'pa-badge'
+                              }
+                            >
+                              {item.is_active ===
+                              false
+                                ? 'Inactive'
+                                : 'Active'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {!users.length && (
+                <div className="pa-empty-state">
+                  <UserRound size={28} />
+                  <strong>
+                    User directory unavailable
+                  </strong>
+                  <span>
+                    The platform user endpoint did
+                    not return a user list.
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {section === 'reports' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  PLATFORM INSIGHTS
+                </span>
+
+                <h3>
+                  Operational reports
+                </h3>
+
+                <p>
+                  Current platform-wide operational
+                  statistics.
+                </p>
+              </div>
+            </div>
+
+            <div className="pa-stat-grid">
+              <div className="pa-stat-card">
+                <span>Companies</span>
+                <strong>
+                  {companies.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Routes</span>
+                <strong>
+                  {routes.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Trips</span>
+                <strong>
+                  {trips.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Bookings</span>
+                <strong>
+                  {bookings.length}
+                </strong>
+              </div>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-panel-header">
+                <div>
+                  <h3>
+                    Company activity
+                  </h3>
+
+                  <p>
+                    Route and trip distribution
+                    across companies.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pa-report-list">
+                {companies.map(
+                  (company) => {
+                    const companyRoutes =
+                      routes.filter(
+                        (route) =>
+                          String(
+                            route.company
+                          ) ===
+                          String(
+                            company.id
+                          )
+                      );
+
+                    const companyTrips =
+                      trips.filter(
+                        (trip) =>
+                          String(
+                            trip.company ||
+                              trip.company_id ||
+                              trip.route_details
+                                ?.company
+                          ) ===
+                          String(
+                            company.id
+                          )
+                      );
+
+                    const companyBookings =
+                      bookings.filter(
+                        (booking) =>
+                          String(
+                            booking.company ||
+                              booking.company_id
+                          ) ===
+                          String(
+                            company.id
+                          )
+                      );
+
+                    return (
+                      <div
+                        className="pa-report-row"
+                        key={company.id}
+                      >
+                        <div>
+                          <strong>
+                            {company.name}
+                          </strong>
+
+                          <span>
+                            {
+                              companyRoutes.length
+                            } routes ·{' '}
+                            {
+                              companyTrips.length
+                            } trips ·{' '}
+                            {
+                              companyBookings.length
+                            } bookings
+                          </span>
+                        </div>
+
+                        <ChevronRight
+                          size={17}
+                        />
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'revenue' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  FINANCIAL OVERVIEW
+                </span>
+
+                <h3>Revenue</h3>
+
+                <p>
+                  Platform-wide booking value.
+                  This is not presented as settled
+                  company revenue.
+                </p>
+              </div>
+            </div>
+
+            <div className="pa-stat-grid">
+              <div className="pa-stat-card">
+                <span>Total booking value</span>
+                <strong>
+                  {money(revenue)}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Total bookings</span>
+                <strong>
+                  {bookings.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Active bookings</span>
+                <strong>
+                  {activeBookings.length}
+                </strong>
+              </div>
+
+              <div className="pa-stat-card">
+                <span>Average booking</span>
+                <strong>
+                  {money(
+                    bookings.length
+                      ? revenue /
+                          bookings.length
+                      : 0
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-panel-header">
+                <div>
+                  <h3>
+                    Booking value by company
+                  </h3>
+
+                  <p>
+                    Calculated from booking amounts
+                    returned by the API.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pa-report-list">
+                {companies.map(
+                  (company) => {
+                    const companyValue =
+                      bookings
+                        .filter(
+                          (booking) =>
+                            String(
+                              booking.company ||
+                                booking.company_id
+                            ) ===
+                            String(
+                              company.id
+                            )
+                        )
+                        .reduce(
+                          (sum, booking) =>
+                            sum +
+                            Number(
+                              booking.total_amount ||
+                                booking.amount ||
+                                0
+                            ),
+                          0
+                        );
+
+                    return (
+                      <div
+                        className="pa-report-row"
+                        key={company.id}
+                      >
+                        <div>
+                          <strong>
+                            {company.name}
+                          </strong>
+
+                          <span>
+                            Platform booking value
+                          </span>
+                        </div>
+
+                        <strong>
+                          {money(
+                            companyValue
+                          )}
+                        </strong>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'issues' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  OPERATIONS
+                </span>
+
+                <h3>
+                  Issue workspace
+                </h3>
+
+                <p>
+                  Live operational exceptions
+                  detected from current platform data.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={runSystemTests}
+                disabled={systemTestLoading}
+              >
+                <RefreshCw
+                  size={15}
+                  className={
+                    systemTestLoading
+                      ? 'pa-spin'
+                      : ''
+                  }
+                />
+
+                {systemTestLoading
+                  ? 'Testing...'
+                  : 'Run System Tests'}
+              </button>
+            </div>
+
+            <div className="pa-issue-summary">
+              <div className="pa-issue-summary-card critical">
+                <AlertTriangle size={20} />
+
+                <div>
+                  <strong>
+                    {criticalAlerts.length}
+                  </strong>
+
+                  <span>
+                    Critical
+                  </span>
+                </div>
+              </div>
+
+              <div className="pa-issue-summary-card warning">
+                <Bell size={20} />
+
+                <div>
+                  <strong>
+                    {warningAlerts.length}
+                  </strong>
+
+                  <span>
+                    Warnings
+                  </span>
+                </div>
+              </div>
+
+              <div className="pa-issue-summary-card healthy">
+                <CheckCircle2 size={20} />
+
+                <div>
+                  <strong>
+                    {platformAlerts.length
+                      ? 'Review'
+                      : 'OK'}
+                  </strong>
+
+                  <span>
+                    Platform status
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-panel-header">
+                <div>
+                  <h3>
+                    Active issues
+                  </h3>
+
+                  <p>
+                    Click an issue to open its
+                    operational workspace.
+                  </p>
+                </div>
+              </div>
+
+              {platformAlerts.length === 0 ? (
+                <div className="pa-empty-state">
+                  <CheckCircle2
+                    size={30}
+                  />
+
+                  <strong>
+                    No active issues
+                  </strong>
+
+                  <span>
+                    Current platform data has no
+                    detected operational exceptions.
+                  </span>
+                </div>
+              ) : (
+                <div className="pa-issue-list">
+                  {platformAlerts.map(
+                    (alert) => (
+                      <button
+                        type="button"
+                        className={`pa-issue-row ${alert.severity}`}
+                        key={alert.id}
+                        onClick={() =>
+                          navigate(
+                            `/platform-admin/${alert.section}`
+                          )
+                        }
+                      >
+                        <div className="pa-issue-icon">
+                          {alert.severity ===
+                          'critical' ? (
+                            <AlertTriangle
+                              size={19}
+                            />
+                          ) : (
+                            <Bell size={19} />
+                          )}
+                        </div>
+
+                        <div className="pa-issue-content">
+                          <strong>
+                            {alert.title}
+                          </strong>
+
+                          <span>
+                            {alert.message}
+                          </span>
+                        </div>
+
+                        <ChevronRight
+                          size={17}
+                        />
+                      </button>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {section === 'system-tests' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  SYSTEM
+                </span>
+
+                <h3>
+                  Platform system tests
+                </h3>
+
+                <p>
+                  Verify the health and integrity
+                  of the CONNECT backend.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-primary-button"
+                onClick={runSystemTests}
+                disabled={systemTestLoading}
+              >
+                <RefreshCw
+                  size={15}
+                  className={
+                    systemTestLoading
+                      ? 'pa-spin'
+                      : ''
+                  }
+                />
+
+                {systemTestLoading
+                  ? 'Running...'
+                  : 'Run System Tests'}
+              </button>
+            </div>
+
+            {!systemChecks ? (
+              <div className="pa-empty-state">
+                <Database size={30} />
+
+                <strong>
+                  No test run yet
+                </strong>
+
+                <span>
+                  Run the system tests to inspect
+                  the current backend.
+                </span>
+
+                <button
+                  type="button"
+                  className="pa-primary-button"
+                  onClick={runSystemTests}
+                >
+                  Run System Tests
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="pa-test-summary">
+                  <div>
+                    <strong>
+                      {systemChecks.passed}
+                    </strong>
+
+                    <span>
+                      Passed
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>
+                      {systemChecks.warnings}
+                    </strong>
+
+                    <span>
+                      Warnings
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>
+                      {systemChecks.failed}
+                    </strong>
+
+                    <span>
+                      Failed
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>
+                      {systemChecks.status}
+                    </strong>
+
+                    <span>
+                      Overall status
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pa-panel">
+                  <div className="pa-panel-header">
+                    <div>
+                      <h3>
+                        Diagnostic results
+                      </h3>
+
+                      <p>
+                        Results returned directly
+                        from Django.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    {systemChecks.checks.map(
+                      (check) => (
+                        <div
+                          className={`pa-test-row ${check.status}`}
+                          key={check.name}
+                        >
+                          <div className="pa-test-icon">
+                            {check.status ===
+                            'passed' ? (
+                              <CheckCircle2
+                                size={18}
+                              />
+                            ) : (
+                              <AlertTriangle
+                                size={18}
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <strong>
+                              {check.name}
+                            </strong>
+
+                            <span>
+                              {check.message}
+                            </span>
+                          </div>
+
+                          <span className="pa-test-status">
+                            {check.status}
+                          </span>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {section === 'settings' && (
+          <section>
+            <div className="pa-section-heading">
+              <div>
+                <span className="pa-card-eyebrow">
+                  SYSTEM CONFIGURATION
+                </span>
+
+                <h3>
+                  Platform settings
+                </h3>
+
+                <p>
+                  Platform-level configuration and
+                  system information.
+                </p>
+              </div>
+            </div>
+
+            <div className="pa-panel">
+              <div className="pa-panel-header">
+                <div>
+                  <h3>
+                    System information
+                  </h3>
+
+                  <p>
+                    Current CONNECT platform
+                    environment.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pa-settings-list">
+                <div className="pa-setting-row">
+                  <div>
+                    <strong>
+                      Platform
+                    </strong>
+
+                    <span>
+                      CONNECT Transport Platform
+                    </span>
+                  </div>
+
+                  <span className="pa-setting-value">
+                    Active
+                  </span>
+                </div>
+
+                <div className="pa-setting-row">
+                  <div>
+                    <strong>
+                      Access level
+                    </strong>
+
+                    <span>
+                      Global platform
+                      administration
+                    </span>
+                  </div>
+
+                  <span className="pa-setting-value">
+                    Platform
+                  </span>
+                </div>
+
+                <div className="pa-setting-row">
+                  <div>
+                    <strong>
+                      Companies
+                    </strong>
+
+                    <span>
+                      Registered transport
+                      companies
+                    </span>
+                  </div>
+
+                  <span className="pa-setting-value">
+                    {companies.length}
+                  </span>
+                </div>
+
+                <div className="pa-setting-row">
+                  <div>
+                    <strong>
+                      Routes
+                    </strong>
+
+                    <span>
+                      Registered platform routes
+                    </span>
+                  </div>
+
+                  <span className="pa-setting-value">
+                    {routes.length}
+                  </span>
+                </div>
+
+                <div className="pa-setting-row">
+                  <div>
+                    <strong>
+                      Diagnostics
+                    </strong>
+
+                    <span>
+                      Backend integrity checks
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pa-secondary-button"
+                    onClick={() =>
+                      navigate(
+                        '/platform-admin/system-tests'
+                      )
+                    }
+                  >
+                    Open tests
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      {companyModal && (
+        <div className="pa-modal-backdrop">
+          <div className="pa-modal">
+            <div className="pa-modal-head">
+              <div>
+                <h3>
+                  {companyEditingId
+                    ? 'Edit company'
+                    : 'Add company'}
+                </h3>
+
+                <p>
+                  Platform administrators can create
+                  and update transport companies.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-icon-button"
+                onClick={() =>
+                  setCompanyModal(false)
+                }
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form
+              className="pa-form"
+              onSubmit={saveCompany}
+            >
+              <div className="pa-form-grid">
+                <div className="pa-field full">
+                  <label>
+                    Company name
+                  </label>
+
+                  <input
+                    value={companyForm.name}
+                    onChange={(event) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        name: event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field full">
+                  <label>
+                    Areas served
+                  </label>
+
+                  <input
+                    value={
+                      companyForm.areas_served
+                    }
+                    onChange={(event) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        areas_served:
+                          event.target.value,
+                      })
+                    }
+                    placeholder="CBD, Rongai, Ngong..."
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Phone number
+                  </label>
+
+                  <input
+                    value={
+                      companyForm.phone_number
+                    }
+                    onChange={(event) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        phone_number:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="pa-field full">
+                  <label>
+                    Description
+                  </label>
+
+                  <textarea
+                    value={
+                      companyForm.description
+                    }
+                    onChange={(event) =>
+                      setCompanyForm({
+                        ...companyForm,
+                        description:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="pa-modal-actions">
+                <button
+                  type="button"
+                  className="pa-secondary-button"
+                  onClick={() =>
+                    setCompanyModal(false)
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="pa-primary-button"
+                  disabled={companySaving}
+                >
+                  {companySaving
+                    ? 'Saving...'
+                    : companyEditingId
+                      ? 'Save Changes'
+                      : 'Create Company'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {routeModal && (
+        <div className="pa-modal-backdrop">
+          <div className="pa-modal">
+            <div className="pa-modal-head">
+              <div>
+                <h3>
+                  {routeEditingId
+                    ? 'Edit route'
+                    : 'Add route'}
+                </h3>
+
+                <p>
+                  Configure the route and owning
+                  company.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-icon-button"
+                onClick={() =>
+                  setRouteModal(false)
+                }
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form
+              className="pa-form"
+              onSubmit={saveRoute}
+            >
+              <div className="pa-form-grid">
+                <div className="pa-field full">
+                  <label>
+                    Company
+                  </label>
+
+                  <select
+                    value={
+                      routeForm.company_id
+                    }
+                    onChange={(event) =>
+                      setRouteForm({
+                        ...routeForm,
+                        company_id:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select company
+                    </option>
+
+                    {companies.map(
+                      (company) => (
+                        <option
+                          key={company.id}
+                          value={company.id}
+                        >
+                          {company.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div className="pa-field full">
+                  <label>
+                    Route name
+                  </label>
+
+                  <input
+                    value={routeForm.name}
+                    onChange={(event) =>
+                      setRouteForm({
+                        ...routeForm,
+                        name: event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Start point
+                  </label>
+
+                  <input
+                    value={
+                      routeForm.start_point
+                    }
+                    onChange={(event) =>
+                      setRouteForm({
+                        ...routeForm,
+                        start_point:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    End point
+                  </label>
+
+                  <input
+                    value={
+                      routeForm.end_point
+                    }
+                    onChange={(event) =>
+                      setRouteForm({
+                        ...routeForm,
+                        end_point:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Price (KES)
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={
+                      routeForm.price
+                    }
+                    onChange={(event) =>
+                      setRouteForm({
+                        ...routeForm,
+                        price: event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pa-modal-actions">
+                <button
+                  type="button"
+                  className="pa-secondary-button"
+                  onClick={() =>
+                    setRouteModal(false)
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="pa-primary-button"
+                  disabled={routeSaving}
+                >
+                  {routeSaving
+                    ? 'Saving...'
+                    : routeEditingId
+                      ? 'Save Changes'
+                      : 'Create Route'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {driverModal && (
+        <div className="pa-modal-backdrop">
+          <div className="pa-modal">
+            <div className="pa-modal-head">
+              <div>
+                <h3>
+                  {driverEditingId
+                    ? 'Edit driver'
+                    : 'Add driver'}
+                </h3>
+
+                <p>
+                  Assign the driver to exactly one
+                  transport company.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-icon-button"
+                onClick={() =>
+                  setDriverModal(false)
+                }
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form
+              className="pa-form"
+              onSubmit={saveDriver}
+            >
+              <div className="pa-form-grid">
+                <div className="pa-field full">
+                  <label>
+                    Company
+                  </label>
+
+                  <select
+                    value={
+                      driverForm.company
+                    }
+                    onChange={(event) =>
+                      setDriverForm({
+                        ...driverForm,
+                        company:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select company
+                    </option>
+
+                    {companies.map(
+                      (company) => (
+                        <option
+                          key={company.id}
+                          value={company.id}
+                        >
+                          {company.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Driver name
+                  </label>
+
+                  <input
+                    value={driverForm.name}
+                    onChange={(event) =>
+                      setDriverForm({
+                        ...driverForm,
+                        name: event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Phone
+                  </label>
+
+                  <input
+                    value={
+                      driverForm.phone_number
+                    }
+                    onChange={(event) =>
+                      setDriverForm({
+                        ...driverForm,
+                        phone_number:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Bus number
+                  </label>
+
+                  <input
+                    value={
+                      driverForm.bus_number
+                    }
+                    onChange={(event) =>
+                      setDriverForm({
+                        ...driverForm,
+                        bus_number:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="pa-modal-actions">
+                <button
+                  type="button"
+                  className="pa-secondary-button"
+                  onClick={() =>
+                    setDriverModal(false)
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="pa-primary-button"
+                  disabled={driverSaving}
+                >
+                  {driverSaving
+                    ? 'Saving...'
+                    : driverEditingId
+                      ? 'Save Changes'
+                      : 'Create Driver'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {tripModal && (
+        <div className="pa-modal-backdrop">
+          <div className="pa-modal">
+            <div className="pa-modal-head">
+              <div>
+                <h3>
+                  Create trip
+                </h3>
+
+                <p>
+                  Create a scheduled trip using an
+                  existing route and driver.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-icon-button"
+                onClick={() =>
+                  setTripModal(false)
+                }
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form
+              className="pa-form"
+              onSubmit={createTrip}
+            >
+              <div className="pa-form-grid">
+                <div className="pa-field full">
+                  <label>
+                    Company
+                  </label>
+
+                  <select
+                    value={
+                      tripForm.company_id
+                    }
+                    onChange={(event) =>
+                      setTripForm({
+                        ...tripForm,
+                        company_id:
+                          event.target.value,
+                        route_id: '',
+                        driver_id: '',
+                      })
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select company
+                    </option>
+
+                    {companies.map(
+                      (company) => (
+                        <option
+                          key={company.id}
+                          value={company.id}
+                        >
+                          {company.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div className="pa-field full">
+                  <label>
+                    Route
+                  </label>
+
+                  <select
+                    value={
+                      tripForm.route_id
+                    }
+                    onChange={(event) =>
+                      setTripForm({
+                        ...tripForm,
+                        route_id:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select route
+                    </option>
+
+                    {routes
+                      .filter(
+                        (route) =>
+                          !tripForm.company_id ||
+                          String(
+                            route.company
+                          ) ===
+                            String(
+                              tripForm.company_id
+                            )
+                      )
+                      .map((route) => (
+                        <option
+                          key={route.id}
+                          value={route.id}
+                        >
+                          {route.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="pa-field full">
+                  <label>
+                    Driver
+                  </label>
+
+                  <select
+                    value={
+                      tripForm.driver_id
+                    }
+                    onChange={(event) =>
+                      setTripForm({
+                        ...tripForm,
+                        driver_id:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select driver
+                    </option>
+
+                    {drivers
+                      .filter(
+                        (driver) =>
+                          !tripForm.company_id ||
+                          String(
+                            driver.company
+                          ) ===
+                            String(
+                              tripForm.company_id
+                            )
+                      )
+                      .map((driver) => (
+                        <option
+                          key={driver.id}
+                          value={driver.id}
+                        >
+                          {driver.name} —{' '}
+                          {driver.bus_number ||
+                            'No bus'}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Departure
+                  </label>
+
+                  <input
+                    type="datetime-local"
+                    value={
+                      tripForm.departure_at
+                    }
+                    onChange={(event) =>
+                      setTripForm({
+                        ...tripForm,
+                        departure_at:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Capacity
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={
+                      tripForm.capacity
+                    }
+                    onChange={(event) =>
+                      setTripForm({
+                        ...tripForm,
+                        capacity:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pa-modal-actions">
+                <button
+                  type="button"
+                  className="pa-secondary-button"
+                  onClick={() =>
+                    setTripModal(false)
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="pa-primary-button"
+                  disabled={tripSaving}
+                >
+                  {tripSaving
+                    ? 'Creating...'
+                    : 'Create Trip'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {operatorModal && (
+        <div className="pa-modal-backdrop">
+          <div className="pa-modal">
+            <div className="pa-modal-head">
+              <div>
+                <h3>
+                  Add company staff
+                </h3>
+
+                <p>
+                  Create a manager, auditor or
+                  operator for one company.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="pa-icon-button"
+                onClick={() =>
+                  setOperatorModal(false)
+                }
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form
+              className="pa-form"
+              onSubmit={saveOperator}
+            >
+              <div className="pa-form-grid">
+                <div className="pa-field">
+                  <label>
+                    Username
+                  </label>
+
+                  <input
+                    value={
+                      operatorForm.username
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        username:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Email
+                  </label>
+
+                  <input
+                    type="email"
+                    value={
+                      operatorForm.email
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        email:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Phone
+                  </label>
+
+                  <input
+                    value={
+                      operatorForm.phone_number
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        phone_number:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Location
+                  </label>
+
+                  <input
+                    value={
+                      operatorForm.location
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        location:
+                          event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Role
+                  </label>
+
+                  <select
+                    value={
+                      operatorForm.role
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        role: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="company_manager">
+                      Company Manager
+                    </option>
+
+                    <option value="company_operator">
+                      Company Operator
+                    </option>
+
+                    <option value="company_auditor">
+                      Company Auditor
+                    </option>
+                  </select>
+                </div>
+
+                <div className="pa-field">
+                  <label>
+                    Company
+                  </label>
+
+                  <select
+                    value={
+                      operatorForm.company
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        company:
+                          event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select company
+                    </option>
+
+                    {companies.map(
+                      (company) => (
+                        <option
+                          key={company.id}
+                          value={company.id}
+                        >
+                          {company.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div className="pa-field full">
+                  <label>
+                    Temporary password
+                  </label>
+
+                  <input
+                    type="password"
+                    value={
+                      operatorForm.password
+                    }
+                    onChange={(event) =>
+                      setOperatorForm({
+                        ...operatorForm,
+                        password:
+                          event.target.value,
+                      })
+                    }
+                    minLength={6}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pa-modal-actions">
+                <button
+                  type="button"
+                  className="pa-secondary-button"
+                  onClick={() =>
+                    setOperatorModal(false)
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="pa-primary-button"
+                  disabled={operatorSaving}
+                >
+                  {operatorSaving
+                    ? 'Creating...'
+                    : 'Create Staff Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </PlatformShell>
+  );
+}

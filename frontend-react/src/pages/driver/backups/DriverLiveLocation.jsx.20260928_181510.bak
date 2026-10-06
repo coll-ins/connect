@@ -1,0 +1,333 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Crosshair, MapPin, Navigation, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { apiRequest } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import ConnectMap from '../../components/maps/ConnectMap';
+import useBookingLiveLocation from '../../hooks/useBookingLiveLocation';
+
+const formatDate = (value) =>
+  value
+    ? new Date(value).toLocaleString('en-KE', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+
+export default function DriverLiveLocation() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [driver, setDriver] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [location, setLocation] = useState(null);
+  const [routeMap, setRouteMap] = useState(null);
+  const [error, setError] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const watchRef = useRef(null);
+
+  const selectedBookingId = selectedBooking?.booking_id || null;
+
+  const {
+    liveLocation,
+    error: liveLocationError,
+  } = useBookingLiveLocation(
+    selectedBookingId,
+    Boolean(selectedBookingId),
+  );
+
+  const load = useCallback(async () => {
+    try {
+      setError('');
+
+      const profile = await apiRequest('/drivers/me/');
+      setDriver(profile);
+
+      const assigned = await apiRequest(`/bookings/driver/${profile.id}/`);
+      const rows = assigned || [];
+
+      setBookings(rows);
+
+      if (rows.length) {
+        setSelectedBooking((current) => {
+          if (
+            current &&
+            rows.some(
+              (booking) => booking.booking_id === current.booking_id,
+            )
+          ) {
+            return current;
+          }
+
+          return rows[0];
+        });
+      }
+    } catch (err) {
+      setError(err.message || 'Unable to load live trip data.');
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const loadRouteMap = useCallback(async (booking) => {
+    if (!booking?.route_id || !booking?.trip_id) {
+      setRouteMap(null);
+      return;
+    }
+
+    try {
+      const data = await apiRequest(
+        `/companies/routes/${booking.route_id}/map/?trip_id=${booking.trip_id}`,
+      );
+
+      console.log('[LIVE MAP] route response:', data);
+      console.log('[LIVE MAP] geometry:', data?.geometry);
+      console.log('[LIVE MAP] stages:', data?.stages);
+
+      setRouteMap(data);
+    } catch (err) {
+      console.error('[LIVE MAP] route error:', err);
+      setRouteMap(null);
+      setError(err.message || 'Unable to load route map.');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRouteMap(selectedBooking);
+  }, [selectedBooking, loadRouteMap]);
+
+  const sendLocation = useCallback(
+    async (position) => {
+      if (!driver) return;
+
+      try {
+        const updated = await apiRequest(
+          `/drivers/${driver.id}/location/`,
+          {
+            method: 'POST',
+            body: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            },
+          },
+        );
+
+        setLocation(updated);
+        setDriver((current) => ({
+          ...current,
+          ...updated,
+        }));
+      } catch (err) {
+        setError(err.message || 'Unable to update GPS location.');
+      }
+    },
+    [driver],
+  );
+
+  useEffect(() => {
+    if (!driver || !navigator.geolocation) return undefined;
+
+    const watchId = navigator.geolocation.watchPosition(
+      sendLocation,
+      () => {
+        setError('Unable to read your GPS location.');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 5000,
+      },
+    );
+
+    watchRef.current = watchId;
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      watchRef.current = null;
+    };
+  }, [driver, sendLocation]);
+
+  const locate = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Location services are unavailable.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      sendLocation,
+      () => setError('Location permission was not granted.'),
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      },
+    );
+  }, [sendLocation]);
+
+  const mapDriver = useMemo(
+    () =>
+      location || liveLocation?.driver || driver
+        ? {
+            ...(driver || {}),
+            ...(liveLocation?.driver || {}),
+            ...(location || {}),
+          }
+        : null,
+    [driver, liveLocation?.driver, location],
+  );
+
+  const stages = routeMap?.stages || [];
+
+  const pickup = stages.find(
+    (stage) => stage.id === selectedBooking?.pickup_stage_id,
+  );
+
+  return (
+    <div className="driver-live-page">
+      <div className="driver-live-map">
+        <ConnectMap
+          driver={mapDriver}
+          passenger={liveLocation?.passenger}
+          routeGeometry={routeMap?.geometry}
+          stages={stages}
+          pickup={pickup}
+          showDriver
+          showPassenger
+          height="100%"
+          zoom={14}
+        />
+
+        <button
+          type="button"
+          className="driver-live-back"
+          onClick={() => navigate('/driver')}
+        >
+          <ArrowLeft size={19} />
+          Dashboard
+        </button>
+
+        <div className="driver-live-status">
+          <span />
+          GPS LIVE
+        </div>
+      </div>
+
+      <section
+        className={`driver-live-sheet ${
+          sheetOpen ? 'driver-live-sheet-open' : ''
+        }`}
+      >
+        <button
+          type="button"
+          className="driver-live-handle"
+          onClick={() => setSheetOpen((open) => !open)}
+          aria-label="Toggle trip details"
+        >
+          <span />
+        </button>
+
+        <div className="driver-live-sheet-header">
+          <div>
+            <span>LIVE TRIP</span>
+            <h1>
+              {selectedBooking?.route || 'No assigned trip'}
+            </h1>
+          </div>
+
+          <button
+            type="button"
+            className="driver-live-locate"
+            onClick={locate}
+          >
+            <Crosshair size={19} />
+          </button>
+        </div>
+
+        <div className="driver-live-route">
+          <MapPin size={18} />
+          <div>
+            <strong>
+              {selectedBooking?.pickup_location || 'Pickup stage'}
+            </strong>
+            <span>
+              {formatDate(selectedBooking?.departure_at)}
+            </span>
+          </div>
+        </div>
+
+        <div className="driver-live-stats">
+          <div>
+            <Navigation size={18} />
+            <strong>{stages.length}</strong>
+            <span>Stages</span>
+          </div>
+
+          <div>
+            <Users size={18} />
+            <strong>
+              {selectedBooking?.seats || 0}
+            </strong>
+            <span>Seats</span>
+          </div>
+
+          <div>
+            <Crosshair size={18} />
+            <strong>
+              {location ? 'ON' : 'OFF'}
+            </strong>
+            <span>GPS</span>
+          </div>
+        </div>
+
+        {bookings.length > 1 && (
+          <div className="driver-live-bookings">
+            <label htmlFor="live-trip-select">
+              Active trip
+            </label>
+
+            <select
+              id="live-trip-select"
+              value={selectedBookingId || ''}
+              onChange={(event) => {
+                const next = bookings.find(
+                  (booking) =>
+                    String(booking.booking_id) === event.target.value,
+                );
+
+                setSelectedBooking(next || null);
+              }}
+            >
+              {bookings.map((booking) => (
+                <option
+                  key={booking.booking_id}
+                  value={booking.booking_id}
+                >
+                  {booking.route || 'Trip'} — {booking.booking_number}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {(error || liveLocationError) && (
+          <div className="driver-live-error">
+            {error || liveLocationError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="driver-live-update"
+          onClick={locate}
+        >
+          <Navigation size={18} />
+          Update my location
+        </button>
+      </section>
+    </div>
+  );
+}

@@ -10,10 +10,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from bookings.models import Booking, Payment, BoardingEvent
-from users.permissions import can_manage_company
+from users.permissions import (
+    can_manage_company,
+    can_access_company,
+)
 from wallets.models import Wallet
-from .models import Company, Route, Trip
-from .serializers import CompanySerializer, TripSerializer
+from .models import Company, Route, Trip, PickupStage
+from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
 
 
 @api_view(['GET'])
@@ -23,66 +26,454 @@ def get_companies(request, *args, **kwargs):
     serializer = CompanySerializer(companies, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_company(request):
+    """
+    Create a company.
+
+    Only the global platform administrator can create companies.
+    Company managers cannot create companies.
+    """
+    if not request.user.is_superuser:
+        return Response(
+            {
+                'error': (
+                    'Only the platform administrator can create companies.'
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    serializer = CompanySerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company = serializer.save()
+
+    return Response(
+        CompanySerializer(company).data,
+        status=status.HTTP_201_CREATED
+    )
+
+
+@api_view(['PATCH', 'PUT'])
+@permission_classes([IsAuthenticated])
+def update_company(request, company_id):
+    """
+    Update a company.
+
+    Only the global platform administrator can update companies.
+    """
+    if not request.user.is_superuser:
+        return Response(
+            {
+                'error': (
+                    'Only the platform administrator can update companies.'
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    company = get_object_or_404(
+        Company,
+        id=company_id
+    )
+
+    serializer = CompanySerializer(
+        company,
+        data=request.data,
+        partial=request.method == 'PATCH'
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company = serializer.save()
+
+    return Response(
+        CompanySerializer(company).data,
+        status=status.HTTP_200_OK
+    )
+
 
 @api_view(['GET'])
 def get_routes(request, company_id=None, *args, **kwargs):
-    """Fetch routes for a specific company or all routes."""
-    # Accept company_id via URL parameter or query parameters
-    comp_id = company_id or request.query_params.get('company_id')
-    if comp_id:
-        routes = Route.objects.filter(company_id=comp_id)
+    """
+    Fetch routes.
+
+    Passengers and unauthenticated users may browse routes
+    across companies.
+
+    Company staff may only access routes belonging to
+    their own company.
+
+    Superusers may access routes for any company.
+    """
+    user = request.user
+
+    company_staff_roles = {
+        'company_manager',
+        'company_auditor',
+        'company_operator',
+    }
+
+    is_company_staff = (
+        user.is_authenticated
+        and not user.is_superuser
+        and user.role in company_staff_roles
+    )
+
+    comp_id = (
+        company_id
+        or request.query_params.get('company_id')
+        or request.query_params.get('company')
+    )
+
+    if is_company_staff:
+        if user.company_id is None:
+            return Response(
+                {'error': 'Company assignment required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if comp_id and str(comp_id) != str(user.company_id):
+            return Response(
+                {
+                    'error': (
+                        'You cannot access routes '
+                        'from another company.'
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        routes = Route.objects.filter(
+            company_id=user.company_id
+        )
+
+    elif comp_id:
+        routes = Route.objects.filter(
+            company_id=comp_id
+        )
+
     else:
         routes = Route.objects.all()
 
-    data = [
-    {
-        'id': r.id,
-        'company': r.company.name if r.company else None,
-        'name': r.name,
-        'origin': r.start_point,
-        'destination': r.end_point,
-        'price': str(r.price),
-    }
-    for r in routes
-]
-    return Response(data, status=status.HTTP_200_OK)
+    routes = routes.select_related('company').prefetch_related(
+        'pickup_stages'
+    )
+
+    data = []
+
+    for route in routes:
+        pickup_stages = [
+            {
+                'id': stage.id,
+                'route': route.id,
+                'name': stage.name,
+                'latitude': float(stage.latitude),
+                'longitude': float(stage.longitude),
+                'order': stage.order,
+                'is_active': stage.is_active,
+            }
+            for stage in route.pickup_stages.all()
+            if stage.is_active
+        ]
+
+        data.append({
+            'id': route.id,
+            'company': route.company_id,
+            'company_name': route.company.name if route.company else None,
+            'name': route.name,
+            'start_point': route.start_point,
+            'end_point': route.end_point,
+            'origin': route.start_point,
+            'destination': route.end_point,
+            'price': str(route.price),
+            'start_latitude': (
+                float(route.start_latitude)
+                if route.start_latitude is not None else None
+            ),
+            'start_longitude': (
+                float(route.start_longitude)
+                if route.start_longitude is not None else None
+            ),
+            'end_latitude': (
+                float(route.end_latitude)
+                if route.end_latitude is not None else None
+            ),
+            'end_longitude': (
+                float(route.end_longitude)
+                if route.end_longitude is not None else None
+            ),
+            'geometry': route.geometry,
+            'pickup_stages': pickup_stages,
+        })
+
+
+    return Response(
+        data,
+        status=status.HTTP_200_OK
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_route(request):
+    """
+    Create a route for a company.
+
+    Company Managers can create routes only for their own company.
+    Django superusers can create routes for any company.
+
+    The company relationship is determined by the server and cannot
+    be changed through RouteSerializer.
+    """
+    company_id = request.data.get('company_id')
+
+    if not company_id:
+        return Response(
+            {'error': 'company_id is required.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company = get_object_or_404(
+        Company,
+        id=company_id
+    )
+
+    if not can_manage_company(request.user, company):
+        return Response(
+            {
+                'error': (
+                    'Only a Company Manager can create routes '
+                    'for this company.'
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    serializer = RouteSerializer(
+        data=request.data
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    route = serializer.save(
+        company=company
+    )
+
+    return Response(
+        RouteSerializer(route).data,
+        status=status.HTTP_201_CREATED
+    )
+
+
+@api_view(['PUT', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_route(request, route_id):
+    """
+    Edit or delete a route.
+
+    Company Managers can manage routes belonging to their company.
+    Django superusers can manage routes for any company.
+
+    The route's company cannot be changed.
+    """
+    route = get_object_or_404(
+        Route.objects.select_related('company'),
+        id=route_id
+    )
+
+    if not can_manage_company(
+        request.user,
+        route.company
+    ):
+        return Response(
+            {
+                'error': (
+                    'Only a Company Manager can manage '
+                    'this route.'
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if request.method == 'DELETE':
+        route.delete()
+
+        return Response(
+            {
+                'message': 'Route deleted successfully.'
+            },
+            status=status.HTTP_200_OK
+        )
+
+    serializer = RouteSerializer(
+        route,
+        data=request.data,
+        partial=request.method == 'PATCH'
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    updated_route = serializer.save(
+        company=route.company
+    )
+
+    return Response(
+        RouteSerializer(updated_route).data,
+        status=status.HTTP_200_OK
+    )
 
 
 @api_view(['GET'])
 def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     """
-    Fetch trips filtered by URL kwargs (company_id)
-    or query parameters (?company_id=X or ?company=X).
-    """
-    queryset = Trip.objects.all()
+    Fetch trips.
 
-    # Support both 'company_id' and 'company' query parameters
+    Passengers and unauthenticated users may browse trips across companies.
+    Company staff may only access trips belonging to their own company.
+    Superusers may access every company.
+    """
+    queryset = Trip.objects.select_related(
+        'route',
+        'driver',
+        'route__company',
+    )
+
+    user = request.user
+    company_staff_roles = {
+        'company_manager',
+        'company_auditor',
+        'company_operator',
+    }
+
+    is_company_staff = (
+        user.is_authenticated
+        and not user.is_superuser
+        and user.role in company_staff_roles
+    )
+
     comp_id = (
-        company_id 
-        or request.query_params.get('company_id') 
+        company_id
+        or request.query_params.get('company_id')
         or request.query_params.get('company')
     )
-    if comp_id:
-        queryset = queryset.filter(route__company_id=comp_id)
 
-    param_route_id = route_id or request.query_params.get('route_id')
+    if is_company_staff:
+        if user.company_id is None:
+            return Response(
+                {'error': 'Company assignment required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if comp_id and str(comp_id) != str(user.company_id):
+            return Response(
+                {'error': 'You cannot access trips from another company.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        queryset = queryset.filter(
+            route__company_id=user.company_id
+        )
+
+    elif comp_id:
+        queryset = queryset.filter(
+            route__company_id=comp_id
+        )
+
+    param_route_id = (
+        route_id
+        or request.query_params.get('route_id')
+    )
+
     if param_route_id:
-        queryset = queryset.filter(route_id=param_route_id)
+        queryset = queryset.filter(
+            route_id=param_route_id
+        )
+
+    # Passengers should only see trips that are still bookable.
+    # Company staff and superusers retain access to historical trips.
+    if not is_company_staff and not user.is_superuser:
+        from django.utils import timezone
+        queryset = queryset.filter(
+            status='scheduled',
+            departure_at__gt=timezone.now(),
+        )
 
     serializer = TripSerializer(queryset, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK
+    )
 
 @api_view(['GET'])
 def get_trip_details(request, trip_id, *args, **kwargs):
-    """Fetch single trip details using route__company span join."""
+    """
+    Fetch a single trip.
+
+    Company staff may only access trips belonging to their company.
+    Passengers and unauthenticated users may view trip details.
+    Superusers may view any trip.
+    """
     try:
-        trip = Trip.objects.select_related('route', 'driver', 'route__company').get(id=trip_id)
+        trip = Trip.objects.select_related(
+            'route',
+            'driver',
+            'route__company',
+        ).get(id=trip_id)
     except Trip.DoesNotExist:
-        return Response({'error': 'Trip not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Trip not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    user = request.user
+    company_staff_roles = {
+        'company_manager',
+        'company_auditor',
+        'company_operator',
+    }
+
+    if (
+        user.is_authenticated
+        and not user.is_superuser
+        and user.role in company_staff_roles
+    ):
+        if user.company_id is None:
+            return Response(
+                {'error': 'Company assignment required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if trip.route.company_id != user.company_id:
+            return Response(
+                {'error': 'You cannot access trips from another company.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     serializer = TripSerializer(trip)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK
+    )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -93,11 +484,8 @@ def company_analytics(request, company_id):
         id=company_id,
     )
 
-    # Safely resolve user's assigned company ID across direct attributes and relations
-    user_company = getattr(request.user, 'company', None)
-    user_company_id = getattr(request.user, 'company_id', getattr(user_company, 'id', None))
-
-    if not request.user.is_staff and user_company_id != company.id:
+    # Company access is enforced by role and company assignment.
+    if not can_access_company(request.user, company.id):
         return Response(
             {'error': 'Unauthorized to view company analytics'},
             status=status.HTTP_403_FORBIDDEN
@@ -141,7 +529,21 @@ def update_trip_status(request, trip_id, *args, **kwargs):
     except Trip.DoesNotExist:
         return Response({'error': 'Trip not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    if not can_manage_company(request.user, trip.route.company):
+    user = request.user
+    company = trip.route.company
+
+    # Trip status is an operational action.
+    # Managers and Operators can update trips for their own company.
+    # Superusers can update trips for any company.
+    allowed = (
+        user.is_superuser
+        or (
+            user.role in {'company_manager', 'company_operator'}
+            and user.company_id == company.id
+        )
+    )
+
+    if not allowed:
         return Response(
             {'error': 'You are not authorized to manage this company\'s trips.'},
             status=status.HTTP_403_FORBIDDEN
@@ -283,3 +685,304 @@ def create_trip(request):
         TripSerializer(trip).data,
         status=status.HTTP_201_CREATED
     )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_route_pickup_stages(request, route_id):
+    """
+    Return pickup stages for a route.
+
+    Company staff can view stages for their own company.
+    Platform admins can view stages for any company.
+    """
+    route = get_object_or_404(
+        Route.objects.select_related('company'),
+        id=route_id,
+    )
+
+    if not can_access_company(request.user, route.company_id):
+        return Response(
+            {'error': 'You do not have access to this company route.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    stages = PickupStage.objects.filter(
+        route=route,
+    ).order_by('order', 'id')
+
+    return Response(
+        PickupStageSerializer(stages, many=True).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_pickup_stage(request, route_id):
+    """
+    Create a manually verified pickup stage for a route.
+
+    Only company managers or the platform administrator can create stages.
+    """
+    route = get_object_or_404(
+        Route.objects.select_related('company'),
+        id=route_id,
+    )
+
+    if not can_manage_company(request.user, route.company):
+        return Response(
+            {'error': 'Only a Company Manager can manage pickup stages.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    data = request.data.copy()
+    data['route'] = route.id
+    data['source'] = 'manual'
+
+    serializer = PickupStageSerializer(data=data)
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    stage = serializer.save(
+        route=route,
+        source='manual',
+    )
+
+    return Response(
+        PickupStageSerializer(stage).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['PATCH', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def manage_pickup_stage(request, stage_id):
+    """
+    Edit, deactivate, or delete a pickup stage.
+
+    The stage can only be managed by the company manager of its route's
+    company or the platform administrator.
+    """
+    stage = get_object_or_404(
+        PickupStage.objects.select_related('route__company'),
+        id=stage_id,
+    )
+
+    if not can_manage_company(
+        request.user,
+        stage.route.company,
+    ):
+        return Response(
+            {'error': 'Only a Company Manager can manage this pickup stage.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == 'DELETE':
+        stage.delete()
+
+        return Response(
+            {'message': 'Pickup stage deleted successfully.'},
+            status=status.HTTP_200_OK,
+        )
+
+    data = request.data.copy()
+
+    # Route ownership and discovery provenance are controlled by the server.
+    data.pop('route', None)
+    data.pop('source', None)
+    data.pop('source_ref', None)
+
+    serializer = PickupStageSerializer(
+        stage,
+        data=data,
+        partial=request.method == 'PATCH',
+    )
+
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    stage = serializer.save()
+
+    return Response(
+        PickupStageSerializer(stage).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def approve_pickup_stage(request, stage_id):
+    """
+    Approve an automatically discovered pickup stage.
+
+    Approval changes its source to manual, meaning the company has
+    explicitly verified the stage.
+    """
+    stage = get_object_or_404(
+        PickupStage.objects.select_related('route__company'),
+        id=stage_id,
+    )
+
+    if not can_manage_company(
+        request.user,
+        stage.route.company,
+    ):
+        return Response(
+            {'error': 'Only a Company Manager can approve pickup stages.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    stage.source = 'manual'
+    stage.is_active = True
+    stage.save(
+        update_fields=['source', 'is_active'],
+    )
+
+    return Response(
+        {
+            'message': 'Pickup stage approved successfully.',
+            'stage': PickupStageSerializer(stage).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deactivate_pickup_stage(request, stage_id):
+    """
+    Deactivate a pickup stage without deleting its record.
+    """
+    stage = get_object_or_404(
+        PickupStage.objects.select_related('route__company'),
+        id=stage_id,
+    )
+
+    if not can_manage_company(
+        request.user,
+        stage.route.company,
+    ):
+        return Response(
+            {'error': 'Only a Company Manager can manage pickup stages.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    stage.is_active = False
+    stage.save(update_fields=['is_active'])
+
+    return Response(
+        {
+            'message': 'Pickup stage deactivated successfully.',
+            'stage': PickupStageSerializer(stage).data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(['GET'])
+def route_map_data(request, route_id):
+    from django.db.models import Count, Sum
+    from .models import Route, Trip
+    from bookings.models import Booking
+
+    try:
+        route = Route.objects.get(id=route_id)
+    except Route.DoesNotExist:
+        return Response({"error": "Route not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    trip_id = request.query_params.get("trip_id")
+    trip = None
+
+    if trip_id:
+        try:
+            trip = Trip.objects.select_related("route").get(id=trip_id)
+        except Trip.DoesNotExist:
+            return Response({"error": "Trip not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if trip.route_id != route.id:
+            return Response({"error": "Trip does not belong to this route."}, status=status.HTTP_400_BAD_REQUEST)
+
+    stages = route.pickup_stages.filter(is_active=True).order_by("order", "id")
+    stage_data = []
+
+    for stage in stages:
+        booking_qs = Booking.objects.none()
+
+        if trip:
+            booking_qs = Booking.objects.filter(
+                trip=trip,
+                pickup_stage_id=stage.id,
+            ).exclude(status="cancelled")
+
+            if not booking_qs.exists():
+                booking_qs = Booking.objects.filter(
+                    trip=trip,
+                    pickup_stage__isnull=True,
+                    pickup_location__iexact=stage.name,
+                ).exclude(status="cancelled")
+
+        counts = booking_qs.aggregate(
+            booking_count=Count("id"),
+            passenger_count=Sum("seats"),
+        )
+
+        passengers = []
+
+        if trip:
+            for booking in booking_qs.select_related("user").order_by(
+                "created_at",
+                "id",
+            ):
+                passengers.append({
+                    "booking_id": booking.id,
+                    "booking_number": booking.booking_number,
+                    "passenger": booking.user.username,
+                    "passenger_phone": booking.user.phone_number,
+                    "seats": booking.seats,
+                    "status": booking.status,
+                    "pickup_stage_id": (
+                        booking.pickup_stage_id
+                    ),
+                    "pickup_location": booking.pickup_location,
+                    "passenger_latitude": (
+                        float(booking.passenger_latitude)
+                        if booking.passenger_latitude is not None
+                        else None
+                    ),
+                    "passenger_longitude": (
+                        float(booking.passenger_longitude)
+                        if booking.passenger_longitude is not None
+                        else None
+                    ),
+                })
+
+        stage_data.append({
+            "id": stage.id,
+            "name": stage.name,
+            "latitude": float(stage.latitude),
+            "longitude": float(stage.longitude),
+            "order": stage.order,
+            "source": stage.source,
+            "booking_count": int(counts["booking_count"] or 0),
+            "passenger_count": int(counts["passenger_count"] or 0),
+            "passengers": passengers,
+        })
+
+    return Response({
+        "route_id": route.id,
+        "route_name": route.name,
+        "start_point": route.start_point,
+        "end_point": route.end_point,
+        "trip_id": trip.id if trip else None,
+        "departure_at": trip.departure_at if trip else None,
+        "geometry": route.geometry or {"type": "LineString", "coordinates": []},
+        "stages": stage_data,
+    })
+

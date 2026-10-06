@@ -1,0 +1,976 @@
+import { useEffect, useMemo, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  Bus,
+  CalendarDays,
+  ChevronRight,
+  CreditCard,
+  FileText,
+  LogOut,
+  Receipt,
+  Search,
+  ShieldCheck,
+  UserRound,
+  WalletCards,
+} from 'lucide-react';
+import { apiRequest } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import './CompanyAuditorDashboard.css';
+
+const money = (value) =>
+  `KES ${Number(value || 0).toLocaleString('en-KE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const date = (value) =>
+  value
+    ? new Date(value).toLocaleString('en-KE', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—';
+
+const statusClass = (value) => {
+  const s = String(value || '').toLowerCase();
+
+  if (['confirmed', 'completed', 'settled', 'processed'].includes(s)) {
+    return 'audit-status success';
+  }
+
+  if (['failed', 'cancelled', 'refunded', 'no_show'].includes(s)) {
+    return 'audit-status danger';
+  }
+
+  return 'audit-status neutral';
+};
+
+function Status({ value }) {
+  return (
+    <span className={statusClass(value)}>
+      {value || 'Unknown'}
+    </span>
+  );
+}
+
+const sidebar = [
+  { label: 'Overview', path: '/company-auditor', icon: BarChart3 },
+  { label: 'Trips', path: '/company-auditor/trips', icon: Bus },
+  { label: 'Payments', path: '/company-auditor/payments', icon: CreditCard },
+  { label: 'Transactions', path: '/company-auditor/transactions', icon: Activity },
+  { label: 'Receipts', path: '/company-auditor/receipts', icon: Receipt },
+  { label: 'Bookings', path: '/company-auditor/bookings', icon: BookOpen },
+  { label: 'Passengers', path: '/company-auditor/passengers', icon: UserRound },
+  { label: 'Incidents', path: '/company-auditor/incidents', icon: AlertTriangle },
+  { label: 'Reports', path: '/company-auditor/reports', icon: FileText },
+];
+
+function Layout({ user, logout, children }) {
+  return (
+    <div className="audit-app">
+      <aside className="audit-sidebar">
+        <div className="audit-logo">
+          <div className="audit-logo-mark">C</div>
+          <div>
+            <strong>CONNECT</strong>
+            <span>Audit Console</span>
+          </div>
+        </div>
+
+        <div className="audit-company-box">
+          <span>COMPANY</span>
+          <strong>{user?.company_name || 'Company'}</strong>
+          <small>Read-only auditor</small>
+        </div>
+
+        <nav className="audit-nav">
+          <div className="audit-nav-label">AUDIT</div>
+
+          {sidebar.map(({ label, path, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              end={path === '/company-auditor'}
+              className={({ isActive }) =>
+                `audit-nav-item ${isActive ? 'active' : ''}`
+              }
+            >
+              <Icon size={17} />
+              <span>{label}</span>
+              {label === 'Overview' && <ChevronRight size={14} />}
+            </NavLink>
+          ))}
+
+          <div className="audit-nav-label audit-nav-label-secondary">
+            TOOLS
+          </div>
+
+          <NavLink
+            to="/company-auditor/search"
+            className={({ isActive }) =>
+              `audit-nav-item ${isActive ? 'active' : ''}`
+            }
+          >
+            <Search size={17} />
+            <span>Search</span>
+          </NavLink>
+        </nav>
+
+        <div className="audit-sidebar-bottom">
+          <NavLink
+            to="/company-auditor/profile"
+            className={({ isActive }) =>
+              `audit-nav-item ${isActive ? 'active' : ''}`
+            }
+          >
+            <UserRound size={17} />
+            <span>Profile</span>
+          </NavLink>
+
+          <button className="audit-nav-item audit-logout" onClick={logout}>
+            <LogOut size={17} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="audit-main">
+        {children}
+      </main>
+    </div>
+  );
+}
+
+function SectionHeader({ eyebrow, title, description, icon: Icon }) {
+  return (
+    <header className="audit-section-header">
+      <div>
+        <div className="audit-eyebrow">{eyebrow}</div>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+
+      <div className="audit-section-icon">
+        <Icon size={22} />
+      </div>
+    </header>
+  );
+}
+
+function DataTable({ children }) {
+  return (
+    <div className="audit-table-wrap">
+      <table className="audit-table">{children}</table>
+    </div>
+  );
+}
+
+function Overview({ analytics, trips, bookings }) {
+  const payments = bookings.filter((b) => b.payment_status);
+  const failed = payments.filter((b) => b.payment_status === 'failed');
+  const confirmed = payments.filter((b) => b.payment_status === 'confirmed');
+
+  const revenue = bookings.reduce(
+    (sum, b) => sum + Number(b.total_amount || b.amount || 0),
+    0
+  );
+
+  const recent = [...bookings]
+    .sort(
+      (a, b) =>
+        new Date(b.created_at || 0) - new Date(a.created_at || 0)
+    )
+    .slice(0, 8);
+
+  return (
+    <>
+      <SectionHeader
+        eyebrow="AUDITOR OVERVIEW"
+        title="Audit control center"
+        description="Company-wide read-only visibility across trips, bookings, payments, receipts and recorded incidents."
+        icon={ShieldCheck}
+      />
+
+      <div className="audit-kpis">
+        <div className="audit-kpi">
+          <span>Trips</span>
+          <strong>{analytics?.total_trips ?? trips.length}</strong>
+          <small>Company trip records</small>
+        </div>
+
+        <div className="audit-kpi">
+          <span>Bookings</span>
+          <strong>{analytics?.active_bookings ?? bookings.length}</strong>
+          <small>Recorded bookings</small>
+        </div>
+
+        <div className="audit-kpi">
+          <span>Payments</span>
+          <strong>{payments.length}</strong>
+          <small>Payment-linked bookings</small>
+        </div>
+
+        <div className="audit-kpi">
+          <span>Confirmed</span>
+          <strong>{confirmed.length}</strong>
+          <small>Confirmed payments</small>
+        </div>
+
+        <div className="audit-kpi danger-kpi">
+          <span>Failed</span>
+          <strong>{failed.length}</strong>
+          <small>Requires investigation</small>
+        </div>
+
+        <div className="audit-kpi">
+          <span>Recorded revenue</span>
+          <strong>{money(analytics?.total_revenue_settled ?? revenue)}</strong>
+          <small>Available company figure</small>
+        </div>
+      </div>
+
+      <div className="audit-dashboard-grid">
+        <section className="audit-panel audit-wide">
+          <div className="audit-panel-head">
+            <div>
+              <h2>Recent audit activity</h2>
+              <p>Latest booking and transaction records.</p>
+            </div>
+            <Activity size={19} />
+          </div>
+
+          <DataTable>
+            <thead>
+              <tr>
+                <th>Booking</th>
+                <th>Passenger</th>
+                <th>Route</th>
+                <th>Payment</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {recent.map((b) => (
+                <tr key={b.booking_id}>
+                  <td><strong>{b.booking_number}</strong></td>
+                  <td>
+                    {b.user || '—'}
+                    <small>{b.user_phone || ''}</small>
+                  </td>
+                  <td>{b.route_name || '—'}</td>
+                  <td><Status value={b.payment_status} /></td>
+                  <td>{date(b.created_at)}</td>
+                </tr>
+              ))}
+
+              {!recent.length && (
+                <tr>
+                  <td colSpan="5" className="audit-empty-cell">
+                    No audit activity recorded.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </DataTable>
+        </section>
+
+        <section className="audit-panel">
+          <div className="audit-panel-head">
+            <div>
+              <h2>Audit scope</h2>
+              <p>What this role can inspect.</p>
+            </div>
+            <ShieldCheck size={19} />
+          </div>
+
+          <div className="audit-scope-list">
+            <div><Bus size={16} /> Trips & departures</div>
+            <div><CreditCard size={16} /> Payments & settlement</div>
+            <div><Receipt size={16} /> Receipts & references</div>
+            <div><BookOpen size={16} /> Booking lifecycle</div>
+            <div><UserRound size={16} /> Passenger records</div>
+            <div><AlertTriangle size={16} /> Incidents & resolutions</div>
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+function Trips({ trips }) {
+  return (
+    <>
+      <SectionHeader
+        eyebrow="TRIP AUDIT"
+        title="Trips"
+        description="Review historical and scheduled company trips without operational controls."
+        icon={Bus}
+      />
+
+      <section className="audit-panel">
+        <div className="audit-panel-head">
+          <div>
+            <h2>Trip register</h2>
+            <p>{trips.length} trip records available for review.</p>
+          </div>
+          <CalendarDays size={19} />
+        </div>
+
+        <DataTable>
+          <thead>
+            <tr>
+              <th>Route</th>
+              <th>Departure</th>
+              <th>Driver</th>
+              <th>Status</th>
+              <th>Trip ID</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {trips.map((trip) => (
+              <tr key={trip.id}>
+                <td>
+                  <strong>{trip.route_details?.name || trip.route_name || '—'}</strong>
+                </td>
+                <td>{date(trip.departure_at)}</td>
+                <td>{trip.driver_name || 'Unassigned'}</td>
+                <td><Status value={trip.status} /></td>
+                <td>#{trip.id}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
+    </>
+  );
+}
+
+function Payments({ bookings }) {
+  const payments = bookings.filter(
+    (b) => b.payment_status || b.payment_reference || b.payment
+  );
+
+  return (
+    <>
+      <SectionHeader
+        eyebrow="PAYMENT AUDIT"
+        title="Payments"
+        description="Review payment states, references and financial outcomes recorded against company bookings."
+        icon={CreditCard}
+      />
+
+      <section className="audit-panel">
+        <div className="audit-panel-head">
+          <div>
+            <h2>Payment register</h2>
+            <p>{payments.length} payment-linked records.</p>
+          </div>
+          <WalletCards size={19} />
+        </div>
+
+        <DataTable>
+          <thead>
+            <tr>
+              <th>Booking</th>
+              <th>Passenger</th>
+              <th>Route</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {payments.map((b) => (
+              <tr key={b.booking_id}>
+                <td><strong>{b.booking_number}</strong></td>
+                <td>{b.user || '—'}</td>
+                <td>{b.route_name || '—'}</td>
+                <td>{money(b.total_amount || b.amount)}</td>
+                <td><Status value={b.payment_status} /></td>
+                <td>{b.payment_reference || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
+    </>
+  );
+}
+
+function Transactions({ bookings }) {
+  return (
+    <>
+      <SectionHeader
+        eyebrow="TRANSACTION AUDIT"
+        title="Transactions"
+        description="Trace booking-linked financial references and transaction outcomes."
+        icon={Activity}
+      />
+
+      <section className="audit-panel">
+        <div className="audit-panel-head">
+          <div>
+            <h2>Transaction register</h2>
+            <p>Read-only financial transaction view.</p>
+          </div>
+          <Activity size={19} />
+        </div>
+
+        <DataTable>
+          <thead>
+            <tr>
+              <th>Booking</th>
+              <th>Passenger</th>
+              <th>Payment reference</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Recorded</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {bookings.map((b) => (
+              <tr key={b.booking_id}>
+                <td>{b.booking_number}</td>
+                <td>{b.user || '—'}</td>
+                <td>{b.payment_reference || '—'}</td>
+                <td>{money(b.total_amount || b.amount)}</td>
+                <td><Status value={b.payment_status} /></td>
+                <td>{date(b.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
+    </>
+  );
+}
+
+function Bookings({ bookings }) {
+  return (
+    <>
+      <SectionHeader
+        eyebrow="BOOKING AUDIT"
+        title="Bookings"
+        description="Inspect booking lifecycle, passengers, routes and payment relationships."
+        icon={BookOpen}
+      />
+
+      <section className="audit-panel">
+        <div className="audit-panel-head">
+          <div>
+            <h2>Booking register</h2>
+            <p>Complete company booking visibility.</p>
+          </div>
+          <BookOpen size={19} />
+        </div>
+
+        <DataTable>
+          <thead>
+            <tr>
+              <th>Booking</th>
+              <th>Passenger</th>
+              <th>Route</th>
+              <th>Seats</th>
+              <th>Booking status</th>
+              <th>Payment</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {bookings.map((b) => (
+              <tr key={b.booking_id}>
+                <td><strong>{b.booking_number}</strong></td>
+                <td>{b.user || '—'}</td>
+                <td>{b.route_name || '—'}</td>
+                <td>{b.seats ?? '—'}</td>
+                <td><Status value={b.status} /></td>
+                <td><Status value={b.payment_status} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
+    </>
+  );
+}
+
+function Passengers({ bookings }) {
+  const passengers = useMemo(() => {
+    const map = new Map();
+
+    bookings.forEach((b) => {
+      const key = b.user || b.user_phone || b.booking_id;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          user: b.user || '—',
+          phone: b.user_phone || '—',
+          bookings: 0,
+          failed: 0,
+          confirmed: 0,
+        });
+      }
+
+      const p = map.get(key);
+      p.bookings += 1;
+
+      if (b.payment_status === 'failed') p.failed += 1;
+      if (b.payment_status === 'confirmed') p.confirmed += 1;
+    });
+
+    return [...map.values()];
+  }, [bookings]);
+
+  return (
+    <>
+      <SectionHeader
+        eyebrow="PASSENGER AUDIT"
+        title="Passengers"
+        description="Review passenger activity through company booking and payment records."
+        icon={UserRound}
+      />
+
+      <section className="audit-panel">
+        <div className="audit-panel-head">
+          <div>
+            <h2>Passenger register</h2>
+            <p>Grouped from company booking records.</p>
+          </div>
+          <UserRound size={19} />
+        </div>
+
+        <DataTable>
+          <thead>
+            <tr>
+              <th>Passenger</th>
+              <th>Phone</th>
+              <th>Bookings</th>
+              <th>Confirmed payments</th>
+              <th>Failed payments</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {passengers.map((p) => (
+              <tr key={`${p.user}-${p.phone}`}>
+                <td><strong>{p.user}</strong></td>
+                <td>{p.phone}</td>
+                <td>{p.bookings}</td>
+                <td>{p.confirmed}</td>
+                <td>{p.failed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      </section>
+    </>
+  );
+}
+
+function Receipts({ onSearch }) {
+  return (
+    <>
+      <SectionHeader
+        eyebrow="RECEIPT AUDIT"
+        title="Receipts"
+        description="Investigate individual receipts and trace their complete recorded transaction history."
+        icon={Receipt}
+      />
+
+      <section className="audit-panel audit-receipt-launch">
+        <Receipt size={30} />
+        <h2>Receipt investigation</h2>
+        <p>
+          Search by receipt/booking number, payment reference, username or
+          passenger phone number.
+        </p>
+
+        <button onClick={onSearch}>
+          <Search size={16} />
+          Open search
+        </button>
+      </section>
+    </>
+  );
+}
+
+function SearchPage() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (!query.trim()) {
+      setError('Enter something to search.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const data = await apiRequest(
+        `/bookings/auditor/receipts/?search=${encodeURIComponent(query.trim())}`
+      );
+
+      setResults(Array.isArray(data) ? data : []);
+      setSelected(data?.[0] || null);
+
+      if (!data?.length) setError('No matching records found.');
+    } catch (err) {
+      setError(err.message || 'Search failed.');
+      setResults([]);
+      setSelected(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <SectionHeader
+        eyebrow="INVESTIGATION"
+        title="Search"
+        description="Search the company's audit records from one place."
+        icon={Search}
+      />
+
+      <section className="audit-panel">
+        <form className="audit-search-form" onSubmit={submit}>
+          <Search size={18} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Receipt, booking, payment reference, username or phone"
+          />
+          <button disabled={loading}>
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+        </form>
+
+        {error && <div className="audit-search-error">{error}</div>}
+      </section>
+
+      {results.length > 0 && (
+        <section className="audit-panel audit-search-results">
+          <div className="audit-panel-head">
+            <div>
+              <h2>Matching records</h2>
+              <p>{results.length} result(s)</p>
+            </div>
+            <Receipt size={19} />
+          </div>
+
+          <div className="audit-search-list">
+            {results.map((record) => (
+              <button
+                key={record.booking_id}
+                className={
+                  selected?.booking_id === record.booking_id
+                    ? 'selected'
+                    : ''
+                }
+                onClick={() => setSelected(record)}
+              >
+                <div>
+                  <strong>{record.booking_number}</strong>
+                  <span>{record.passenger?.name || record.passenger?.username}</span>
+                </div>
+
+                <Status value={record.payment?.status} />
+              </button>
+            ))}
+          </div>
+
+          {selected && (
+            <div className="audit-investigation">
+              <div className="audit-investigation-grid">
+                <div>
+                  <span>Passenger</span>
+                  <strong>{selected.passenger?.name || '—'}</strong>
+                </div>
+                <div>
+                  <span>Phone</span>
+                  <strong>{selected.passenger?.phone_number || '—'}</strong>
+                </div>
+                <div>
+                  <span>Route</span>
+                  <strong>{selected.trip?.route || '—'}</strong>
+                </div>
+                <div>
+                  <span>Amount</span>
+                  <strong>{money(selected.payment?.amount)}</strong>
+                </div>
+                <div>
+                  <span>Payment</span>
+                  <strong><Status value={selected.payment?.status} /></strong>
+                </div>
+                <div>
+                  <span>Reference</span>
+                  <strong>{selected.payment?.provider_reference || '—'}</strong>
+                </div>
+              </div>
+
+              <div className="audit-timeline">
+                <h3>Recorded timeline</h3>
+
+                {(selected.activity || []).map((event, index) => (
+                  <div className="audit-event" key={`${event.type}-${index}`}>
+                    <div />
+                    <section>
+                      <strong>{event.label}</strong>
+                      <time>{date(event.timestamp)}</time>
+                      <p>{event.details || 'Recorded event.'}</p>
+                    </section>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+function Reports({ analytics, bookings, trips }) {
+  const failed = bookings.filter((b) => b.payment_status === 'failed').length;
+  const confirmed = bookings.filter((b) => b.payment_status === 'confirmed').length;
+
+  return (
+    <>
+      <SectionHeader
+        eyebrow="AUDIT REPORTS"
+        title="Reports"
+        description="Read-only company audit summaries generated from the available records."
+        icon={FileText}
+      />
+
+      <div className="audit-report-grid">
+        <div className="audit-report">
+          <span>Trip records</span>
+          <strong>{analytics?.total_trips ?? trips.length}</strong>
+          <small>Trips currently returned by the company API.</small>
+        </div>
+
+        <div className="audit-report">
+          <span>Booking records</span>
+          <strong>{bookings.length}</strong>
+          <small>Company booking records available for review.</small>
+        </div>
+
+        <div className="audit-report">
+          <span>Confirmed payments</span>
+          <strong>{confirmed}</strong>
+          <small>Bookings whose payment status is confirmed.</small>
+        </div>
+
+        <div className="audit-report danger">
+          <span>Failed payments</span>
+          <strong>{failed}</strong>
+          <small>Records requiring transaction investigation.</small>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Incidents() {
+  return (
+    <>
+      <SectionHeader
+        eyebrow="INCIDENT AUDIT"
+        title="Incidents"
+        description="Review recorded company incidents and their resolutions. Operational actions remain unavailable."
+        icon={AlertTriangle}
+      />
+
+      <section className="audit-panel audit-placeholder">
+        <AlertTriangle size={28} />
+        <h2>Incident register</h2>
+        <p>
+          The current frontend has no dedicated company incident-list endpoint.
+          Incident information is still available inside individual receipt
+          investigations where it is attached to a booking.
+        </p>
+        <NavLink to="/company-auditor/search">
+          Investigate a record
+        </NavLink>
+      </section>
+    </>
+  );
+}
+
+function Profile({ user }) {
+  return (
+    <>
+      <SectionHeader
+        eyebrow="AUDITOR PROFILE"
+        title="Profile"
+        description="Your CONNECT audit identity and access scope."
+        icon={UserRound}
+      />
+
+      <section className="audit-panel audit-profile">
+        <div className="audit-profile-avatar">
+          {(user?.username || 'A')[0].toUpperCase()}
+        </div>
+
+        <div>
+          <span>Username</span>
+          <strong>{user?.username || '—'}</strong>
+        </div>
+
+        <div>
+          <span>Role</span>
+          <strong>{user?.role || 'company_auditor'}</strong>
+        </div>
+
+        <div>
+          <span>Company</span>
+          <strong>{user?.company_name || `Company ${user?.company_id || ''}`}</strong>
+        </div>
+
+        <div>
+          <span>Access</span>
+          <strong>Read-only audit</strong>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export default function CompanyAuditorDashboard() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+
+  const [analytics, setAnalytics] = useState(null);
+  const [trips, setTrips] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const section = location.pathname
+    .replace('/company-auditor', '')
+    .replace(/^\/+/, '')
+    .split('/')[0] || 'overview';
+
+  useEffect(() => {
+    async function loadAuditData() {
+      if (!user?.company_id) return;
+
+      setLoading(true);
+
+      try {
+        const [analyticsData, tripsData, bookingsData] = await Promise.all([
+          apiRequest(`/companies/${user.company_id}/analytics/`),
+          apiRequest(`/companies/${user.company_id}/trips/`),
+          apiRequest(`/bookings/all/?company_id=${user.company_id}`),
+        ]);
+
+        setAnalytics(analyticsData || null);
+        setTrips(Array.isArray(tripsData) ? tripsData : []);
+        setBookings(Array.isArray(bookingsData) ? bookingsData : []);
+      } catch (err) {
+        setError(err.message || 'Unable to load audit records.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadAuditData();
+  }, [user?.company_id]);
+
+  const content = (() => {
+    if (loading) {
+      return (
+        <div className="audit-loading">
+          <ShieldCheck size={28} />
+          <span>Loading company audit records…</span>
+        </div>
+      );
+    }
+
+    if (error && section !== 'search') {
+      return (
+        <div className="audit-error-page">
+          <AlertTriangle size={28} />
+          <h2>Audit data could not be loaded</h2>
+          <p>{error}</p>
+        </div>
+      );
+    }
+
+    switch (section) {
+      case 'trips':
+        return <Trips trips={trips} />;
+
+      case 'payments':
+        return <Payments bookings={bookings} />;
+
+      case 'transactions':
+        return <Transactions bookings={bookings} />;
+
+      case 'receipts':
+        return (
+          <Receipts
+            onSearch={() => {
+              window.history.pushState({}, '', '/company-auditor/search');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+          />
+        );
+
+      case 'bookings':
+        return <Bookings bookings={bookings} />;
+
+      case 'passengers':
+        return <Passengers bookings={bookings} />;
+
+      case 'incidents':
+        return <Incidents />;
+
+      case 'reports':
+        return (
+          <Reports
+            analytics={analytics}
+            bookings={bookings}
+            trips={trips}
+          />
+        );
+
+      case 'search':
+        return <SearchPage />;
+
+      case 'profile':
+        return <Profile user={user} />;
+
+      default:
+        return (
+          <Overview
+            analytics={analytics}
+            trips={trips}
+            bookings={bookings}
+          />
+        );
+    }
+  })();
+
+  return (
+    <Layout user={user} logout={logout}>
+      {content}
+    </Layout>
+  );
+}

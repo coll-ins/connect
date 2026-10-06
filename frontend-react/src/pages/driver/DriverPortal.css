@@ -1,0 +1,1068 @@
+.driver-app {
+  min-height: 100vh;
+  display: flex;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(16, 185, 129, .08), transparent 30%),
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, .07), transparent 28%),
+    #07111f;
+  color: #e8eef7;
+}
+
+/* =========================================================
+   SIDEBAR
+   ========================================================= */
+
+.driver-sidebar {
+  width: 260px;
+  min-width: 260px;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+  border-right: 1px solid rgba(255,255,255,.07);
+  background: rgba(5,14,27,.78);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  z-index: 30;
+  box-sizing: border-box;
+}
+
+.driver-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px 22px;
+}
+
+.driver-brand-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: rgba(16,185,129,.14);
+  color: #34d399;
+  border: 1px solid rgba(52,211,153,.2);
+}
+
+.driver-brand strong,
+.driver-brand span {
+  display: block;
+}
+
+.driver-brand strong {
+  font-size: 18px;
+  letter-spacing: .08em;
+}
+
+.driver-brand span {
+  margin-top: 2px;
+  color: #718096;
+  font-size: 11px;
+}
+
+.driver-company-card {
+  padding: 15px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  background: rgba(255,255,255,.035);
+  margin-bottom: 25px;
+}
+
+.driver-company-card span,
+.driver-company-card small {
+  display: block;
+  color: #718096;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+}
+
+.driver-company-card strong {
+  display: block;
+  margin: 7px 0 5px;
+  font-size: 14px;
+  color: #f5f8fc;
+}
+
+.driver-company-card small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+
+.driver-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.driver-nav-label {
+  padding: 0 11px 9px;
+  color: #526176;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.driver-nav-item {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: #8290a5;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: .2s ease;
+}
+
+.driver-nav-item:hover {
+  color: #eaf2f8;
+  background: rgba(255,255,255,.045);
+}
+
+.driver-nav-item-active {
+  color: #ecfdf5;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(16,185,129,.16),
+      rgba(16,185,129,.055)
+    );
+  box-shadow: inset 2px 0 #34d399;
+}
+
+.driver-nav-item-active .driver-nav-icon {
+  color: #34d399;
+}
+
+.driver-nav-icon {
+  width: 18px;
+  min-width: 18px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.driver-nav-arrow {
+  margin-left: auto;
+  opacity: .35;
+}
+
+/* =========================================================
+   SIDEBAR BOTTOM
+   ========================================================= */
+
+.driver-sidebar-bottom {
+  margin-top: auto;
+}
+
+.driver-user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 9px;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+
+.driver-user-avatar,
+.driver-topbar-avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #183d45, #102a37);
+  border: 1px solid rgba(52,211,153,.22);
+  color: #a7f3d0;
+  font-weight: 700;
+}
+
+.driver-user-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
+.driver-user-card strong,
+.driver-user-card span {
+  display: block;
+}
+
+.driver-user-card strong {
+  font-size: 12px;
+}
+
+.driver-user-card span {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.driver-logout {
+  width: 100%;
+  height: 40px;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 11px;
+  background: rgba(255,255,255,.025);
+  color: #8390a2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  font: inherit;
+  transition: .2s ease;
+}
+
+.driver-logout:hover {
+  color: #fca5a5;
+  border-color: rgba(248,113,113,.2);
+  background: rgba(248,113,113,.035);
+}
+
+/* =========================================================
+   MAIN / TOPBAR
+   ========================================================= */
+
+.driver-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.driver-topbar {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 34px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: rgba(7,17,31,.68);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-sizing: border-box;
+}
+
+.driver-menu-button {
+  display: none;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+  color: #d9e2ec;
+  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+}
+
+.driver-topbar-title span,
+.driver-topbar-title strong {
+  display: block;
+}
+
+.driver-topbar-title span {
+  color: #526176;
+  font-size: 9px;
+  letter-spacing: .15em;
+  font-weight: 800;
+}
+
+.driver-topbar-title strong {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #e7edf5;
+}
+
+.driver-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.driver-live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #9fb0c4;
+  font-size: 11px;
+}
+
+.driver-live-indicator span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgba(52,211,153,.09);
+}
+
+.driver-topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.driver-topbar-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 12px;
+}
+
+/* =========================================================
+   CONTENT
+   ========================================================= */
+
+.driver-content {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 34px;
+  box-sizing: border-box;
+}
+
+.driver-content h1 {
+  color: #f5f8fc !important;
+}
+
+.driver-content h2,
+.driver-content h3 {
+  color: #f5f8fc !important;
+}
+
+.driver-content p {
+  color: #8190a5;
+}
+
+.driver-content strong {
+  color: #e8eef7;
+}
+
+.driver-content small {
+  color: #718096;
+}
+
+/* =========================================================
+   GLASS SECTIONS
+   ========================================================= */
+
+.driver-content section {
+  position: relative;
+  margin-bottom: 22px;
+  padding: 24px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 90% 0%,
+      rgba(16,185,129,.08),
+      transparent 35%
+    ),
+    rgba(255,255,255,.035);
+  box-shadow: 0 24px 70px rgba(0,0,0,.14);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-sizing: border-box;
+}
+
+.driver-content section:last-child {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+   STAT CARDS
+   ========================================================= */
+
+.driver-content section > div[style*="grid"] > div {
+  border: 1px solid rgba(255,255,255,.07) !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(
+      circle at 90% 0%,
+      rgba(16,185,129,.07),
+      transparent 40%
+    ),
+    rgba(255,255,255,.035) !important;
+  box-shadow: 0 18px 45px rgba(0,0,0,.12) !important;
+  color: #e8eef7 !important;
+  transition:
+    transform .2s ease,
+    border-color .2s ease,
+    background .2s ease;
+}
+
+.driver-content section > div[style*="grid"] > div:hover {
+  transform: translateY(-2px);
+  border-color: rgba(52,211,153,.16) !important;
+}
+
+/* =========================================================
+   BOOKING / PASSENGER ITEMS
+   ========================================================= */
+
+.driver-content section > div[style*="border"] {
+  color: #cbd5e1;
+}
+
+.driver-content section > div[style*="border"] strong {
+  color: #f1f5f9 !important;
+}
+
+.driver-content section > div[style*="border"] div {
+  color: #8190a5 !important;
+}
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.driver-content [style*="background: #fff7ed"] {
+  background: rgba(127,29,29,.14) !important;
+  border: 1px solid rgba(248,113,113,.18) !important;
+  color: #fca5a5 !important;
+}
+
+.driver-content [style*="background: #fff7ed"] strong {
+  color: #fecaca !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .driver-sidebar {
+    width: 230px;
+    min-width: 230px;
+  }
+
+  .driver-topbar {
+    padding: 0 20px;
+  }
+
+  .driver-content {
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 700px) {
+  .driver-app {
+    display: block;
+  }
+
+  .driver-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 260px;
+    min-width: 260px;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: 20px 0 60px rgba(0,0,0,.3);
+  }
+
+  .driver-sidebar.driver-sidebar-open {
+    transform: translateX(0);
+  }
+
+  .driver-menu-button {
+    display: grid;
+    place-items: center;
+  }
+
+  .driver-topbar {
+    height: 70px;
+    padding: 0 16px;
+  }
+
+  .driver-content {
+    padding: 22px 16px;
+  }
+
+  .driver-topbar-title span {
+    display: none;
+  }
+
+  .driver-topbar-right {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .driver-topbar-user > div:not(.driver-topbar-avatar) {
+    display: none;
+  }
+
+  .driver-content section {
+    padding: 18px;
+    border-radius: 15px;
+  }
+}
+
+/* =========================================================
+   DRIVER INNER PAGES — OPERATOR-STYLE GLASS UI
+   ========================================================= */
+
+.driver-page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+.driver-page-heading h1 {
+  margin: 5px 0 8px;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.7px;
+  color: #f4f8fb;
+}
+
+.driver-page-heading p {
+  margin: 0;
+  color: #91a3b7;
+  font-size: 14px;
+}
+
+.driver-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #55d99a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.35px;
+  text-transform: uppercase;
+}
+
+/* Error */
+
+.driver-error {
+  margin-bottom: 22px;
+  padding: 14px 17px;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: 13px;
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+  font-size: 13px;
+}
+
+.driver-error strong {
+  color: #fca5a5;
+}
+
+/* Dashboard stats */
+
+.driver-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.driver-stat-card {
+  position: relative;
+  min-height: 128px;
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 20px;
+  overflow: hidden;
+
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 17px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(17, 34, 54, 0.78),
+      rgba(8, 20, 35, 0.62)
+    );
+
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.driver-stat-card::before {
+  content: "";
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  right: -45px;
+  top: -50px;
+  border-radius: 50%;
+  background: rgba(53, 211, 137, 0.08);
+  filter: blur(4px);
+}
+
+.driver-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(74, 222, 154, 0.22);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(20, 42, 61, 0.84),
+      rgba(8, 24, 39, 0.72)
+    );
+}
+
+.driver-stat-icon {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(76, 222, 154, 0.18);
+  border-radius: 12px;
+
+  color: #59dfa0;
+  background: rgba(38, 183, 117, 0.09);
+}
+
+.driver-stat-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.driver-stat-copy span {
+  color: #8498ad;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+}
+
+.driver-stat-copy strong {
+  margin-top: 3px;
+  color: #f5f9fc;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.driver-stat-copy small {
+  margin-top: 5px;
+  color: #70859b;
+  font-size: 11px;
+}
+
+.driver-status-active {
+  color: #5ee0a1 !important;
+  font-size: 20px !important;
+}
+
+/* Main glass panels */
+
+.driver-panel {
+  margin: 0 0 22px;
+  padding: 22px;
+
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 17px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(14, 31, 49, 0.80),
+      rgba(7, 18, 32, 0.68)
+    );
+
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.driver-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+
+  border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+}
+
+.driver-panel-heading h2 {
+  margin: 5px 0 0;
+  color: #eef5f9;
+  font-size: 18px;
+  letter-spacing: -0.2px;
+}
+
+/* Profile / overview details */
+
+.driver-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.driver-detail {
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+
+  padding: 14px 16px;
+
+  border: 1px solid rgba(148, 163, 184, 0.09);
+  border-radius: 12px;
+
+  background: rgba(4, 14, 26, 0.38);
+}
+
+.driver-detail span {
+  color: #70859b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.driver-detail strong {
+  color: #e9f1f5;
+  font-size: 14px;
+}
+
+/* Trips / passengers / boarding list */
+
+.driver-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.driver-list-item {
+  position: relative;
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  padding: 16px;
+
+  border: 1px solid rgba(148, 163, 184, 0.10);
+  border-radius: 13px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(12, 29, 46, 0.74),
+      rgba(5, 17, 30, 0.58)
+    );
+
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.driver-list-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(76, 222, 154, 0.22);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(18, 40, 59, 0.82),
+      rgba(6, 20, 34, 0.68)
+    );
+}
+
+.driver-list-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(76, 222, 154, 0.16);
+  border-radius: 11px;
+
+  color: #57dda0;
+  background: rgba(37, 181, 116, 0.08);
+}
+
+.driver-list-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.driver-list-content strong {
+  overflow: hidden;
+  color: #e9f2f6;
+  font-size: 14px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver-list-content span {
+  overflow: hidden;
+  color: #8195aa;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver-panel-description {
+  margin: 0 0 17px;
+  color: #8498ad;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Empty states */
+
+.driver-empty {
+  min-height: 120px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+
+  padding: 25px;
+
+  border: 1px dashed rgba(148, 163, 184, 0.15);
+  border-radius: 13px;
+
+  background: rgba(3, 13, 24, 0.28);
+
+  color: #71869b;
+  font-size: 13px;
+}
+
+/* Mobile navigation backdrop */
+
+.driver-mobile-backdrop {
+  display: none;
+}
+
+/* =========================================================
+   RESPONSIVE INNER CONTENT
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .driver-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .driver-page-heading {
+    margin-bottom: 20px;
+  }
+
+  .driver-page-heading h1 {
+    font-size: 25px;
+  }
+
+  .driver-content {
+    padding: 24px 18px;
+  }
+
+  .driver-panel {
+    padding: 17px;
+    border-radius: 15px;
+  }
+
+  .driver-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-stat-card {
+    min-height: 112px;
+  }
+
+  .driver-sidebar-open + .driver-mobile-backdrop,
+  .driver-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    border: 0;
+    background: rgba(1, 7, 14, 0.58);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+
+  .driver-sidebar-open {
+    z-index: 1000;
+  }
+}
+
+@media (max-width: 480px) {
+  .driver-content {
+    padding: 20px 14px;
+  }
+
+  .driver-page-heading h1 {
+    font-size: 23px;
+  }
+
+  .driver-page-heading p {
+    font-size: 12px;
+  }
+
+  .driver-panel {
+    padding: 15px;
+  }
+
+  .driver-stat-card {
+    padding: 16px;
+  }
+
+  .driver-list-item {
+    padding: 14px;
+  }
+
+  .driver-list-icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+}
+
+/* =========================================================
+   FINAL OVERRIDE — OVERVIEW + PROFILE GLASS PANELS
+   ========================================================= */
+
+/* Remove any old white/default section styling */
+.driver-content section.driver-panel {
+  color: #e8f1f5 !important;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(14, 31, 49, 0.82),
+      rgba(6, 18, 32, 0.72)
+    ) !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Overview/profile information boxes */
+.driver-content .driver-detail {
+  color: #e8f1f5 !important;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(10, 25, 41, 0.76),
+      rgba(4, 14, 26, 0.62)
+    ) !important;
+  border: 1px solid rgba(148, 163, 184, 0.10) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.018);
+}
+
+/* Labels */
+.driver-content .driver-detail span {
+  color: #70859b !important;
+}
+
+/* Values */
+.driver-content .driver-detail strong {
+  color: #edf5f8 !important;
+}
+
+/* Panel headings */
+.driver-content .driver-panel-heading {
+  background: transparent !important;
+  color: #eef5f9 !important;
+}
+
+.driver-content .driver-panel-heading h2 {
+  color: #eef5f9 !important;
+}
+
+/* Make sure old generic section rules cannot turn these white */
+.driver-content > section,
+.driver-content section {
+  background-color: transparent;
+}
+
+.driver-content > section.driver-panel,
+.driver-content section.driver-panel {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(14, 31, 49, 0.82),
+      rgba(6, 18, 32, 0.72)
+    ) !important;
+}
+
+/* Overview stat cards */
+.driver-content .driver-stat-card {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(17, 34, 54, 0.82),
+      rgba(8, 20, 35, 0.68)
+    ) !important;
+  border-color: rgba(148, 163, 184, 0.12) !important;
+}
+
+/* Profile page spacing */
+.driver-content .driver-detail-grid {
+  width: 100%;
+}
+
+/* Keep all text inside the glass panels dark-theme friendly */
+.driver-content .driver-panel p {
+  color: #8498ad !important;
+}
+
+.driver-content .driver-panel strong {
+  color: #e9f2f6;
+}
+
+/* Prevent browser/default white controls from leaking into panels */
+.driver-content .driver-panel * {
+  scrollbar-color: rgba(80, 220, 153, 0.35) transparent;
+}
+
