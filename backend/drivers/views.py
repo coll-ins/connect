@@ -37,14 +37,13 @@ def _is_company_staff(user):
 
 def _can_view_driver(user, driver):
     """
-    Check whether a user may view a specific driver.
-
-    Superusers can view every driver.
-    Company staff can view drivers only in their company.
-    Other authenticated/public users may view driver details.
+    Superusers: any driver.
+    Company staff: drivers in their own company.
+    A driver: their own record.
+    Everyone else (anonymous, passengers): no access.
     """
     if not user or not user.is_authenticated:
-        return True
+        return False
 
     if user.is_superuser:
         return True
@@ -55,7 +54,10 @@ def _can_view_driver(user, driver):
             and user.company_id == driver.company_id
         )
 
-    return True
+    if getattr(user, 'role', None) == 'driver':
+        return user.phone_number == driver.phone_number
+
+    return False
 
 
 def _can_manage_driver(user, driver):
@@ -97,6 +99,33 @@ def driver_list(request):
         Only Company Managers or superusers may create a driver.
     """
     if request.method == 'GET':
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Login required.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not (
+            request.user.is_superuser
+            or _is_company_staff(request.user)
+        ):
+            return Response(
+                {'error': 'Staff access required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Login required.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not request.user.is_superuser and not _is_company_staff(request.user):
+            return Response(
+                {'error': 'Only company staff can list drivers.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         company_id = request.query_params.get('company_id')
 
         queryset = Driver.objects.select_related(

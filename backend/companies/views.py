@@ -1,3 +1,5 @@
+from rest_framework.decorators import permission_classes
+from rest_framework.permissions import AllowAny
 from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum, Count
@@ -20,6 +22,7 @@ from .serializers import CompanySerializer, RouteSerializer, TripSerializer, Pic
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def get_companies(request, *args, **kwargs):
     """Fetch a list of all registered companies."""
     companies = Company.objects.all()
@@ -105,6 +108,7 @@ def update_company(request, company_id):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def get_routes(request, company_id=None, *args, **kwargs):
     """
     Fetch routes.
@@ -344,6 +348,7 @@ def manage_route(request, route_id):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     """
     Fetch trips.
@@ -425,6 +430,7 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     )
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def get_trip_details(request, trip_id, *args, **kwargs):
     """
     Fetch a single trip.
@@ -887,6 +893,7 @@ def deactivate_pickup_stage(request, stage_id):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def route_map_data(request, route_id):
     from django.db.models import Count, Sum
     from .models import Route, Trip
@@ -935,7 +942,7 @@ def route_map_data(request, route_id):
 
         passengers = []
 
-        if trip:
+        if trip and _can_see_route_passengers(request.user, route, trip):
             for booking in booking_qs.select_related("user").order_by(
                 "created_at",
                 "id",
@@ -986,3 +993,17 @@ def route_map_data(request, route_id):
         "stages": stage_data,
     })
 
+
+def _can_see_route_passengers(user, route, trip):
+    """Passenger names, phones and positions are private."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    role = getattr(user, 'role', None)
+    if role in {'company_manager', 'company_auditor', 'company_operator'}:
+        return user.company_id is not None and user.company_id == route.company_id
+    if role == 'driver':
+        driver = trip.driver
+        return driver is not None and driver.phone_number == user.phone_number
+    return False

@@ -112,7 +112,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',    # (Or JWT authentication if you use it)
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
@@ -214,3 +214,19 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     # Start low; raise to a year once HTTPS is confirmed working.
     SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '3600'))
+
+
+# Self-service platform-admin signup. On for local dev, off by default in
+# production: create the first admin with `manage.py createsuperuser`.
+ALLOW_ADMIN_SIGNUP = os.getenv(
+    'ALLOW_ADMIN_SIGNUP', 'True' if DEBUG else 'False'
+).lower() == 'true'
+
+
+# Throttle counters must be shared across workers and survive restarts.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache',
+    }
+}

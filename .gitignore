@@ -22,3 +22,4 @@ staticfiles/
 # Test/coverage output
 htmlcov/
 .pytest_cache/
+*.before-*
