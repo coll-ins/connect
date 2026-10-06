@@ -1066,3 +1066,6 @@
   scrollbar-color: rgba(80, 220, 153, 0.35) transparent;
 }
 
+
+/* Keep content beside the sidebar instead of centred in a wide column */
+.driver-app .driver-content { margin-left: 0; margin-right: auto; width: 100%; max-width: 1440px; }

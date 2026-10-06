@@ -1,4 +1,5 @@
 import AppShell from '../../components/layout/AppShell';
+import './PassengerRecords.css';
 import { useAuth } from '../../context/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../../api';
@@ -230,7 +231,6 @@ export function PassengerRecords({ mode = 'receipts' }) {
                 <h3>Passenger</h3>
                 <div className="record-info-grid">
                   <span>Name<strong>{selected.passenger?.name}</strong></span>
-                  <span>Username<strong>{selected.passenger?.username}</strong></span>
                   <span>Phone<strong>{selected.passenger?.phone_number}</strong></span>
                 </div>
               </div>

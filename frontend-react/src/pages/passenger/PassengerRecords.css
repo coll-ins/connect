@@ -1,0 +1,72 @@
+/* Receipts, Activity/History, Help & Issues, Wallet */
+
+.records-search {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 8px 8px 16px; margin-bottom: 14px;
+  border: 1px solid rgba(255,255,255,.10); border-radius: 14px;
+  background: rgba(255,255,255,.055); color: #91a4b9;
+}
+.records-search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: #f4f8fb; padding: 10px 0; font-size: 14px;
+}
+.records-search-note {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 14px; color: #91a4b9; font-size: 13px;
+}
+
+.records-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.records-layout:has(.record-detail-panel) { grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); }
+.records-list { display: grid; gap: 10px; min-width: 0; }
+
+.record-card-icon {
+  width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center;
+  border-radius: 12px; background: rgba(98,217,175,.12); color: #62d9af;
+}
+.record-card-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; text-align: left; }
+.record-card-main strong { color: #f1f5f9; font-size: 14px; }
+.record-card-main span, .record-card-main small { color: #91a4b9; font-size: 12px; overflow-wrap: anywhere; }
+.record-card-status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; font-size: 12px; color: #91a4b9; text-transform: capitalize; }
+.record-card-status strong { color: #e8eef7; font-size: 13px; }
+
+.record-detail-panel {
+  min-width: 0; padding: 22px; border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.035));
+  position: sticky; top: 90px; max-height: calc(100vh - 110px); overflow-y: auto;
+}
+.record-detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.record-detail-header h2 { margin: 6px 0 0; font-size: 22px; overflow-wrap: anywhere; }
+.record-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); }
+.record-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #9fb1c7; }
+.record-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.record-info-grid span { display: flex; flex-direction: column; gap: 4px; color: #71889d; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.record-info-grid strong { color: #e8eef7; font-size: 13px; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.record-section.record-issue { padding: 14px; border: 1px solid rgba(251,191,36,.30); border-radius: 14px; background: rgba(251,191,36,.07); }
+.record-issue p { margin: 0 0 12px; color: #e8eef7; }
+
+.record-timeline { display: grid; gap: 16px; }
+.record-timeline-item { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; }
+.record-timeline-item strong, .record-timeline-item span, .record-timeline-item small { display: block; }
+.record-timeline-item span, .record-timeline-item small { color: #91a4b9; font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+.timeline-dot { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: rgba(98,217,175,.12); color: #62d9af; }
+
+.help-glass-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.help-glass-card {
+  padding: 22px; border-radius: 18px; border: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.035));
+}
+.help-glass-card svg { color: #62d9af; }
+.help-glass-card h3 { margin: 14px 0 8px; font-size: 16px; }
+.help-glass-card p { margin: 0; color: #91a4b9; line-height: 1.6; font-size: 14px; }
+
+.wallet-glass-card.wallet-main {
+  border-color: rgba(98,217,175,.28);
+  background: linear-gradient(145deg, rgba(98,217,175,.16), rgba(255,255,255,.04));
+}
+.wallet-glass-card.wallet-main strong { font-size: 34px; }
+
+@media (max-width: 900px) {
+  .records-layout, .records-layout:has(.record-detail-panel) { grid-template-columns: minmax(0, 1fr); }
+  .record-detail-panel { position: static; max-height: none; }
+}

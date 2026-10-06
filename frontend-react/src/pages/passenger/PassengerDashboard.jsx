@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -183,13 +183,39 @@ function LiveTripModal({ booking, onClose }) {
   );
 }
 
+const JOURNEY_MODES = ['seat', 'delivery', 'bus'];
+
+const toSearch = (j, initialStep) => {
+  const p = new URLSearchParams();
+  if (j.step && j.step !== initialStep) p.set('step', j.step);
+  if (j.mode) p.set('mode', j.mode);
+  if (j.company) p.set('company', j.company);
+  if (j.route) p.set('route', j.route);
+  const q = p.toString();
+  return q ? `?${q}` : '';
+};
+
+const fromSearch = (search, initialStep) => {
+  const p = new URLSearchParams(search);
+  const digits = (v) => (/^\d+$/.test(v || '') ? v : '');
+  const mode = p.get('mode');
+  return {
+    step: p.get('step') || initialStep,
+    mode: JOURNEY_MODES.includes(mode) ? mode : '',
+    company: digits(p.get('company')),
+    route: digits(p.get('route')),
+  };
+};
+
 export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const urlJourney = fromSearch(location.search, initialJourneyStep);
   const { user } = useAuth();
   const [companies,setCompanies]=useState([]),[routes,setRoutes]=useState([]),[trips,setTrips]=useState([]);
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
-  const [company,setCompany]=useState(''),[route,setRoute]=useState('');
+  const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
   const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1),[pickup,setPickup]=useState(user?.location||'Main Stage');
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
@@ -258,8 +284,35 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     }
   };
 
-  const [journeyStep, setJourneyStep] = useState(initialJourneyStep);
-  const [journeyMode, setJourneyMode] = useState('');
+  const [journeyStep, setJourneyStep] = useState(urlJourney.step);
+  const [journeyMode, setJourneyMode] = useState(urlJourney.mode);
+
+  const locationRef = useRef(location);
+  const baseIdx = useRef(window.history.state?.idx ?? 0);
+  useEffect(() => { locationRef.current = location; });
+
+  // Browser back/forward: restore the journey from the URL.
+  useEffect(() => {
+    const j = fromSearch(location.search, initialJourneyStep);
+    setJourneyStep(j.step);
+    setJourneyMode(j.mode);
+    setCompany(j.company);
+    setRoute(j.route);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
+
+  // Each journey step becomes a history entry.
+  useEffect(() => {
+    const target = toSearch(
+      { step: journeyStep, mode: journeyMode, company, route },
+      initialJourneyStep
+    );
+    const current = locationRef.current;
+    if (target !== current.search) {
+      navigate({ pathname: current.pathname, search: target });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journeyStep, journeyMode, company, route]);
 
   const selectedCompany = useMemo(
     () => companies.find((c) => String(c.id) === String(company)),
@@ -309,11 +362,15 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   };
 
   const goBack = () => {
-    console.log("[CONNECT JOURNEY BACK] BEFORE", { path: window.location.pathname, journeyStep, journeyMode });
     setError('');
 
+    // A real history entry exists for the previous step: use it.
+    if ((window.history.state?.idx ?? 0) > baseIdx.current) {
+      navigate(-1);
+      return;
+    }
+
     if (journeyStep === 'companies') {
-      console.log("[CONNECT JOURNEY BACK] COMPANIES -> HOME");
       setJourneyMode('');
       setCompany('');
       setRoute('');
