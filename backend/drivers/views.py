@@ -91,7 +91,7 @@ def _can_manage_driver(user, driver):
 def driver_list(request):
     """
     GET:
-        Public driver listing, optionally filtered by company_id.
+        Driver listing for authenticated company staff, optionally filtered by company_id.
 
         Company staff are restricted to their own company.
 
@@ -111,18 +111,6 @@ def driver_list(request):
         ):
             return Response(
                 {'error': 'Staff access required.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if not request.user.is_authenticated:
-            return Response(
-                {'error': 'Login required.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        if not request.user.is_superuser and not _is_company_staff(request.user):
-            return Response(
-                {'error': 'Only company staff can list drivers.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -312,7 +300,7 @@ def driver_detail(request, driver_id):
     Retrieve, update, or delete a driver.
 
     GET:
-        Public.
+        Authenticated company staff only.
 
         Company staff are restricted to their own company.
 
