@@ -9,7 +9,8 @@ import Signup from './pages/auth/Signup';
 import PassengerDashboard from './pages/passenger/PassengerDashboard';
 import PassengerMapPage from './pages/passenger/PassengerMapPage';
 import PaymentReturn from './pages/passenger/PaymentReturn';
-import { DeliveryList, DeliveryNew, DeliveryDetail } from './pages/passenger/DeliveryPages';
+import { DeliveryList, DeliveryDetail } from './pages/passenger/DeliveryPages';
+import { DeliveryNew } from './pages/passenger/DeliveryWizard';
 import { CharterList, CharterNew, CharterDetail } from './pages/passenger/CharterPages';
 import {
   PassengerBookings,
