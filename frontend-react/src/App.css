@@ -5162,3 +5162,6 @@
     flex: 0 0 40px;
   }
 }
+
+/* Manager pages no longer draw their own sidebar; the layout provides it */
+.company-inner-page { display: block; width: 100%; min-height: 0; }
