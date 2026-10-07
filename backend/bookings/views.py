@@ -2817,7 +2817,10 @@ def get_driver_bookings(request, driver_id):
     # does not lose its route mid-journey.
     trip = (
         _driver_trips
-        .filter(status="boarding")
+        .filter(
+            status="boarding",
+            departure_at__gte=now - _dt.timedelta(hours=12),
+        )
         .order_by("departure_at", "id")
         .first()
     ) or (
