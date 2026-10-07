@@ -42,6 +42,7 @@ function getDriverName(driver) {
   return (
     driver?.user?.username ||
     driver?.username ||
+    driver?.name ||
     "Driver"
   );
 }

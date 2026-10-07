@@ -1069,3 +1069,8 @@
 
 /* Keep content beside the sidebar instead of centred in a wide column */
 .driver-app .driver-content { margin-left: 0; margin-right: auto; width: 100%; max-width: 1440px; }
+
+/* Fix: sidebar offset was applied twice (flex layout already places main beside it) */
+.driver-app .driver-main { margin-left: 0 !important; }
+.driver-topbar-user strong,
+.driver-topbar-user span { display: block; }
