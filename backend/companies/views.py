@@ -1035,3 +1035,131 @@ def _can_see_route_passengers(user, route, trip):
         driver = trip.driver
         return driver is not None and driver.phone_number == user.phone_number
     return False
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def route_plan(request, route_id):
+    """Preview or save a route's start, end and road-following line.
+
+    The line is always generated here from the start, the end, the active
+    stages and optional road points, so a client can never store its own line.
+    """
+    from datetime import timedelta
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from .geo import MAX_STAGE_OFFSET_M, locate_on_line
+    from .routing import RoutingError, road_line
+
+    route = get_object_or_404(Route.objects.select_related('company'), id=route_id)
+    if not can_manage_company(request.user, route.company):
+        return Response(
+            {'error': 'Only a Company Manager can plan routes.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    data = request.data
+
+    def end_point(key, name, lat, lng):
+        raw = data.get(key)
+        if raw is None and lat is not None and lng is not None:
+            raw = {'name': name, 'latitude': lat, 'longitude': lng}
+        return raw
+
+    def read(raw, label):
+        if not isinstance(raw, dict):
+            raise ValueError(f'Choose the {label} point on the map.')
+        try:
+            lat, lng = float(raw.get('latitude')), float(raw.get('longitude'))
+        except (TypeError, ValueError):
+            raise ValueError(f'Choose the {label} point on the map.')
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValueError(f'The {label} point is not a valid place.')
+        return lat, lng, str(raw.get('name') or '').strip()[:100]
+
+    try:
+        s_lat, s_lng, s_name = read(
+            end_point('start', route.start_point, route.start_latitude, route.start_longitude), 'start')
+        e_lat, e_lng, e_name = read(
+            end_point('end', route.end_point, route.end_latitude, route.end_longitude), 'end')
+        raw_via = data.get('via') or []
+        if not isinstance(raw_via, list) or len(raw_via) > 10:
+            raise ValueError('Use at most 10 road points.')
+        vias = []
+        for i, raw in enumerate(raw_via, start=1):
+            v_lat, v_lng, _ = read(raw, f'road point {i}')
+            vias.append((v_lat, v_lng))
+    except ValueError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    apply = data.get('apply') is True
+
+    if apply:
+        if not s_name or not e_name:
+            return Response(
+                {'error': 'Give the start and the end a name before saving.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        now = timezone.now()
+        running = Trip.objects.filter(
+            route=route,
+            status__in=['boarding', 'departed'],
+            departure_at__gte=now - timedelta(hours=12),
+            departure_at__lte=now + timedelta(hours=3),
+        ).exists()
+        if running:
+            return Response(
+                {'error': 'A bus is running on this route right now. Change the road line when no trip is running.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+    stages = list(route.pickup_stages.filter(is_active=True).order_by('order', 'id'))
+
+    def key(lat, lng):
+        return (lat - s_lat) * (e_lat - s_lat) + (lng - s_lng) * (e_lng - s_lng)
+
+    stage_pts = [(float(s.latitude), float(s.longitude)) for s in stages]
+    vias.sort(key=lambda p: key(*p))
+    waypoints, vi = [(s_lat, s_lng)], 0
+    for pt in stage_pts:
+        while vi < len(vias) and key(*vias[vi]) <= key(*pt):
+            waypoints.append(vias[vi])
+            vi += 1
+        waypoints.append(pt)
+    waypoints.extend(vias[vi:])
+    waypoints.append((e_lat, e_lng))
+    if len(waypoints) > 30:
+        return Response(
+            {'error': 'Too many stages and road points for one line.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        geometry, distance_m = road_line(waypoints)
+    except RoutingError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+    off_route = []
+    for s in stages:
+        loc = locate_on_line(geometry, float(s.latitude), float(s.longitude))
+        if loc is not None and loc[0] > MAX_STAGE_OFFSET_M:
+            off_route.append({'id': s.id, 'name': s.name, 'offset_m': round(loc[0])})
+
+    if apply:
+        route.start_point, route.end_point = s_name, e_name
+        route.start_latitude, route.start_longitude = Decimal(f'{s_lat:.6f}'), Decimal(f'{s_lng:.6f}')
+        route.end_latitude, route.end_longitude = Decimal(f'{e_lat:.6f}'), Decimal(f'{e_lng:.6f}')
+        route.geometry = geometry
+        route.save(update_fields=[
+            'start_point', 'end_point', 'start_latitude', 'start_longitude',
+            'end_latitude', 'end_longitude', 'geometry',
+        ])
+
+    return Response({
+        'applied': apply,
+        'geometry': geometry,
+        'distance_km': round(distance_m / 1000, 1),
+        'off_route_stages': off_route,
+    })

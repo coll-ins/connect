@@ -11,6 +11,7 @@ urlpatterns = [
     path('routes/<int:route_id>/', views.manage_route, name='manage_route'),
     path('routes/<int:route_id>/pickup-stages/', views.get_route_pickup_stages, name='get_route_pickup_stages'),
     path('routes/<int:route_id>/pickup-stages/create/', views.create_pickup_stage, name='create_pickup_stage'),
+    path('routes/<int:route_id>/plan/', views.route_plan, name='route_plan'),
     path('pickup-stages/<int:stage_id>/', views.manage_pickup_stage, name='manage_pickup_stage'),
     path('pickup-stages/<int:stage_id>/approve/', views.approve_pickup_stage, name='approve_pickup_stage'),
     path('pickup-stages/<int:stage_id>/deactivate/', views.deactivate_pickup_stage, name='deactivate_pickup_stage'),
