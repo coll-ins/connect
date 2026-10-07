@@ -529,6 +529,11 @@ def paystack_webhook(request):
     if not reference:
         return HttpResponse(status=400)
 
+    # Parcel and bus-hire payments carry their own references.
+    from connect.paystack_extra import handle_extra_charge
+    if handle_extra_charge(reference, data):
+        return HttpResponse(status=200)
+
     try:
         with transaction.atomic():
             payment = (

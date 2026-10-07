@@ -46,6 +46,8 @@ urlpatterns = [
     path('api/drivers/', include('drivers.urls')),
     path('api/buses/', include('buses.urls')),
     path('api/wallet/', include('wallets.urls')),
+    path('api/deliveries/', include('deliveries.urls')),
+    path('api/charters/', include('charters.urls')),
 ]
 
 admin.site.site_header = "My Custom API Admin"

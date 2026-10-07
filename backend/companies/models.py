@@ -14,6 +14,8 @@ class Company(models.Model):
     description = models.TextField(blank=True)
     areas_served = models.TextField()
     phone_number = models.CharField(max_length=15, blank=True)
+    # Bus hire is opt-in: only companies that switch this on can receive requests.
+    accepts_charters = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -60,6 +62,18 @@ class Route(models.Model):
         blank=True,
         help_text='Road-following route geometry as GeoJSON.',
     )
+
+    # Parcel carriage is opt-in per route: a size with no rate is not carried.
+    parcel_price_small = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    parcel_price_medium = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    parcel_price_large = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    def parcel_rate(self, size):
+        return {
+            'small': self.parcel_price_small,
+            'medium': self.parcel_price_medium,
+            'large': self.parcel_price_large,
+        }.get(size)
 
     def __str__(self):
         return f"{self.company.name} - {self.name}"
