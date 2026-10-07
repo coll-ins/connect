@@ -613,11 +613,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </button>
 
             <span className="glass-eyebrow">
-              {journeyMode === 'seat'
-                ? 'BOOK A SEAT'
-                : journeyMode === 'delivery'
-                  ? 'ORDER DELIVERY'
-                  : 'BOOK A BUS'}
+              BOOK A SEAT
             </span>
 
             <h1>Choose your transport company</h1>
