@@ -231,6 +231,7 @@ export function PassengerRecords({ mode = 'receipts' }) {
                 <h3>Passenger</h3>
                 <div className="record-info-grid">
                   <span>Name<strong>{selected.passenger?.name}</strong></span>
+                  <span>Username<strong>{selected.passenger?.username}</strong></span>
                   <span>Phone<strong>{selected.passenger?.phone_number}</strong></span>
                 </div>
               </div>
@@ -562,6 +563,12 @@ export function PassengerProfile() {
           <UserRound size={20} />
           <span>Full name</span>
           <strong>{user?.name || 'Not provided'}</strong>
+        </div>
+
+        <div className="profile-detail">
+          <UserRound size={20} />
+          <span>Username</span>
+          <strong>{user?.username || 'Not available'}</strong>
         </div>
 
         <div className="profile-detail">
