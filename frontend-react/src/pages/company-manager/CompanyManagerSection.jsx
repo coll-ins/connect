@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import StageManager from '../../components/manager/StageManager';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -799,7 +798,7 @@ export default function CompanyManagerSection({ section }) {
               )}
 
               {section === 'routes' && companyId && (
-                <StageManager companyId={companyId} />
+                <NavLink to="/company-manager/route-planner" className="btn btn-primary">Open the route planner</NavLink>
               )}
 
               {section === 'trips' && (

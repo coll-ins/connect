@@ -3,6 +3,7 @@ import CompanyManagerLayout from './CompanyManagerLayout';
 import CompanyManagerOverview from './CompanyManagerOverview';
 import CompanyManagerSection from './CompanyManagerSection';
 import { ManagerParcels, ManagerCharters } from './ManagerServices';
+import RoutePlanner from './RoutePlanner';
 
 export default function CompanyManagerRoutes() {
   return (
@@ -61,6 +62,7 @@ export default function CompanyManagerRoutes() {
         />
 
         <Route path="parcels" element={<ManagerParcels />} />
+        <Route path="route-planner" element={<RoutePlanner />} />
 
         <Route path="charters" element={<ManagerCharters />} />
 
