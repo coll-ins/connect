@@ -9,6 +9,8 @@ import Signup from './pages/auth/Signup';
 import PassengerDashboard from './pages/passenger/PassengerDashboard';
 import PassengerMapPage from './pages/passenger/PassengerMapPage';
 import PaymentReturn from './pages/passenger/PaymentReturn';
+import { DeliveryList, DeliveryNew, DeliveryDetail } from './pages/passenger/DeliveryPages';
+import { CharterList, CharterNew, CharterDetail } from './pages/passenger/CharterPages';
 import {
   PassengerBookings,
   PassengerWallet,
@@ -42,6 +44,12 @@ function PassengerRoutes() {
         <Route path="help" element={<PassengerHelp />} />
         <Route path="profile" element={<PassengerProfile />} />
         <Route path="payment/:bookingId" element={<PaymentReturn />} />
+        <Route path="delivery" element={<DeliveryList />} />
+        <Route path="delivery/new" element={<DeliveryNew />} />
+        <Route path="delivery/:id" element={<DeliveryDetail />} />
+        <Route path="charter" element={<CharterList />} />
+        <Route path="charter/new" element={<CharterNew />} />
+        <Route path="charter/:id" element={<CharterDetail />} />
       </Routes>
     </ProtectedRoute>
   );

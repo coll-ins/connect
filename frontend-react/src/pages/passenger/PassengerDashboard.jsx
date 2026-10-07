@@ -463,7 +463,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             <button
               type="button"
               className="journey-choice"
-              disabled aria-disabled="true" title="Coming soon"
+              onClick={() => navigate('/passenger/delivery')}
             >
               <div className="journey-choice-image journey-travel-image" style={{ backgroundImage: `url(${deliveryImage})` }}>
                 <div className="journey-image-overlay" />
@@ -476,14 +476,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <p>
                   Send a parcel safely through the CONNECT transport network.
                 </p>
-                <span className="journey-arrow">Coming soon</span>
+                <span className="journey-arrow">Send a parcel <b>→</b></span>
               </div>
             </button>
 
             <button
               type="button"
               className="journey-choice"
-              disabled aria-disabled="true" title="Coming soon"
+              onClick={() => navigate('/passenger/charter')}
             >
               <div className="journey-choice-image journey-bus-image" style={{ backgroundImage: `url(${bookBusImage})` }}>
                 <div className="journey-image-overlay" />
@@ -496,7 +496,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <p>
                   Reserve a whole bus for groups, events and private travel.
                 </p>
-                <span className="journey-arrow">Coming soon</span>
+                <span className="journey-arrow">Request a bus <b>→</b></span>
               </div>
             </button>
 

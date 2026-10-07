@@ -281,3 +281,19 @@ def charter_verify(request, charter_id):
     except (CharterError, paystack.GatewayError) as exc:
         return Response({'error': exc.message}, status=exc.status_code)
     return Response(payload(_qs().get(id=charter.id), request.user))
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def charter_settings(request):
+    user = request.user
+    if user.is_superuser or user.role != 'company_manager' or user.company_id is None:
+        return Response({'error': 'Company manager access required.'}, status=403)
+    company = Company.objects.get(id=user.company_id)
+    if request.method == 'PATCH':
+        value = request.data.get('accepts_charters')
+        if not isinstance(value, bool):
+            return Response({'error': 'accepts_charters must be true or false.'}, status=400)
+        company.accepts_charters = value
+        company.save(update_fields=['accepts_charters'])
+    return Response({'accepts_charters': company.accepts_charters})

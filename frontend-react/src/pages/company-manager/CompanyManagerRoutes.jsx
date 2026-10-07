@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import CompanyManagerLayout from './CompanyManagerLayout';
 import CompanyManagerOverview from './CompanyManagerOverview';
 import CompanyManagerSection from './CompanyManagerSection';
+import { ManagerParcels, ManagerCharters } from './ManagerServices';
 
 export default function CompanyManagerRoutes() {
   return (
@@ -58,6 +59,10 @@ export default function CompanyManagerRoutes() {
           path="settings"
           element={<CompanyManagerSection section="settings" />}
         />
+
+        <Route path="parcels" element={<ManagerParcels />} />
+
+        <Route path="charters" element={<ManagerCharters />} />
 
         <Route
           path="*"

@@ -8,12 +8,14 @@ import {
   LogOut,
   MapPin,
   Menu,
+  Package,
   User,
   Users,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Link, useLocation } from "react-router-dom";
 import { apiRequest } from "../../api";
+import DriverJobs from "./DriverJobs";
 import "./DriverPortal.css";
 
 const nav = [
@@ -22,6 +24,7 @@ const nav = [
   ["/driver/passengers", "Passengers", Users],
   ["/driver/location", "Live Location", MapPin],
   ["/driver/boarding", "Boarding", CheckCircle2],
+  ["/driver/jobs", "Parcels & Hires", Package],
   ["/driver/profile", "Profile", User],
 ];
 
@@ -30,6 +33,7 @@ function pageTitle(path) {
   if (path.startsWith("/driver/passengers")) return "Passengers";
   if (path.startsWith("/driver/location")) return "Live Location";
   if (path.startsWith("/driver/boarding")) return "Boarding";
+  if (path.startsWith("/driver/jobs")) return "Parcels & Hires";
   if (path.startsWith("/driver/profile")) return "Profile";
   return "Overview";
 }
@@ -362,6 +366,8 @@ export default function DriverPortal() {
               </section>
             </>
           )}
+
+          {active === "/driver/jobs" && <DriverJobs />}
 
           {/* TRIPS */}
           {active === "/driver/trips" && (

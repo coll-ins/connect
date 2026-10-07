@@ -6,7 +6,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from companies.models import PickupStage, Trip
+from django.db.models import F, Q
+
+from companies.models import PickupStage, Route, Trip
 from drivers.models import Driver
 from drivers.views import COMPANY_STAFF_ROLES
 
@@ -275,3 +277,103 @@ def parcel_verify(request, parcel_id):
     except (ParcelError, paystack.GatewayError) as exc:
         return Response({'error': exc.message}, status=exc.status_code)
     return Response(payload(_qs().get(id=parcel.id), request.user))
+
+
+RATE_KEYS = (
+    ('small', 'parcel_price_small'),
+    ('medium', 'parcel_price_medium'),
+    ('large', 'parcel_price_large'),
+)
+
+
+class RatesSerializer(serializers.Serializer):
+    small = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1,
+                                     max_value=100000, required=False, allow_null=True)
+    medium = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1,
+                                      max_value=100000, required=False, allow_null=True)
+    large = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1,
+                                     max_value=100000, required=False, allow_null=True)
+
+
+def _manager_only(user):
+    return (not user.is_superuser and user.role == 'company_manager'
+            and user.company_id is not None)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def parcel_options(request):
+    routes = list(
+        Route.objects.filter(
+            Q(parcel_price_small__gt=0) | Q(parcel_price_medium__gt=0) | Q(parcel_price_large__gt=0)
+        ).select_related('company').order_by('company__name', 'name')
+    )
+    route_ids = [r.id for r in routes]
+
+    trips = {}
+    upcoming = (
+        Trip.objects.filter(
+            route_id__in=route_ids, status='scheduled', departure_at__gt=timezone.now(),
+            driver__company_id=F('route__company_id'),
+        ).select_related('driver').order_by('departure_at')
+    )
+    for t in upcoming:
+        bucket = trips.setdefault(t.route_id, [])
+        if len(bucket) < 20:
+            bucket.append({'id': t.id, 'departure_at': t.departure_at,
+                           'bus_number': t.driver.bus_number})
+
+    stages = {}
+    for s in PickupStage.objects.filter(route_id__in=route_ids, is_active=True).order_by('order', 'id'):
+        stages.setdefault(s.route_id, []).append({'id': s.id, 'name': s.name, 'order': s.order})
+
+    companies = {}
+    for r in routes:
+        if not trips.get(r.id) or len(stages.get(r.id, [])) < 2:
+            continue
+        rates = {}
+        for size, _ in Parcel.SIZE_CHOICES:
+            rate = r.parcel_rate(size)
+            if rate and rate > 0:
+                rates[size] = str(rate)
+        entry = companies.setdefault(
+            r.company_id, {'id': r.company_id, 'name': r.company.name, 'routes': []})
+        entry['routes'].append({
+            'id': r.id, 'name': r.name, 'rates': rates,
+            'stages': stages[r.id], 'trips': trips[r.id],
+        })
+    return Response(list(companies.values()))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def route_rates(request):
+    if not _manager_only(request.user):
+        return Response({'error': 'Company manager access required.'}, status=403)
+    rows = Route.objects.filter(company_id=request.user.company_id).order_by('name')
+    out = []
+    for r in rows:
+        item = {'id': r.id, 'name': r.name}
+        for key, field in RATE_KEYS:
+            value = getattr(r, field)
+            item[key] = str(value) if value is not None else None
+        out.append(item)
+    return Response(out)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def route_rates_update(request, route_id):
+    if not _manager_only(request.user):
+        return Response({'error': 'Company manager access required.'}, status=403)
+    route = Route.objects.filter(id=route_id, company_id=request.user.company_id).first()
+    if route is None:
+        return Response({'error': 'Route not found.'}, status=404)
+    ser = RatesSerializer(data=request.data)
+    if not ser.is_valid():
+        return Response(ser.errors, status=400)
+    for key, field in RATE_KEYS:
+        if key in ser.validated_data:
+            setattr(route, field, ser.validated_data[key])
+    route.save(update_fields=[field for _, field in RATE_KEYS])
+    return Response({'ok': True})

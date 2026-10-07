@@ -7,6 +7,8 @@ import {
   ClipboardList,
   Gauge,
   Menu,
+  Package,
+  CarFront,
   Route,
   Settings,
   ShieldCheck,
@@ -24,6 +26,8 @@ const nav = [
   { label: 'Drivers', path: '/company-manager/drivers', icon: Users },
   { label: 'Operators', path: '/company-manager/operators', icon: ShieldCheck },
   { label: 'Bookings', path: '/company-manager/bookings', icon: ClipboardList },
+  { label: 'Parcels', path: '/company-manager/parcels', icon: Package },
+  { label: 'Bus hire', path: '/company-manager/charters', icon: CarFront },
   { label: 'Seats & Capacity', path: '/company-manager/capacity', icon: Bus },
   { label: 'Pricing', path: '/company-manager/pricing', icon: WalletCards },
   { label: 'Revenue', path: '/company-manager/revenue', icon: BarChart3 },
@@ -36,9 +40,9 @@ export default function CompanyManagerLayout() {
 
   const closeMenu = () => setOpen(false);
 
-  const management = nav.slice(0, 7);
-  const operations = nav.slice(7, 10);
-  const settings = nav[10];
+  const management = nav.slice(0, 9);
+  const operations = nav.slice(9, 12);
+  const settings = nav[12];
 
   return (
     <div className="company-management-page">
