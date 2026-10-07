@@ -183,7 +183,8 @@ function LiveTripModal({ booking, onClose }) {
   );
 }
 
-const JOURNEY_MODES = ['seat', 'delivery', 'bus'];
+// Delivery and bus charter have no backend yet; only seat booking is live.
+const JOURNEY_MODES = ['seat'];
 
 const toSearch = (j, initialStep) => {
   const p = new URLSearchParams();
@@ -462,7 +463,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             <button
               type="button"
               className="journey-choice"
-              onClick={() => chooseJourney('delivery')}
+              disabled aria-disabled="true" title="Coming soon"
             >
               <div className="journey-choice-image journey-travel-image" style={{ backgroundImage: `url(${deliveryImage})` }}>
                 <div className="journey-image-overlay" />
@@ -475,14 +476,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <p>
                   Send a parcel safely through the CONNECT transport network.
                 </p>
-                <span className="journey-arrow">Send a parcel <b>→</b></span>
+                <span className="journey-arrow">Coming soon</span>
               </div>
             </button>
 
             <button
               type="button"
               className="journey-choice"
-              onClick={() => chooseJourney('bus')}
+              disabled aria-disabled="true" title="Coming soon"
             >
               <div className="journey-choice-image journey-bus-image" style={{ backgroundImage: `url(${bookBusImage})` }}>
                 <div className="journey-image-overlay" />
@@ -495,7 +496,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <p>
                   Reserve a whole bus for groups, events and private travel.
                 </p>
-                <span className="journey-arrow">Reserve a bus <b>→</b></span>
+                <span className="journey-arrow">Coming soon</span>
               </div>
             </button>
 
