@@ -48,6 +48,7 @@ function normalizeUser(data) {
   return {
     id: u.id || null,
     name: u.name || u.username || '',
+    username: u.username || '',
     email: u.email || '',
     phone: u.phone || u.phone_number || '',
     location: u.location || '',
