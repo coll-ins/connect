@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 export default function Signup() {
   const { signup } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ phone_number: '', password: '', location: '' });
+  const [form, setForm] = useState({ name: '', phone_number: '', password: '', location: '' });
   const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
   const update = (key) => (e) => setForm(v => ({ ...v, [key]: e.target.value }));
   const submit = async (e) => {
@@ -16,6 +16,7 @@ export default function Signup() {
     <div className="brand-mark">C</div><p className="eyebrow">JOIN CONNECT</p><h1>Create your account</h1><p className="muted">Book rides quickly and keep every trip in one place.</p>
     {error && <div className="error">{error}</div>}
     <form onSubmit={submit} className="form-stack">
+      <label>Full name<input className="input" value={form.name} onChange={update('name')} placeholder="e.g. Collins Otieno" autoComplete="name" maxLength="150" required /></label>
       <label>Phone number<input className="input" value={form.phone_number} onChange={update('phone_number')} placeholder="07XX XXX XXX" required /></label>
       <label>Usual location<input className="input" value={form.location} onChange={update('location')} placeholder="e.g. CBD" /></label>
       <label>Password<input className="input" type="password" minLength="6" value={form.password} onChange={update('password')} required /></label>
