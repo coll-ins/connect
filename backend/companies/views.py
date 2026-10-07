@@ -753,10 +753,38 @@ def create_pickup_stage(request, route_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    stage = serializer.save(
-        route=route,
-        source='manual',
+    from django.db import transaction
+    from django.db.models import F
+    from .geo import MAX_STAGE_OFFSET_M, locate_on_line
+
+    new_order = None
+    here = locate_on_line(
+        route.geometry,
+        float(serializer.validated_data['latitude']),
+        float(serializer.validated_data['longitude']),
     )
+    if here is not None:
+        if here[0] > MAX_STAGE_OFFSET_M:
+            return Response(
+                {'error': (
+                    f'That point is about {round(here[0])} m from the route line. '
+                    f'Place the stage on the road the bus uses (within {MAX_STAGE_OFFSET_M} m).'
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        existing = list(route.pickup_stages.order_by('order', 'id'))
+        new_order = max([s.order for s in existing], default=0) + 1
+        for s in existing:
+            loc = locate_on_line(route.geometry, float(s.latitude), float(s.longitude))
+            if loc is not None and loc[1] > here[1]:
+                new_order = s.order
+                break
+
+    with transaction.atomic():
+        if new_order is not None:
+            route.pickup_stages.filter(order__gte=new_order).update(order=F('order') + 1)
+        extra = {'order': new_order} if new_order is not None else {}
+        stage = serializer.save(route=route, source='manual', **extra)
 
     return Response(
         PickupStageSerializer(stage).data,
