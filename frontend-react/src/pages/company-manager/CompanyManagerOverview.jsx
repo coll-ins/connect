@@ -219,8 +219,7 @@ export default function CompanyManagerOverview() {
   );
 
   return (
-    <div className="company-management-page">
-      <Sidebar open={open} setOpen={setOpen} />
+    <div className="company-inner-page">
 
       <main className="company-management-main">
         <header className="company-management-topbar">

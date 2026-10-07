@@ -671,8 +671,7 @@ export default function CompanyManagerSection({ section }) {
   );
 
   return (
-    <div className="company-management-page">
-      <Sidebar user={user} company={company} />
+    <div className="company-inner-page">
 
       <main className="company-management-main">
         <section className="company-content">
