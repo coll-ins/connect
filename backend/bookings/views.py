@@ -660,6 +660,7 @@ def payment_status(request, booking_id):
             'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
         }
 
+        gateway_response = None
         try:
             gateway_response = requests.get(
                 f'https://api.paystack.co/transaction/verify/{payment.provider_reference}',
@@ -673,7 +674,8 @@ def payment_status(request, booking_id):
         data = result.get('data') or {}
 
         if (
-            gateway_response.status_code == 200
+            gateway_response is not None
+            and gateway_response.status_code == 200
             and result.get('status')
             and data.get('status') == 'success'
         ):
