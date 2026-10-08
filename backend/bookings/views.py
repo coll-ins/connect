@@ -592,7 +592,7 @@ def _mark_payment_confirmed(payment, paystack_amount):
     - Repeated webhook/verification calls do not create duplicate holds.
     """
 
-    if payment.status == 'confirmed':
+    if payment.status in ('confirmed', 'refunded'):
         return True
 
     expected_amount = int(payment.amount * Decimal('100'))
@@ -690,6 +690,17 @@ def payment_status(request, booking_id):
                     payment,
                     data.get('amount', 0),
                 )
+
+            if getattr(payment, '_needs_refund', False):
+                try:
+                    settle_booking_fault(payment.booking, fault_party='company')
+                except Exception:
+                    _alert_payment_problem(
+                        payment.provider_reference,
+                        'late payment confirmed but the automatic refund failed',
+                    )
+                payment.refresh_from_db()
+                payment.booking.refresh_from_db()
 
     return Response({
         'booking_id': booking_id,
