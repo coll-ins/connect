@@ -18,7 +18,7 @@ class RoutePlanViaTests(_Fixture, APITestCase):
         self.route = self.trip.route
         PickupStage.objects.create(
             route=self.route, name='R24 Stage',
-            latitude=Decimal('-1.270000'), longitude=Decimal('36.750000'), order=1)
+            latitude=Decimal('-1.265000'), longitude=Decimal('36.750000'), order=1)
         manager = User.objects.create_user(
             username='r24_mgr', password=STRONG, phone_number='+254733002401',
             role='company_manager', company=self.route.company)

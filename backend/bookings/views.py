@@ -1353,6 +1353,12 @@ def confirm_cash_payment(request, booking_id):
                     status=status.HTTP_200_OK
                 )
 
+            if booking.status in ('cancelled', 'completed', 'no_show'):
+                return Response(
+                    {'error': f'Cannot confirm cash for a {booking.status} booking.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
             if trip_has_departed(booking.trip):
                 return Response(
                     {
@@ -2815,6 +2821,13 @@ def verify_boarding(request, booking_id):
             # -------------------------------------------------
 
             elif boarding_pin:
+                from django.core.cache import cache
+                fail_key = f'pin-fail:{booking.id}'
+                if cache.get(fail_key, 0) >= 5:
+                    return Response(
+                        {'error': 'Too many wrong PINs. Scan the QR code or wait 15 minutes.'},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS
+                    )
                 if (
                     str(
                         getattr(
@@ -2825,6 +2838,10 @@ def verify_boarding(request, booking_id):
                     )
                     != str(boarding_pin)
                 ):
+                    try:
+                        cache.incr(fail_key)
+                    except ValueError:
+                        cache.set(fail_key, 1, 900)
                     return Response(
                         {
                             'error': (
