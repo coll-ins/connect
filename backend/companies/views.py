@@ -1395,6 +1395,19 @@ def route_plan(request, route_id):
         if loc is not None and loc[0] > MAX_STAGE_OFFSET_M:
             off_route.append({'id': s.id, 'name': s.name, 'offset_m': round(loc[0])})
 
+    if apply and off_route:
+        return Response(
+            {
+                'error': (
+                    'This line would leave stage(s) off the road line. '
+                    'Add road points so the line passes through them, '
+                    'then save again.'
+                ),
+                'off_route_stages': off_route,
+            },
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
     if apply:
         route.start_point, route.end_point = s_name, e_name
         route.start_latitude, route.start_longitude = Decimal(f'{s_lat:.6f}'), Decimal(f'{s_lng:.6f}')
