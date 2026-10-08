@@ -267,7 +267,7 @@ export default function CompanyManagerSection({ section }) {
     event.preventDefault();
 
     try {
-      await apiRequest('/companies/routes/create/', {
+      const created = await apiRequest('/companies/routes/create/', {
         method: 'POST',
         body: {
           company_id: companyId,
@@ -278,6 +278,11 @@ export default function CompanyManagerSection({ section }) {
 
       setMessage('Route created successfully.');
       closeModal();
+      if (created?.id) {
+        // Next step: place the start, end and road line on the map.
+        window.location.assign(`/company-manager/route-planner?route=${created.id}`);
+        return;
+      }
       setRouteForm({
         name: '',
         start_point: '',

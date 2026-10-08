@@ -7,6 +7,7 @@ urlpatterns = [
     path('<int:company_id>/', views.update_company, name='update_company'),
 
     path('routes/', views.get_routes, name='get_routes'),
+    path('routes/health/', views.route_health, name='route_health'),
     path('routes/create/', views.create_route, name='create_route'),
     path('routes/<int:route_id>/', views.manage_route, name='manage_route'),
     path('routes/<int:route_id>/pickup-stages/', views.get_route_pickup_stages, name='get_route_pickup_stages'),

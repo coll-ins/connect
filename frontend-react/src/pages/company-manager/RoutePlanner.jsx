@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, useMapEvents,
 } from 'react-leaflet';
@@ -59,6 +59,18 @@ export default function RoutePlanner() {
   const [note, setNote] = useState('');
   const [tick, setTick] = useState(0);
 
+  const [health, setHealth] = useState({});
+
+  const loadHealth = useCallback(async () => {
+    try {
+      const d = await apiRequest('/companies/routes/health/');
+      const rows = Array.isArray(d) ? d : d?.results || [];
+      const map = {};
+      rows.forEach((h) => { map[h.id] = h; });
+      setHealth(map);
+    } catch (e) { /* advisory only; the planner works without it */ }
+  }, []);
+
   const route = routes?.find((r) => String(r.id) === routeId);
 
   const loadRoutes = useCallback(async () => {
@@ -80,7 +92,8 @@ export default function RoutePlanner() {
 
   const choose = (r) => {
     setRouteId(String(r.id));
-    setDraft(null); setOffRoute([]); setVia([]); setPending(null);
+    setDraft(null); setOffRoute([]); setPending(null);
+    setVia(Array.isArray(r.via_points) ? r.via_points : []);
     setError(''); setNote(''); setMode('stage');
     const sl = num(r.start_latitude); const sg = num(r.start_longitude);
     const el = num(r.end_latitude); const eg = num(r.end_longitude);
@@ -89,11 +102,12 @@ export default function RoutePlanner() {
     setTick((t) => t + 1);
   };
 
-  useEffect(() => { loadRoutes(); }, [loadRoutes]);
+  useEffect(() => { loadRoutes(); loadHealth(); }, [loadRoutes, loadHealth]);
 
   useEffect(() => {
     if (!routes?.length || routeId) return;
-    choose(routes[0]);
+    const wanted = new URLSearchParams(window.location.search).get('route');
+    choose(routes.find((r) => String(r.id) === wanted) || routes[0]);
   }, [routes, routeId]);
 
   useEffect(() => {
@@ -105,8 +119,8 @@ export default function RoutePlanner() {
   const onPick = (ll) => {
     setError(''); setNote('');
     const p = { latitude: Number(ll.lat.toFixed(6)), longitude: Number(ll.lng.toFixed(6)) };
-    if (mode === 'start') { setStart((s) => ({ name: s?.name || '', ...p })); setDraft(null); }
-    else if (mode === 'end') { setEnd((s) => ({ name: s?.name || '', ...p })); setDraft(null); }
+    if (mode === 'start') { setStart((s) => ({ name: s?.name || route?.start_point || '', ...p })); setDraft(null); }
+    else if (mode === 'end') { setEnd((s) => ({ name: s?.name || route?.end_point || '', ...p })); setDraft(null); }
     else if (mode === 'via') { setVia((v) => (v.length >= 10 ? v : [...v, p])); setDraft(null); }
     else setPending(p);
   };
@@ -120,15 +134,27 @@ export default function RoutePlanner() {
       });
       setOffRoute(d.off_route_stages || []);
       if (apply) {
-        setDraft(null); setVia([]);
+        setDraft(null); setVia(Array.isArray(d.via) ? d.via : []);
         setNote('Road line saved. Passengers and drivers now see this route.');
         await loadRoutes();
+        await loadHealth();
       } else {
         setDraft(d);
       }
       setTick((t) => t + 1);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
+
+  const autoPlanned = useRef('');
+
+  // A route with a start and an end but no line gets a preview automatically.
+  useEffect(() => {
+    if (!route || !start || !end || busy) return;
+    if (route.geometry?.coordinates?.length > 1) return;
+    if (autoPlanned.current === routeId) return;
+    autoPlanned.current = routeId;
+    plan(false);
+  }, [routeId, route, start, end]);
 
   const nextOrder = useMemo(
     () => stages.reduce((m, s) => Math.max(m, Number(s.order) || 0), 0) + 1,
@@ -202,6 +228,11 @@ export default function RoutePlanner() {
                 <span className="svc-pick-main">
                   <strong>{r.name}</strong>
                   <small>{r.start_point} → {r.end_point}</small>
+                  {health[r.id] && (
+                    <small style={{ color: health[r.id].status === 'ok' ? '#6ee7b7' : '#fcd34d' }}>
+                      {health[r.id].status === 'ok' ? 'Line looks fine' : health[r.id].reasons[0]}
+                    </small>
+                  )}
                 </span>
               </button>
             ))}
@@ -257,6 +288,12 @@ export default function RoutePlanner() {
                         <Tooltip>Road point {i + 1}</Tooltip>
                       </CircleMarker>
                     ))}
+                    {(health[route.id]?.spur_points || []).map((sp, i) => (
+                      <CircleMarker key={`spur-${i}`} center={sp} radius={9}
+                        pathOptions={{ color: '#f87171', fillOpacity: 0.35 }}>
+                        <Tooltip>Saved line doubles back here</Tooltip>
+                      </CircleMarker>
+                    ))}
                     {pending && (
                       <CircleMarker center={[pending.latitude, pending.longitude]} radius={10}
                         pathOptions={{ color: '#fb923c', fillOpacity: 0.5 }} />
@@ -299,6 +336,13 @@ export default function RoutePlanner() {
                   {draft && (
                     <div className="rp-stats" style={{ marginTop: 14 }}>
                       <span>New line: {draft.distance_km} km</span>
+                    </div>
+                  )}
+                  {health[route.id]?.status === 'check' && (
+                    <div className="rp-warn" style={{ marginTop: 14 }}>
+                      Check this route: {health[route.id].reasons.join('; ')}.
+                      {health[route.id].spur_points?.length > 0
+                        && ' Red circles on the map show where the line doubles back. Use “Add road point” on the road the bus really takes, then preview again.'}
                     </div>
                   )}
                   {offRoute.length > 0 && (

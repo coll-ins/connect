@@ -63,6 +63,8 @@ class RouteSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    via_points = serializers.JSONField(read_only=True)
+
     pickup_stages = PickupStageSerializer(
         many=True,
         read_only=True
@@ -83,6 +85,7 @@ class RouteSerializer(serializers.ModelSerializer):
             'end_latitude',
             'end_longitude',
             'geometry',
+            'via_points',
             'pickup_stages',
         ]
         read_only_fields = [

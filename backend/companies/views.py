@@ -220,6 +220,7 @@ def get_routes(request, company_id=None, *args, **kwargs):
                 if route.end_longitude is not None else None
             ),
             'geometry': route.geometry,
+            'via_points': route.via_points or [],
             'pickup_stages': pickup_stages,
         })
 
@@ -1258,7 +1259,7 @@ def route_plan(request, route_id):
             end_point('start', route.start_point, route.start_latitude, route.start_longitude), 'start')
         e_lat, e_lng, e_name = read(
             end_point('end', route.end_point, route.end_latitude, route.end_longitude), 'end')
-        raw_via = data.get('via') or []
+        raw_via = (data.get('via') if 'via' in data else route.via_points) or []
         if not isinstance(raw_via, list) or len(raw_via) > 10:
             raise ValueError('Use at most 10 road points.')
         vias = []
@@ -1299,14 +1300,9 @@ def route_plan(request, route_id):
 
     controls = []
 
-    for index, stage in enumerate(stages):
-        controls.append({
-            'kind': 'stage',
-            'lat': float(stage.latitude),
-            'lng': float(stage.longitude),
-            'order': int(stage.order or 0),
-            'index': index,
-        })
+    # Stages do NOT steer the line. A bus follows its real road; stages sit on
+    # it, and any stage off the line is reported in off_route below. Only the
+    # manager's road points (via) steer the line.
 
     for index, point in enumerate(vias):
         controls.append({
@@ -1398,9 +1394,10 @@ def route_plan(request, route_id):
         route.start_latitude, route.start_longitude = Decimal(f'{s_lat:.6f}'), Decimal(f'{s_lng:.6f}')
         route.end_latitude, route.end_longitude = Decimal(f'{e_lat:.6f}'), Decimal(f'{e_lng:.6f}')
         route.geometry = geometry
+        route.via_points = [{'latitude': v[0], 'longitude': v[1]} for v in vias]
         route.save(update_fields=[
             'start_point', 'end_point', 'start_latitude', 'start_longitude',
-            'end_latitude', 'end_longitude', 'geometry',
+            'end_latitude', 'end_longitude', 'geometry', 'via_points',
         ])
 
     return Response({
@@ -1408,4 +1405,48 @@ def route_plan(request, route_id):
         'geometry': geometry,
         'distance_km': round(distance_m / 1000, 1),
         'off_route_stages': off_route,
+        'via': [{'latitude': v[0], 'longitude': v[1]} for v in vias],
     })
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def route_health(request):
+    """Advisory shape check of every route the caller manages."""
+    from .geo import MAX_STAGE_OFFSET_M, line_health
+
+    routes = Route.objects.select_related('company').prefetch_related('pickup_stages')
+    if not request.user.is_superuser:
+        routes = routes.filter(company_id=request.user.company_id)
+
+    results = []
+    for route in routes.order_by('id'):
+        if not can_manage_company(request.user, route.company):
+            continue
+        stages = [
+            (s.id, s.name, float(s.latitude), float(s.longitude))
+            for s in route.pickup_stages.all() if s.is_active
+        ]
+        h = line_health(route.geometry, stages)
+        reasons = []
+        if not h['has_line']:
+            reasons.append('No road line yet')
+        if h['spurs']:
+            reasons.append(f"{h['spurs']} place(s) where the line turns back on itself")
+        if h['detour_ratio'] and h['detour_ratio'] > 2.5:
+            reasons.append('The line is much longer than the straight distance')
+        if h['stages_off']:
+            reasons.append(f"{len(h['stages_off'])} stage(s) more than {MAX_STAGE_OFFSET_M} m from the line")
+        results.append({
+            'id': route.id,
+            'name': route.name,
+            'status': 'check' if reasons else 'ok',
+            'reasons': reasons,
+            'length_km': h['length_km'],
+            'detour_ratio': h['detour_ratio'],
+            'spur_points': h['spur_points'],
+            'stages_off': h['stages_off'],
+            'road_points': len(route.via_points or []),
+        })
+    return Response(results)

@@ -61,7 +61,8 @@ class RoutePlanTests(APITestCase):
         self.assertEqual(points[0], (-1.30, 36.80))
         self.assertEqual(points[1], (-1.26, 36.801))
         self.assertEqual(points[-1], (-1.20, 36.80))
-        self.assertEqual(len(points), 5)
+        # Stages no longer steer the line: start, road point, end.
+        self.assertEqual(len(points), 3)
 
     @patch('companies.routing.road_line', return_value=(LINE, 12000.0))
     def test_existing_curved_route_controls_are_ordered_along_saved_geometry(self, rl):
@@ -105,10 +106,8 @@ class RoutePlanTests(APITestCase):
             points,
             [
                 (-1.30, 36.80),  # start
-                (-1.25, 36.80),  # S1
                 (-1.23, 36.78),  # B
                 (-1.24, 36.82),  # A
-                (-1.22, 36.80),  # S2
                 (-1.20, 36.80),  # end
             ],
         )

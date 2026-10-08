@@ -62,6 +62,12 @@ class Route(models.Model):
         blank=True,
         help_text='Road-following route geometry as GeoJSON.',
     )
+    via_points = models.JSONField(
+        null=True,
+        blank=True,
+        default=list,
+        help_text='Road points the manager placed to steer the line.',
+    )
 
     # Parcel carriage is opt-in per route: a size with no rate is not carried.
     parcel_price_small = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
