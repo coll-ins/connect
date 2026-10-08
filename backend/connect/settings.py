@@ -286,6 +286,7 @@ if not DEBUG:
         )
 
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '10/hour'
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 
 from decimal import Decimal
 PLATFORM_FEE_PER_SEAT = Decimal("20.00")  # KES the platform keeps per seat

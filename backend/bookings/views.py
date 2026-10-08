@@ -323,8 +323,19 @@ def initialize_paystack_payment(request, booking_id):
 # PAYSTACK M-PESA CHARGE
 # ============================================================
 
+class MpesaPushThrottle(SimpleRateThrottle):
+    """Each M-PESA initialization pushes a prompt to a phone: limit it per user."""
+    scope = 'mpesa_push'
+
+    def get_cache_key(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return self.cache_format % {'scope': self.scope, 'ident': request.user.pk}
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([MpesaPushThrottle])
 def initialize_mpesa_payment(request, booking_id):
     """Send one Paystack M-PESA charge for the passenger's booking."""
     try:
@@ -521,6 +532,12 @@ def initialize_mpesa_payment(request, booking_id):
         )
 
     if gateway_response.status_code != 200 or not result.get('status'):
+        # Paystack answered and refused, so no prompt was sent: release the
+        # attempt so the passenger can retry. A 5xx or timeout stays
+        # "in progress" because the prompt may already be on the phone.
+        if gateway_response.status_code < 500:
+            Payment.objects.filter(pk=payment.pk, status='pending').update(
+                status='failed')
         return Response(
             {
                 'error': result.get(
