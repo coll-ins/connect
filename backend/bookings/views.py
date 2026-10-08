@@ -94,7 +94,7 @@ def initialize_paystack_payment(request, booking_id):
                 )
             )
 
-            if booking.status == 'cancelled':
+            if booking.status in ('cancelled', 'no_show'):
                 return Response(
                     {'error': 'Cancelled bookings cannot be paid for'},
                     status=status.HTTP_400_BAD_REQUEST
