@@ -836,7 +836,7 @@ def paystack_webhook(request):
 
             # Paystack may retry the same webhook.
             # If we already processed it, do nothing.
-            if payment.status == 'confirmed':
+            if payment.status in ('confirmed', 'refunded'):
                 return HttpResponse(status=200)
 
             # This webhook is only for digital payments.
@@ -3246,6 +3246,12 @@ def set_stage_departure(request, booking_id):
     except (TypeError, ValueError):
         return Response(
             {'error': 'Enter valid minutes'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not 0 <= minutes <= 720:
+        return Response(
+            {'error': 'Minutes must be between 0 and 720.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 

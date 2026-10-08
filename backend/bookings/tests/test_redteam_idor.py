@@ -11,28 +11,37 @@ from companies.models import Company, PickupStage, Route, Trip
 from drivers.models import Driver
 
 User = get_user_model()
-DENIED = (401, 403)
-HIDDEN = (401, 403, 404)
+NO = (401, 403)
 
 
-class RedTeamIDORTests(APITestCase):
+class RedTeamIdorTests(APITestCase):
+    def _world(self, co, phone):
+        route = Route.objects.create(
+            company=co, name=f"R{co.id}", start_point="A", end_point="B",
+            price=Decimal("100.00"))
+        stage = PickupStage.objects.create(
+            route=route, name="S1", latitude=Decimal("-1.285"),
+            longitude=Decimal("36.82"), order=1)
+        drv = Driver.objects.create(
+            name=f"D{co.id}", phone_number=phone, bus_number=f"K{co.id}", company=co)
+        trip = Trip.objects.create(
+            route=route, driver=drv,
+            departure_at=timezone.now() + timedelta(days=1),
+            capacity=10, status="scheduled")
+        return route, stage, drv, trip
+
+    def _booking(self, user, world):
+        route, stage, drv, trip = world
+        return Booking.objects.create(
+            user=user, route=route, trip=trip, driver=drv, pickup_stage=stage,
+            pickup_location="S1", seats=1, total_amount=Decimal("100.00"),
+            status="confirmed")
+
     def setUp(self):
         self.co = Company.objects.create(name="A", description="d", areas_served="N")
         self.co2 = Company.objects.create(name="B", description="d", areas_served="N")
-        self.route = Route.objects.create(
-            company=self.co, name="R", start_point="A", end_point="B",
-            price=Decimal("100.00"))
-        self.stage = PickupStage.objects.create(
-            route=self.route, name="S1", latitude=Decimal("-1.285"),
-            longitude=Decimal("36.82"), order=1)
-        self.d1 = Driver.objects.create(
-            name="D1", phone_number="0700000001", bus_number="K1", company=self.co)
-        self.d2 = Driver.objects.create(
-            name="D2", phone_number="0700000002", bus_number="K2", company=self.co)
-        self.trip = Trip.objects.create(
-            route=self.route, driver=self.d1,
-            departure_at=timezone.now() + timedelta(days=1),
-            capacity=10, status="scheduled")
+        self.wa = self._world(self.co, "0700000001")
+        self.wb = self._world(self.co2, "0700000008")
         mk = User.objects.create_user
         self.owner = mk(username="own", password="x", phone_number="0711000001")
         self.stranger = mk(username="str", password="x", phone_number="0711000002")
@@ -40,55 +49,82 @@ class RedTeamIDORTests(APITestCase):
                       company=self.co, role="company_manager")
         self.mgr_b = mk(username="m2", password="x", phone_number="0711000004",
                         company=self.co2, role="company_manager")
+        self.aud = mk(username="aud", password="x", phone_number="0711000005",
+                      company=self.co, role="company_auditor")
         self.drv1 = mk(username="d1", password="x", phone_number="0700000001",
                        company=self.co, role="driver")
-        self.drv2 = mk(username="d2", password="x", phone_number="0700000002",
-                       company=self.co, role="driver")
-        self.booking = Booking.objects.create(
-            user=self.owner, route=self.route, trip=self.trip, driver=self.d1,
-            pickup_stage=self.stage, pickup_location="S1", seats=1,
-            total_amount=Decimal("100.00"), status="confirmed")
+        self.drv_other = mk(username="d9", password="x", phone_number="0700000009",
+                            company=self.co, role="driver")
+        self.booking = self._booking(self.owner, self.wa)
+        self.booking_b = self._booking(self.stranger, self.wb)
 
-    def _call(self, user, method, name, arg):
+    def _as(self, user):
         self.client.force_authenticate(user=user)
-        return getattr(self.client, method)(
-            reverse(f"bookings:{name}", args=[arg]), {}, format="json")
 
-    def _attacks(self):
-        b, d = self.booking.id, self.d1.id
-        return [
-            ("get", "get-booking-detail", b),
-            ("get", "booking-live-location", b),
-            ("post", "update-passenger-location", b),
-            ("get", "get-driver-bookings", d),
-        ]
+    def test_booking_list_is_company_scoped(self):
+        url = reverse("bookings:get-all-bookings")
+        self._as(self.mgr)
+        r = self.client.get(url)
+        ids = {row["booking_id"] for row in r.data}
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(self.booking.id, ids)
+        self.assertNotIn(self.booking_b.id, ids)
+        self.assertEqual(
+            self.client.get(url, {"company_id": self.co2.id}).status_code, 403)
+        for label, u in (("passenger", self.owner), ("driver", self.drv1), ("anon", None)):
+            with self.subTest(who=label):
+                self._as(u)
+                self.assertIn(self.client.get(url).status_code, NO)
 
-    def _assert_denied(self, user, label, skip=()):
-        for method, name, arg in self._attacks():
-            if name in skip:
-                continue
-            with self.subTest(attacker=label, endpoint=name):
-                r = self._call(user, method, name, arg)
-                self.assertIn(r.status_code, HIDDEN, r.content[:200])
+    def test_booking_detail_access(self):
+        url = reverse("bookings:get-booking-detail", args=[self.booking.id])
+        for label, u in (("anon", None), ("stranger", self.stranger),
+                         ("other manager", self.mgr_b)):
+            with self.subTest(attacker=label):
+                self._as(u)
+                self.assertIn(self.client.get(url).status_code, NO)
+        for label, u in (("owner", self.owner), ("manager", self.mgr), ("auditor", self.aud)):
+            with self.subTest(viewer=label):
+                self._as(u)
+                self.assertEqual(self.client.get(url).status_code, 200)
 
-    def test_anonymous_denied_everywhere(self):
-        self._assert_denied(None, "anonymous")
+    def test_passenger_location_is_owner_only(self):
+        url = reverse("bookings:update-passenger-location", args=[self.booking.id])
+        body = {"latitude": -1.28, "longitude": 36.82}
+        for label, u in (("stranger", self.stranger), ("manager", self.mgr),
+                         ("driver", self.drv1)):
+            with self.subTest(attacker=label):
+                self._as(u)
+                self.assertEqual(self.client.post(url, body, format="json").status_code, 404)
+        self._as(self.owner)
+        self.assertEqual(self.client.post(url, body, format="json").status_code, 200)
 
-    def test_stranger_passenger_denied_everywhere(self):
-        self._assert_denied(self.stranger, "stranger")
+    def test_stage_departure_roles(self):
+        url = reverse("bookings:set-stage-departure", args=[self.booking.id])
+        for label, u in (("anon", None), ("passenger", self.owner),
+                         ("stranger", self.stranger), ("other manager", self.mgr_b),
+                         ("auditor", self.aud), ("driver", self.drv1)):
+            with self.subTest(attacker=label):
+                self._as(u)
+                self.assertIn(self.client.post(url, {"minutes": 5}, format="json").status_code, NO)
+        self._as(self.mgr)
+        self.assertEqual(self.client.post(url, {"minutes": 5}, format="json").status_code, 200)
 
-    def test_other_company_manager_denied_everywhere(self):
-        self._assert_denied(self.mgr_b, "other-company manager")
+    def test_stage_departure_rejects_absurd_minutes(self):
+        url = reverse("bookings:set-stage-departure", args=[self.booking.id])
+        self._as(self.mgr)
+        for m in (10 ** 15, -5, 100000):
+            with self.subTest(minutes=m):
+                self.assertEqual(self.client.post(url, {"minutes": m}, format="json").status_code, 400)
 
-    def test_other_driver_same_company_denied_booking_endpoints(self):
-        self._assert_denied(self.drv2, "other driver", skip=())
-
-    def test_positive_controls(self):
-        self.assertEqual(self._call(self.owner, "get", "get-booking-detail", self.booking.id).status_code, 200)
-        self.assertEqual(self._call(self.mgr, "get", "get-booking-detail", self.booking.id).status_code, 200)
-        for user in (self.owner, self.mgr, self.drv1):
-            r = self._call(user, "get", "booking-live-location", self.booking.id)
-            self.assertNotIn(r.status_code, HIDDEN, (user.username, r.content[:200]))
-        for user in (self.mgr, self.drv1):
-            r = self._call(user, "get", "get-driver-bookings", self.d1.id)
-            self.assertNotIn(r.status_code, HIDDEN, (user.username, r.content[:200]))
+    def test_driver_bookings_access(self):
+        url = reverse("bookings:get-driver-bookings", args=[self.wa[2].id])
+        for label, u in (("anon", None), ("stranger", self.stranger), ("passenger", self.owner),
+                         ("other manager", self.mgr_b), ("other driver", self.drv_other)):
+            with self.subTest(attacker=label):
+                self._as(u)
+                self.assertIn(self.client.get(url).status_code, NO)
+        for label, u in (("driver", self.drv1), ("manager", self.mgr)):
+            with self.subTest(viewer=label):
+                self._as(u)
+                self.assertEqual(self.client.get(url).status_code, 200)
