@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from bookings.models import BookingHold, Payment
+from bookings.models import BookingHold, Payment, Payout
 from bookings.tests.test_round5 import _Fixture, _paystack_ok
 
 
@@ -143,6 +143,53 @@ class ReconcileRefundsTests(_Fixture, TestCase):
         self.assertEqual(self.payment.refund_reference, '9')
         self.assertEqual(hold.refunded_amount, Decimal('400.00'))
         self.assertEqual(hold.status, 'held')
+
+    def test_partial_refund_keeps_payment_confirmed_for_settlement(self):
+        self._run(listing=[{'id': 9, 'status': 'processed', 'amount': 40000}])
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.refund_status, 'processed')
+        self.assertEqual(self.payment.status, 'confirmed')
+
+    def test_full_refund_marks_payment_refunded(self):
+        full = self.payment.amount
+        Payment.objects.filter(pk=self.payment.pk).update(refund_amount=full)
+        self._run(listing=[{'id': 9, 'status': 'processed', 'amount': int(full * 100)}])
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'refunded')
+        self.assertIsNotNone(self.payment.refunded_at)
+
+    def _settle(self, apply=False):
+        out = io.StringIO()
+        kwargs = {'apply': True, 'reference': 'TESTPAY1'} if apply else {}
+        call_command('settle_company', self.company.pk, stdout=out, **kwargs)
+        return out.getvalue()
+
+    def test_partial_refund_then_settlement_pays_only_the_remainder(self):
+        self._run(listing=[{'id': 9, 'status': 'processed', 'amount': 40000}])
+        self._settle(apply=True)
+        payout = Payout.objects.get(company=self.company)
+        fee = settings.PLATFORM_FEE_PER_SEAT * self.booking_obj.seats
+        self.assertEqual(payout.gross_amount, Decimal('400.00'))
+        self.assertEqual(payout.fee_amount, fee)
+        self.assertEqual(payout.net_amount, Decimal('400.00') - fee)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.settlement_status, 'settled')
+        self._settle(apply=True)
+        self.assertEqual(Payout.objects.filter(company=self.company).count(), 1)
+
+    def test_full_refund_is_never_paid_out(self):
+        Payment.objects.filter(pk=self.payment.pk).update(refund_amount=Decimal('800.00'))
+        self._run(listing=[{'id': 9, 'status': 'processed', 'amount': 80000}])
+        self._settle(apply=True)
+        self.assertFalse(Payout.objects.filter(company=self.company).exists())
+
+    def test_processed_refund_without_amount_is_held_not_paid(self):
+        Payment.objects.filter(pk=self.payment.pk).update(
+            refund_status='processed', refund_amount=None,
+            settlement_status='not_ready')
+        self.assertIn('HELD BACK', self._settle())
+        self._settle(apply=True)
+        self.assertFalse(Payout.objects.filter(company=self.company).exists())
 
     def test_missed_webhook_pending_becomes_processed(self):
         self._claim(minutes_ago=120, status='pending', reference='9')

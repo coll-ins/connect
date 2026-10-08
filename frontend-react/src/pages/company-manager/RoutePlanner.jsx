@@ -228,11 +228,6 @@ export default function RoutePlanner() {
                 <span className="svc-pick-main">
                   <strong>{r.name}</strong>
                   <small>{r.start_point} → {r.end_point}</small>
-                  {health[r.id] && (
-                    <small style={{ color: health[r.id].status === 'ok' ? '#6ee7b7' : '#fcd34d' }}>
-                      {health[r.id].status === 'ok' ? 'Line looks fine' : health[r.id].reasons[0]}
-                    </small>
-                  )}
                 </span>
               </button>
             ))}

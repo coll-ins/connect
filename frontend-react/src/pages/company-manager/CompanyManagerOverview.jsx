@@ -118,34 +118,7 @@ export default function CompanyManagerOverview() {
   return (
     <div className="company-inner-page">
 
-      <main className="company-management-main">
-        <header className="company-management-topbar">
-          <button
-            className="company-mobile-menu"
-            
-            aria-label="Open navigation"
-          >
-            <Menu size={21} />
-          </button>
-
-          <div>
-            <p className="company-eyebrow">COMPANY MANAGER</p>
-            <h1>{company?.name || user?.company_name || 'My Company'}</h1>
-          </div>
-
-          <div className="company-top-actions">
-            <button className="company-refresh" onClick={load}>
-              <Activity size={17} />
-              Refresh
-            </button>
-
-            <button className="company-logout" onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </header>
-
-        <section className="company-content">
+      <section className="company-content">
           {error && <div className="company-error">{error}</div>}
 
           {loading ? (
@@ -394,7 +367,6 @@ export default function CompanyManagerOverview() {
             </>
           )}
         </section>
-      </main>
     </div>
   );
 }

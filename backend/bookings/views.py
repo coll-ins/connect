@@ -1026,13 +1026,17 @@ def paystack_refund_webhook(request):
 
                 if new_refund_status == 'processed':
                     # Money genuinely reached the passenger.
-                    payment.status = 'refunded'
                     payment.refunded_at = timezone.now()
-
-                    update_fields += [
-                        'status',
-                        'refunded_at',
-                    ]
+                    update_fields.append('refunded_at')
+                    # Only a full refund closes the payment. A partial
+                    # refund stays 'confirmed' so settle_company pays the
+                    # company the remainder.
+                    if (
+                        payment.refund_amount is not None
+                        and payment.refund_amount >= payment.amount
+                    ):
+                        payment.status = 'refunded'
+                        update_fields.append('status')
 
                 # A failed refund means the reversal did not reach the
                 # passenger. The original charge remains confirmed.

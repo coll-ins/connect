@@ -8,14 +8,14 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Enforce secure secret key in production
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
-    if DEBUG := os.getenv('DEBUG', 'False').lower() == 'true':
+    if DEBUG:
         SECRET_KEY = 'django-insecure-development-key-123456789'
     else:
         raise ValueError("CRITICAL: SECRET_KEY environment variable must be set in production.")
-
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -321,3 +321,20 @@ if _os.environ.get('DJANGO_PRODUCTION') == '1':
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 3600  # raise to 31536000 once HTTPS is proven stable
+
+# --- Production hardening (active only when DEBUG is off) ---
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
+    # Start low. Raise to 31536000 only after HTTPS is confirmed stable.
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '3600'))
+    if os.getenv('BEHIND_TLS_PROXY', 'False').lower() == 'true':
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+if not DEBUG and (
+    len(ADMIN_SIGNUP_CODE) < 20
+    or 'your_secure' in ADMIN_SIGNUP_CODE
+    or 'replace-with' in ADMIN_SIGNUP_CODE
+):
+    raise ValueError('CRITICAL: ADMIN_SIGNUP_CODE is a placeholder or too short.')

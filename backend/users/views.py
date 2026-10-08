@@ -1,3 +1,4 @@
+import hmac
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
@@ -81,7 +82,9 @@ def admin_signup(request):
         return Response({'error': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
 
     admin_code = request.data.get('admin_code')
-    if not admin_code or admin_code != getattr(settings, 'ADMIN_SIGNUP_CODE', None):
+    if not admin_code or not hmac.compare_digest(
+        str(admin_code).encode(),
+        str(getattr(settings, 'ADMIN_SIGNUP_CODE', '') or '').encode()):
         return Response(
             {'error': 'Invalid or missing admin access code'},
             status=status.HTTP_403_FORBIDDEN,

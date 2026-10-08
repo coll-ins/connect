@@ -1074,6 +1074,12 @@ def route_map_data(request, route_id):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+    if trip is not None and not _can_access_route_trip_map(request.user, route, trip):
+        return Response(
+            {"error": "Not authorized for this trip."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     can_see_private_trip_data = (
         trip is not None
         and _can_see_route_passengers(request.user, route, trip)

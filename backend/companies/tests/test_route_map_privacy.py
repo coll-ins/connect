@@ -67,24 +67,39 @@ class RouteMapPrivacyTests(APITestCase):
         stage = next(s for s in r.json()["stages"] if s["name"] == "Stage1")
         return stage["passengers"], stage, r.content.decode()
 
-    def test_anonymous_sees_counts_but_no_passengers(self):
-        p, stage, raw = self._passengers(None)
-        self.assertEqual(p, [])
-        self.assertEqual(stage["booking_count"], 1)
-        self.assertNotIn("passenger_phone", raw)
-        self.assertNotIn("0711000001", raw)
+    def _denied(self, user):
+        self.client.force_authenticate(user=user)
+        r = self.client.get(self.url, {"trip_id": self.trip.id})
+        self.assertEqual(r.status_code, 403)
+        raw = r.content.decode()
+        for leak in ("booking_count", "passenger_count", "departure_at",
+                     "passenger_phone", "0711000001", "coordinates"):
+            self.assertNotIn(leak, raw)
 
-    def test_other_passenger_sees_none(self):
-        self.assertEqual(self._passengers(self.stranger)[0], [])
+    def test_anonymous_denied_trip_data(self):
+        self._denied(None)
+
+    def test_other_passenger_denied(self):
+        self._denied(self.stranger)
+
+    def test_other_company_manager_denied(self):
+        self._denied(self.other_manager)
+
+    def test_unassigned_driver_denied(self):
+        self._denied(self.other_driver_user)
+
+    def test_anonymous_can_still_browse_route_without_trip(self):
+        self.client.force_authenticate(user=None)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("0711000001", r.content.decode())
+        self.assertEqual(r.json()["trip_id"], None)
+
 
     def test_booking_owner_passenger_role_sees_none_here(self):
         self.assertEqual(self._passengers(self.passenger)[0], [])
 
-    def test_other_company_manager_sees_none(self):
-        self.assertEqual(self._passengers(self.other_manager)[0], [])
 
-    def test_unassigned_driver_sees_none(self):
-        self.assertEqual(self._passengers(self.other_driver_user)[0], [])
 
     def test_owning_manager_sees_passenger(self):
         self.assertEqual(len(self._passengers(self.manager)[0]), 1)

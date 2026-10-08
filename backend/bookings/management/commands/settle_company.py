@@ -129,6 +129,9 @@ class Command(BaseCommand):
                     if p.refund_status not in clean_states:
                         held.append(p)
                         continue
+                    if p.refund_status == 'processed' and p.refund_amount is None:
+                        held.append(p)
+                        continue
                     refunded = (
                         p.refund_amount
                         if p.refund_status == 'processed' and p.refund_amount

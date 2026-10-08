@@ -292,6 +292,14 @@ def record_refund_result(claim, provider_refund_status, refund_id):
                 payment.refund_reference = str(refund_id)
                 update_fields.append('refund_reference')
 
+            if provider_refund_status == 'processed':
+                payment.refunded_at = timezone.now()
+                update_fields.append('refunded_at')
+                total_refunded = payment.refund_amount or claim.refund_amount
+                if total_refunded >= payment.amount:
+                    payment.status = 'refunded'
+                    update_fields.append('status')
+
             payment.save(update_fields=update_fields)
 
         refund_to_record = payment.refund_amount or claim.refund_amount
