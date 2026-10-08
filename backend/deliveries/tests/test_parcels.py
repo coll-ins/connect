@@ -229,10 +229,17 @@ class ParcelTests(APITestCase):
         self.assertEqual(self.client.post(f'{BASE}{pid}/cancel/').status_code, 200)
         self.assertEqual(self.client.post(f'{BASE}{pid}/cancel/').status_code, 409)
 
-    def test_paid_parcel_cannot_be_cancelled_yet(self):
+    def test_paid_parcel_cancel_queues_full_refund(self):
         p = self.paid()
         self.client.force_authenticate(self.sender)
-        self.assertEqual(self.client.post(f'{BASE}{p.id}/cancel/').status_code, 409)
+        response = self.client.post(f'{BASE}{p.id}/cancel/')
+        self.assertEqual(response.status_code, 200)
+        p.refresh_from_db()
+        self.assertEqual(p.status, 'cancelled')
+        from bookings.models import UnappliedPayment
+        self.assertEqual(
+            UnappliedPayment.objects.filter(
+                reference=p.provider_reference, status='refund_due').count(), 1)
 
     # ---------- driver list ----------
     def test_driver_list_only_own_paid_parcels(self):

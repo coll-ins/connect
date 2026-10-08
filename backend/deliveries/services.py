@@ -101,9 +101,30 @@ def cancel_parcel(*, parcel_id, user):
             parcel.save(update_fields=['status', 'cancelled_at', 'updated_at'])
             return parcel
         if parcel.status == 'paid':
-            raise ParcelError(
-                'This parcel is already paid. Refunds are not automated yet; contact support.', 409
+            # Nothing has been picked up yet: refund the full price. The refund
+            # is queued in this transaction and sent by process_unapplied
+            # (never from inside a transaction).
+            if not parcel.provider_reference:
+                raise ParcelError(
+                    'This parcel has no payment reference; contact support for a refund.', 409
+                )
+            from bookings.models import UnappliedPayment
+
+            parcel.status = 'cancelled'
+            parcel.cancelled_at = timezone.now()
+            parcel.save(update_fields=['status', 'cancelled_at', 'updated_at'])
+            UnappliedPayment.objects.get_or_create(
+                reference=parcel.provider_reference,
+                defaults={
+                    'kind': 'parcel',
+                    'amount': parcel.price,
+                    'currency': 'KES',
+                    'reason': 'Customer cancelled before pickup; full refund.',
+                    'payload': {},
+                    'status': 'refund_due',
+                },
             )
+            return parcel
         raise ParcelError('This parcel can no longer be cancelled.', 409)
 
 

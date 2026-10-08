@@ -5,11 +5,13 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import transaction
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
+from .throttles import LoginPhoneThrottle
 from .serializers import UserSerializer, CompanyStaffSerializer
 
 
@@ -109,6 +111,7 @@ def admin_signup(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([LoginPhoneThrottle, AnonRateThrottle])
 def user_login(request):
     raw_phone = request.data.get('phone_number')
     password = request.data.get('password')
@@ -349,8 +352,12 @@ def company_staff(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    from users.phone import phone_variants
+
     if CustomUser.objects.filter(
-        phone_number=serializer.validated_data.get('phone_number')
+        phone_number__in=phone_variants(
+            serializer.validated_data.get('phone_number')
+        )
     ).exists():
         return Response(
             {'error': 'A user with this phone number already exists.'},

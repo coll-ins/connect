@@ -9,7 +9,6 @@ from rest_framework.response import Response
 from django.db.models import F, Q
 
 from companies.models import PickupStage, Route, Trip
-from drivers.models import Driver
 from drivers.views import COMPANY_STAFF_ROLES
 
 from .models import Parcel
@@ -17,6 +16,7 @@ from django.conf import settings
 
 from connect import paystack_extra as paystack
 from .services import ParcelError, cancel_parcel, create_parcel, deliver, pick_up
+from users.identity import drivers_for_user
 
 
 class ParcelCreateSerializer(serializers.Serializer):
@@ -46,7 +46,7 @@ def _qs():
 def _driver_for(user):
     if getattr(user, 'role', None) != 'driver' or not user.phone_number:
         return None
-    return Driver.objects.filter(phone_number=user.phone_number).first()
+    return drivers_for_user(user).first()
 
 
 def _is_staff(user):

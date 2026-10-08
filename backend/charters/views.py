@@ -4,7 +4,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from companies.models import Company
-from drivers.models import Driver
 from drivers.views import COMPANY_STAFF_ROLES
 from users.permissions import can_manage_company
 
@@ -16,6 +15,7 @@ from .services import (
     CharterError, cancel_charter, check_payable, complete_charter, create_charter,
     decline_charter, quote_charter, set_pending_reference,
 )
+from users.identity import drivers_for_user
 
 
 class CharterCreateSerializer(serializers.Serializer):
@@ -44,7 +44,7 @@ def _qs():
 def _driver_for(user):
     if getattr(user, 'role', None) != 'driver' or not user.phone_number:
         return None
-    return Driver.objects.filter(phone_number=user.phone_number).first()
+    return drivers_for_user(user).first()
 
 
 def _is_staff(user):

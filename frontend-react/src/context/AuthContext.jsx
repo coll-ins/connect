@@ -36,10 +36,9 @@ function normalizeRole(role, isSuperuser = false) {
 
   if (KNOWN_ROLES.includes(value)) return value;
 
-  // Do NOT silently default to 'passenger' here - that hid the bug last time.
-  // Surface it loudly so a backend/frontend role mismatch is caught immediately.
-  console.error(`[CONNECT] Unrecognized role from backend: "${role}". Falling back to passenger.`);
-  return 'passenger';
+  throw new Error(
+    `CONNECT received an unrecognized account role: ${String(role || '(empty)')}`
+  );
 }
 
 function normalizeUser(data) {

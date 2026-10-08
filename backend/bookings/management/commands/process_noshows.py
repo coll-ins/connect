@@ -8,7 +8,11 @@ from django.utils import timezone
 
 from companies.models import Trip
 from bookings.models import Booking, Payment
-from bookings.services import settle_booking_fault
+from bookings.services import (
+    claim_booking_refund,
+    run_refund_claims,
+    settle_booking_fault,
+)
 
 
 # Passengers are only treated as no-shows this long after departure.
@@ -43,6 +47,8 @@ class Command(BaseCommand):
         refunds_retried = 0
 
         for trip in trips:
+            trip_claims = []
+
             with transaction.atomic():
                 trip = (
                     Trip.objects
@@ -75,10 +81,12 @@ class Command(BaseCommand):
                         continue
 
                     try:
-                        settle_booking_fault(
+                        _, claim = claim_booking_refund(
                             booking,
-                            fault_party="passenger",
+                            "passenger",
                         )
+                        if claim is not None:
+                            trip_claims.append(claim)
                     except ValueError as e:
                         self.stderr.write(
                             f"Refund failed for {booking.booking_number}: {e}"
@@ -101,6 +109,10 @@ class Command(BaseCommand):
                     trip.save(update_fields=["status"])
 
                 trips_processed += 1
+
+            # Paystack is called only after this trip's row locks are
+            # released and its refund reservations are committed.
+            run_refund_claims(trip_claims)
 
         stuck_refunds = Payment.objects.filter(
             method="digital",

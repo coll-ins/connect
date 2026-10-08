@@ -3,14 +3,11 @@ import { NavLink } from 'react-router-dom';
 import {
   Activity,
   ArrowUpRight,
-  BarChart3,
   Bus,
   CalendarDays,
   ClipboardList,
-  Gauge,
   Menu,
   Route,
-  Settings,
   ShieldCheck,
   Users,
   WalletCards,
@@ -32,105 +29,6 @@ const formatDate = (value) =>
       })
     : '—';
 
-const nav = [
-  { label: 'Overview', path: '/company-manager', icon: Gauge },
-  { label: 'Company Profile', path: '/company-manager/companies', icon: Bus },
-  { label: 'Routes', path: '/company-manager/routes', icon: Route },
-  { label: 'Trips', path: '/company-manager/trips', icon: CalendarDays },
-  { label: 'Drivers', path: '/company-manager/drivers', icon: Users },
-  { label: 'Operators', path: '/company-manager/operators', icon: ShieldCheck },
-  { label: 'Bookings', path: '/company-manager/bookings', icon: ClipboardList },
-  { label: 'Seats & Capacity', path: '/company-manager/capacity', icon: Bus },
-  { label: 'Pricing', path: '/company-manager/pricing', icon: WalletCards },
-  { label: 'Revenue', path: '/company-manager/revenue', icon: BarChart3 },
-  { label: 'Settings', path: '/company-manager/settings', icon: Settings },
-];
-
-function Sidebar({ open, setOpen, user, company }) {
-  return (
-    <>
-      {open && (
-        <button
-          className="company-sidebar-overlay"
-          onClick={() => setOpen(false)}
-          aria-label="Close navigation"
-        />
-      )}
-
-      <aside className={`company-sidebar ${open ? 'open' : ''}`}>
-        <div className="company-brand">
-          <div className="company-brand-mark">C</div>
-          <div>
-            <strong>CONNECT</strong>
-            <span>Company Manager</span>
-          </div>
-        </div>
-
-        <div className="company-user-identity">
-          <div className="company-user-name">
-            {user?.username || 'Company Manager'}
-          </div>
-          <div className="company-user-role">
-            Company Manager
-          </div>
-          <div className="company-user-company">
-            {company?.name || user?.company_name || 'My Company'}
-          </div>
-        </div>
-
-        <div className="company-nav-label">MANAGEMENT</div>
-
-        <div className="company-sidebar-links">
-          {nav.slice(0, 7).map(({ label, path, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === '/company-manager'}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `company-nav-link ${isActive ? 'active' : ''}`
-              }
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </div>
-
-        <div className="company-nav-label">OPERATIONS</div>
-
-        <div className="company-sidebar-links">
-          {nav.slice(7, 10).map(({ label, path, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `company-nav-link ${isActive ? 'active' : ''}`
-              }
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </div>
-
-        <div className="company-nav-label">SYSTEM</div>
-
-        <NavLink
-          to="/company-manager/settings"
-          onClick={() => setOpen(false)}
-          className={({ isActive }) =>
-            `company-nav-link ${isActive ? 'active' : ''}`
-          }
-        >
-          <Settings size={18} />
-          <span>Settings</span>
-        </NavLink>
-      </aside>
-    </>
-  );
-}
 
 function Stat({ icon: Icon, label, value, detail }) {
   return (
@@ -153,7 +51,6 @@ export default function CompanyManagerOverview() {
 
   const companyId = user?.company_id;
 
-  const [open, setOpen] = useState(false);
   const [company, setCompany] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [routes, setRoutes] = useState([]);
@@ -225,7 +122,7 @@ export default function CompanyManagerOverview() {
         <header className="company-management-topbar">
           <button
             className="company-mobile-menu"
-            onClick={() => setOpen(true)}
+            
             aria-label="Open navigation"
           >
             <Menu size={21} />

@@ -17,6 +17,11 @@ from .serializers import DriverSerializer
 from rest_framework.decorators import throttle_classes
 from .throttles import DriverLocationThrottle
 from django.utils import timezone
+from users.identity import drivers_for_user, is_driver_account_for
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError
+from django.db.models import Q
+from users.phone import canonical_phone, phone_variants
 
 
 COMPANY_STAFF_ROLES = {
@@ -55,9 +60,7 @@ def _can_view_driver(user, driver):
         )
 
     if getattr(user, 'role', None) == 'driver':
-        return bool(driver.phone_number) and (
-            user.phone_number == driver.phone_number
-        )
+        return is_driver_account_for(user, driver)
 
     return False
 
@@ -229,7 +232,9 @@ def driver_list(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    phone_number = str(request.data.get('phone_number', '')).strip()
+    from users.phone import canonical_phone
+
+    phone_number = canonical_phone(str(request.data.get('phone_number', '')).strip())
     password = request.data.get('password')
 
     if not phone_number:
@@ -244,9 +249,14 @@ def driver_list(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if len(password) < 6:
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
         return Response(
-            {'error': 'Password must be at least 6 characters.'},
+            {'error': ' '.join(exc.messages)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -341,7 +351,41 @@ def driver_detail(request, driver_id):
         )
 
     if request.method == 'DELETE':
-        driver.delete()
+        try:
+            with transaction.atomic():
+                locked_driver = (
+                    Driver.objects
+                    .select_for_update()
+                    .get(pk=driver.pk)
+                )
+
+                has_trip_history = locked_driver.trips.exists()
+                has_booking_history = (
+                    locked_driver.assigned_bookings.exists()
+                )
+
+                if has_trip_history or has_booking_history:
+                    return Response(
+                        {
+                            'error': (
+                                'This driver has operational history and '
+                                'cannot be deleted. Deactivate the driver '
+                                'instead so historical trips, bookings, '
+                                'payments and boarding records remain '
+                                'available.'
+                            ),
+                            'is_available': locked_driver.is_available,
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                locked_driver.delete()
+
+        except Driver.DoesNotExist:
+            return Response(
+                {'error': 'Driver not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         return Response(
             {'message': 'Driver removed successfully.'},
@@ -362,7 +406,64 @@ def driver_detail(request, driver_id):
 
     # Company is controlled by the server.
     # A manager cannot move a driver to another company.
-    serializer.save(company=driver.company)
+    save_kwargs = {'company': driver.company}
+    new_phone = None
+    old_phone = canonical_phone(driver.phone_number) if driver.phone_number else ''
+
+    if 'phone_number' in serializer.validated_data:
+        new_phone = canonical_phone(serializer.validated_data['phone_number'] or '')
+        if old_phone and not new_phone:
+            return Response(
+                {'error': 'A driver must keep a phone number: it is their login.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_phone:
+            save_kwargs['phone_number'] = new_phone
+
+    try:
+        with transaction.atomic():
+            if new_phone and new_phone != old_phone:
+                logins = list(
+                    get_user_model().objects.select_for_update()
+                    .filter(
+                        role='driver',
+                        phone_number__in=phone_variants(driver.phone_number),
+                    )
+                    .filter(Q(company__isnull=True) | Q(company_id=driver.company_id))
+                )
+                if len(logins) > 1:
+                    return Response(
+                        {'error': 'More than one login account matches this driver. Resolve that first.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                new_variants = phone_variants(new_phone)
+                taken_by_driver = (
+                    Driver.objects.filter(phone_number__in=new_variants)
+                    .exclude(pk=driver.pk)
+                    .exists()
+                )
+                taken_by_user = (
+                    get_user_model().objects.filter(phone_number__in=new_variants)
+                    .exclude(pk__in=[u.pk for u in logins])
+                    .exists()
+                )
+                if taken_by_driver or taken_by_user:
+                    return Response(
+                        {'error': 'That phone number is already in use.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                for login in logins:
+                    login.phone_number = new_phone
+                    login.save(update_fields=['phone_number'])
+
+            serializer.save(**save_kwargs)
+    except IntegrityError:
+        return Response(
+            {'error': 'That phone number is already in use.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     return Response(
         DriverSerializer(driver).data,
@@ -396,9 +497,7 @@ def _can_manage_driver_location(request, driver):
         return True
 
     if user.role == 'driver':
-        return bool(driver.phone_number) and (
-            user.phone_number == driver.phone_number
-        )
+        return is_driver_account_for(user, driver)
 
     return can_manage_company(user, driver.company)
 
@@ -501,7 +600,7 @@ def my_driver_profile(request):
     driver = Driver.objects.select_related(
         'company'
     ).filter(
-        phone_number=request.user.phone_number
+        pk__in=drivers_for_user(request.user).values('pk')
     ).first()
 
     if not driver:

@@ -68,6 +68,14 @@ class Booking(models.Model):
 
 
 class Payment(models.Model):
+    refund_claimed_at = models.DateTimeField(null=True, blank=True)
+    payout = models.ForeignKey(
+        'bookings.Payout',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='payments',
+    )
     METHOD_CHOICES = [
         ('digital', 'Digital (M-Pesa/Card)'),
         ('cash', 'Cash'),
@@ -398,3 +406,74 @@ class IncidentResolution(models.Model):
             f"{self.booking.booking_number} - "
             f"{self.resolution} ({self.status})"
         )
+
+
+class Payout(models.Model):
+    """One manual payout (M-Pesa or bank) to a company, covering a batch of payments."""
+
+    company = models.ForeignKey(
+        'companies.Company',
+        on_delete=models.PROTECT,
+        related_name='payouts',
+    )
+    reference = models.CharField(max_length=100, unique=True)
+    gross_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    fee_per_seat = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    fee_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    net_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payments_count = models.PositiveIntegerField()
+    breakdown = models.JSONField(default=dict, blank=True)
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'Payout {self.reference} to {self.company_id}: {self.net_amount}'
+
+
+class UnappliedPayment(models.Model):
+    """A successful Paystack charge for a parcel or bus hire that could not be applied."""
+
+    STATUS_CHOICES = [
+        ('retry', 'Retry'),
+        ('refund_due', 'Refund due'),
+        ('refunding', 'Refund claimed'),
+        ('refunded', 'Refund sent'),
+        ('review', 'Needs review'),
+        ('applied', 'Applied'),
+    ]
+
+    reference = models.CharField(max_length=100, unique=True)
+    kind = models.CharField(max_length=10)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=10, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    payload = models.JSONField(default=dict)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='retry')
+    attempts = models.PositiveSmallIntegerField(default=0)
+    refund_status = models.CharField(max_length=20, blank=True)
+    refund_reference = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.reference} [{self.status}]'
+
+
+class PayoutItem(models.Model):
+    """One non-seat item (a completed charter) paid out inside a Payout."""
+
+    payout = models.ForeignKey(Payout, on_delete=models.PROTECT, related_name='items')
+    kind = models.CharField(max_length=10)
+    object_id = models.PositiveBigIntegerField()
+    reference = models.CharField(max_length=100, blank=True)
+    gross_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    fee_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    net_amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['kind', 'object_id'], name='uniq_payout_item'),
+        ]
+
+    def __str__(self):
+        return f'{self.kind} {self.object_id} in payout {self.payout_id}'

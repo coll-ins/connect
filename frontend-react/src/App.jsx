@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -58,9 +57,6 @@ function PassengerRoutes() {
 }
 
 function AppRoutes() {
-  const location = useLocation();
-
-
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />

@@ -1,3 +1,4 @@
+from django.contrib.auth.password_validation import validate_password
 import re
 
 from rest_framework import serializers
@@ -25,7 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
             'name',
         ]
         extra_kwargs = {
-            'password': {'write_only': True, 'min_length': 6},
+            'password': {'write_only': True, 'min_length': 8, 'validators': [validate_password]},
             'email': {'required': False, 'allow_blank': True},
             'role': {'read_only': True},
             'company': {'read_only': True},

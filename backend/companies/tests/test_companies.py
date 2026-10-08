@@ -1,5 +1,9 @@
+import threading
+import unittest
 from decimal import Decimal
 from django.contrib.auth import get_user_model
+from django.db import close_old_connections, connection, connections, transaction
+from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -1176,4 +1180,218 @@ class CompanyFunctionViewsTests(APITestCase):
 
       returned_ids = [trip["id"] for trip in response.data]
       self.assertIn(other_trip.pk, returned_ids)
+
+
+class TripStatusConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Trip Status Race Co",
+        )
+
+        self.manager = User.objects.create_user(
+            username="trip_status_race_manager",
+            password="password123",
+            role="company_manager",
+            company=self.company,
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="Status Race Route",
+            start_point="CBD",
+            end_point="Ngong",
+            price=Decimal("300.00"),
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Trip Status Race Driver",
+            phone_number="+254711111114",
+            bus_number="KAA 114D",
+        )
+
+        self.trip = Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=2),
+            capacity=10,
+            status="scheduled",
+        )
+
+    def tearDown(self):
+        connections.close_all()
+
+    @unittest.skipUnless(
+        connection.vendor == "postgresql",
+        "True row-level locking test requires PostgreSQL.",
+    )
+    def test_invalid_transition_is_rejected_after_locked_state_changes(self):
+        """
+        Prove the endpoint does not rely only on the stale state read
+        performed before entering transaction.atomic().
+
+        The trip is changed to cancelled while another request is
+        already attempting to move it to boarding. The request must
+        re-check the locked current state and return 409.
+        """
+        from rest_framework.test import APIClient
+
+        ready = threading.Event()
+        results = []
+
+        def attempt_boarding():
+            close_old_connections()
+
+            try:
+                client = APIClient()
+                client.force_authenticate(user=self.manager)
+
+                ready.set()
+
+                response = client.patch(
+                    reverse(
+                        "update_trip_status",
+                        kwargs={"trip_id": self.trip.pk},
+                    ),
+                    {"status": "boarding"},
+                    format="json",
+                )
+
+                results.append(response.status_code)
+            except Exception as exc:
+                results.append(f"error: {exc}")
+            finally:
+                connections.close_all()
+
+        close_old_connections()
+
+        with transaction.atomic():
+            locked_trip = (
+                Trip.objects
+                .select_for_update()
+                .get(pk=self.trip.pk)
+            )
+
+            locked_trip.status = "cancelled"
+            locked_trip.save(update_fields=["status"])
+
+            worker = threading.Thread(
+                target=attempt_boarding,
+            )
+            worker.start()
+
+            ready.wait(timeout=5)
+
+            # Keep the row locked until the worker has had a chance
+            # to enter the endpoint and wait on select_for_update().
+            import time
+            time.sleep(0.15)
+
+        worker.join(timeout=5)
+
+        connections.close_all()
+
+        self.assertEqual(
+            results,
+            [409],
+            results,
+        )
+
+        self.trip.refresh_from_db()
+
+        self.assertEqual(
+            self.trip.status,
+            "cancelled",
+        )
+
+
+class RouteHistoryDeletionTests(APITestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Route History Test Co",
+        )
+
+        self.manager = User.objects.create_user(
+            username="route_history_manager",
+            password="password123",
+            phone_number="+254711111119",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.passenger = User.objects.create_user(
+            username="route_history_passenger",
+            password="password123",
+            phone_number="+254700000030",
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Route History Driver",
+            phone_number="+254711111120",
+            bus_number="KAA 120J",
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="Protected History Route",
+            start_point="CBD",
+            end_point="Ngong",
+            price=Decimal("500.00"),
+        )
+
+    def test_route_with_trip_history_cannot_be_deleted(self):
+        Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=3),
+            capacity=10,
+            status="completed",
+        )
+
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.delete(
+            reverse(
+                "manage_route",
+                kwargs={"route_id": self.route.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertTrue(
+            Route.objects.filter(pk=self.route.pk).exists()
+        )
+
+    def test_route_with_booking_history_cannot_be_deleted(self):
+        Booking.objects.create(
+            user=self.passenger,
+            route=self.route,
+            trip=None,
+            total_amount=Decimal("500.00"),
+            status="cancelled",
+        )
+
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.delete(
+            reverse(
+                "manage_route",
+                kwargs={"route_id": self.route.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertTrue(
+            Route.objects.filter(pk=self.route.pk).exists()
+        )
+
 

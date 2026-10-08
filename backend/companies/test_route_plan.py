@@ -64,6 +64,56 @@ class RoutePlanTests(APITestCase):
         self.assertEqual(len(points), 5)
 
     @patch('companies.routing.road_line', return_value=(LINE, 12000.0))
+    def test_existing_curved_route_controls_are_ordered_along_saved_geometry(self, rl):
+        # Existing route bends away from the straight start -> end line.
+        # Along the saved geometry the order is:
+        # S1 -> B -> A -> S2
+        #
+        # Straight-line latitude ordering would incorrectly produce:
+        # S1 -> A -> B -> S2
+        curved = {
+            'type': 'LineString',
+            'coordinates': [
+                [36.80, -1.30],  # start
+                [36.80, -1.25],  # S1
+                [36.78, -1.23],  # B
+                [36.82, -1.24],  # A
+                [36.80, -1.22],  # S2
+                [36.80, -1.20],  # end
+            ],
+        }
+
+        self.route.geometry = curved
+        self.route.start_latitude = Decimal('-1.300000')
+        self.route.start_longitude = Decimal('36.800000')
+        self.route.end_latitude = Decimal('-1.200000')
+        self.route.end_longitude = Decimal('36.800000')
+        self.route.save()
+
+        via = [
+            {'latitude': -1.24, 'longitude': 36.82},  # A
+            {'latitude': -1.23, 'longitude': 36.78},  # B
+        ]
+
+        r = self.post(self.body(via=via))
+
+        self.assertEqual(r.status_code, 200)
+
+        points = rl.call_args[0][0]
+
+        self.assertEqual(
+            points,
+            [
+                (-1.30, 36.80),  # start
+                (-1.25, 36.80),  # S1
+                (-1.23, 36.78),  # B
+                (-1.24, 36.82),  # A
+                (-1.22, 36.80),  # S2
+                (-1.20, 36.80),  # end
+            ],
+        )
+
+    @patch('companies.routing.road_line', return_value=(LINE, 12000.0))
     def test_apply_saves_start_end_and_line(self, rl):
         r = self.post(self.body(apply=True))
         self.assertEqual(r.status_code, 200)

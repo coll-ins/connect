@@ -9,6 +9,21 @@ import '../shared/Services.css';
 
 const STEPS = ['Company', 'Trip', 'When', 'Contact', 'Review'];
 
+function Next({ ok, onNext }) {
+  return (
+    <div className="svc-actions">
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={!ok}
+        onClick={onNext}
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
 export function CharterNew() {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState(null);
@@ -19,7 +34,7 @@ export function CharterNew() {
     company: '', purpose: '', pickup: '', destination: '', depart: '', ret: '',
     count: '', contactName: '', contactPhone: '', notes: '',
   });
-  const earliest = localInput(new Date(Date.now() + 25 * 3600 * 1000));
+  const [earliest] = useState(() => localInput(new Date(Date.now() + 25 * 3600 * 1000)));
 
   useEffect(() => {
     apiRequest('/charters/companies/')
@@ -62,12 +77,6 @@ export function CharterNew() {
       setBusy(false);
     }
   };
-
-  const Next = ({ ok, to }) => (
-    <div className="svc-actions">
-      <button type="button" className="btn btn-primary" disabled={!ok} onClick={() => setStep(to)}>Next</button>
-    </div>
-  );
 
   return (
     <AppShell>
@@ -129,7 +138,7 @@ export function CharterNew() {
                       onChange={(e) => set({ destination: e.target.value })} />
                   </label>
                 </div>
-                <Next ok={tripOk} to={2} />
+                <Next ok={tripOk} onNext={() => setStep(2)} />
               </>
             )}
 
@@ -149,7 +158,7 @@ export function CharterNew() {
                 {f.ret && f.depart && f.ret <= f.depart && (
                   <div className="svc-error" style={{ marginTop: 12 }}>The return must be after the departure.</div>
                 )}
-                <Next ok={whenOk} to={3} />
+                <Next ok={whenOk} onNext={() => setStep(3)} />
               </>
             )}
 
@@ -175,7 +184,7 @@ export function CharterNew() {
                       placeholder="Stops along the way, luggage, special needs…" />
                   </label>
                 </div>
-                <Next ok={contactOk} to={4} />
+                <Next ok={contactOk} onNext={() => setStep(4)} />
               </>
             )}
 

@@ -178,7 +178,10 @@ export function useRoadDriverPosition(target, geometry) {
   const lastGoalAtRef = useRef(0);
   const backCountRef = useRef(0);
   const geomRef = useRef({ geometry, cumulative });
-  geomRef.current = { geometry, cumulative };
+
+  useEffect(() => {
+    geomRef.current = { geometry, cumulative };
+  }, [geometry, cumulative]);
 
   const targetKey = target ? JSON.stringify(target) : null;
 
@@ -247,7 +250,6 @@ export function useRoadDriverPosition(target, geometry) {
     // Reading is BEHIND the bus: ignore it unless it keeps happening.
     backCountRef.current += 1;
     if (backCountRef.current >= 4) jumpTo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetKey, geometry, cumulative]);
 
   // One animation loop for the whole lifetime of the map.

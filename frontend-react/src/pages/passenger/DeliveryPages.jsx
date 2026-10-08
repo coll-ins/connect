@@ -243,7 +243,6 @@ export function DeliveryDetail() {
       verify();
       setParams({}, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const pay = async () => {

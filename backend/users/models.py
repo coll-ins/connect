@@ -57,3 +57,20 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return f"{self.username} - {self.phone_number}"
+
+
+# --- Phone numbers are stored in one canonical format (+254...) -----------------
+from django.db.models.signals import pre_save  # noqa: E402
+
+from .phone import canonical_phone  # noqa: E402
+
+
+def _store_canonical_phone(sender, instance, **kwargs):
+    if getattr(instance, 'phone_number', None):
+        instance.phone_number = canonical_phone(instance.phone_number)
+
+
+pre_save.connect(_store_canonical_phone, sender='users.CustomUser',
+                 dispatch_uid='canonical_phone_user')
+pre_save.connect(_store_canonical_phone, sender='drivers.Driver',
+                 dispatch_uid='canonical_phone_driver')

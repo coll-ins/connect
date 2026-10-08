@@ -1,5 +1,6 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from users.identity import is_driver_account_for
 
 
 class BookingLiveConsumer(AsyncJsonWebsocketConsumer):
@@ -50,7 +51,7 @@ class BookingLiveConsumer(AsyncJsonWebsocketConsumer):
         if (
             driver is not None
             and role == "driver"
-            and driver.phone_number == getattr(user, "phone_number", None)
+            and is_driver_account_for(user, driver)
         ):
             return True
 

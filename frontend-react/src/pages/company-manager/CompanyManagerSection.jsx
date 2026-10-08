@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
 import {
-  ArrowLeft,
   Bus,
   CalendarDays,
   CheckCircle2,
@@ -86,17 +84,6 @@ const sectionConfig = {
   },
 };
 
-const navItems = [
-  ['Company Profile', '/company-manager/companies', Bus],
-  ['Routes', '/company-manager/routes', Route],
-  ['Trips', '/company-manager/trips', CalendarDays],
-  ['Drivers', '/company-manager/drivers', Users],
-  ['Operators', '/company-manager/operators', ShieldCheck],
-  ['Bookings', '/company-manager/bookings', ClipboardList],
-  ['Seats & Capacity', '/company-manager/capacity', Bus],
-  ['Pricing', '/company-manager/pricing', WalletCards],
-  ['Revenue', '/company-manager/revenue', WalletCards],
-];
 
 function Input({ label, ...props }) {
   return (
@@ -129,74 +116,6 @@ function Modal({ title, children, onClose }) {
         {children}
       </div>
     </div>
-  );
-}
-
-function Sidebar({ user, company }) {
-  return (
-    <aside className="company-sidebar">
-      <div className="company-brand">
-        <div className="company-brand-mark">C</div>
-        <div>
-          <strong>CONNECT</strong>
-          <span>Company Manager</span>
-        </div>
-      </div>
-
-      <div className="company-user-identity">
-        <div className="company-user-name">
-          {user?.username || 'Company Manager'}
-        </div>
-        <div className="company-user-role">
-          Company Manager
-        </div>
-        <div className="company-user-company">
-          {company?.name || user?.company_name || 'My Company'}
-        </div>
-      </div>
-
-      <div className="company-nav-label">MANAGEMENT</div>
-
-      <NavLink to="/company-manager" className="company-nav-link">
-        <ArrowLeft size={18} />
-        <span>Overview</span>
-      </NavLink>
-
-      {navItems.slice(0, 6).map(([label, path, Icon]) => (
-        <NavLink
-          key={path}
-          to={path}
-          className={({ isActive }) =>
-            `company-nav-link ${isActive ? 'active' : ''}`
-          }
-        >
-          <Icon size={18} />
-          <span>{label}</span>
-        </NavLink>
-      ))}
-
-      <div className="company-nav-label">OPERATIONS</div>
-
-      {navItems.slice(6).map(([label, path, Icon]) => (
-        <NavLink
-          key={path}
-          to={path}
-          className={({ isActive }) =>
-            `company-nav-link ${isActive ? 'active' : ''}`
-          }
-        >
-          <Icon size={18} />
-          <span>{label}</span>
-        </NavLink>
-      ))}
-
-      <div className="company-nav-label">SYSTEM</div>
-
-      <NavLink to="/company-manager/settings" className="company-nav-link">
-        <ShieldCheck size={18} />
-        <span>Settings</span>
-      </NavLink>
-    </aside>
   );
 }
 
@@ -479,14 +398,21 @@ export default function CompanyManagerSection({ section }) {
   };
 
   const deleteDriver = async (driver) => {
-    if (!window.confirm(`Delete ${driver.name}?`)) return;
+    if (!window.confirm(
+      `Deactivate ${driver.name}? Their trip and booking history will be preserved.`
+    )) return;
 
     try {
       await apiRequest(`/drivers/${driver.id}/`, {
-        method: 'DELETE',
+        method: 'PATCH',
+        body: {
+          is_available: false,
+        },
       });
 
-      setMessage('Driver deleted.');
+      setMessage(
+        'Driver deactivated. Historical records were preserved.'
+      );
       load();
     } catch (err) {
       setError(err.message);
@@ -797,10 +723,6 @@ export default function CompanyManagerSection({ section }) {
                 </div>
               )}
 
-              {section === 'routes' && companyId && (
-                <NavLink to="/company-manager/route-planner" className="btn btn-primary">Open the route planner</NavLink>
-              )}
-
               {section === 'trips' && (
                 <div className="company-card-grid">
                   {data.map((trip) => (
@@ -884,8 +806,11 @@ export default function CompanyManagerSection({ section }) {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => deleteDriver(driver)}
                           className="company-danger-button"
+                          title="Deactivate driver"
+                          aria-label={`Deactivate ${driver.name}`}
                         >
                           <Trash2 size={15} />
                         </button>

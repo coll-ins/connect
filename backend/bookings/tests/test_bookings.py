@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import close_old_connections, connection, connections
+from django.db import close_old_connections, connection, connections, transaction
 from django.urls import reverse
 from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from bookings.models import Booking, Payment, BoardingEvent, Incident, BookingHold, IncidentResolution
 from companies.models import Company, Route, Trip
@@ -451,6 +451,9 @@ class BookingsAppTests(APITestCase):
         self.booking.verification_pin = "1234"
         self.booking.save()
 
+        self.trip.status = "boarding"
+        self.trip.save(update_fields=["status"])
+
         Payment.objects.create(
             booking=self.booking,
             provider_reference="PAY123456",
@@ -498,6 +501,9 @@ class BookingsAppTests(APITestCase):
         self.booking.status = "confirmed"
         self.booking.verification_pin = "1234"
         self.booking.save()
+
+        self.trip.status = "boarding"
+        self.trip.save(update_fields=["status"])
 
         Payment.objects.create(
             booking=self.booking,
@@ -1443,6 +1449,172 @@ class BookingsAppTests(APITestCase):
             80000,
         )
 
+
+
+class ConcurrentRefundTests(TransactionTestCase):
+
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Concurrent Refund Co"
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Refund Driver",
+            phone_number="+254700000400",
+            bus_number="KAA 333D",
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="Nairobi - Kisumu",
+            price=Decimal("800.00"),
+        )
+
+        self.trip = Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=3),
+            capacity=10,
+            status="scheduled",
+        )
+
+        self.passenger = User.objects.create_user(
+            username="concurrent_refund_user",
+            password="password123",
+            phone_number="+254700000401",
+        )
+
+        self.booking = Booking.objects.create(
+            user=self.passenger,
+            route=self.route,
+            trip=self.trip,
+            booking_number="REFUND-RACE-001",
+            total_amount=Decimal("800.00"),
+            status="confirmed",
+        )
+
+        self.payment = Payment.objects.create(
+            booking=self.booking,
+            provider_reference="PAYSTACK_REFUND_RACE",
+            amount=Decimal("800.00"),
+            method="digital",
+            status="confirmed",
+        )
+
+        BookingHold.objects.create(
+            booking=self.booking,
+            amount=Decimal("800.00"),
+            status="held",
+        )
+
+    def tearDown(self):
+        connections.close_all()
+
+    def _refund(self, results):
+        from bookings.services import settle_booking_fault
+        import time
+
+        close_old_connections()
+
+        try:
+            # Small delay makes it much more likely that a second
+            # thread reaches the refund claim while the first request
+            # is still waiting on the mocked external provider.
+            time.sleep(0.02)
+
+            amount = settle_booking_fault(
+                self.booking,
+                "passenger",
+            )
+
+            results.append(
+                ("ok", amount)
+            )
+
+        except Exception as exc:
+            results.append(
+                ("error", str(exc))
+            )
+
+        finally:
+            connections.close_all()
+
+    @unittest.skipUnless(
+        connection.vendor == "postgresql",
+        "True row-level locking test requires PostgreSQL.",
+    )
+    @patch("bookings.services.requests.post")
+    def test_concurrent_refund_only_calls_paystack_once(
+        self,
+        mock_post,
+    ):
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            "status": True,
+            "data": {
+                "id": 987654,
+                "status": "pending",
+            },
+        }
+
+        results = []
+
+        thread_a = threading.Thread(
+            target=self._refund,
+            args=(results,),
+        )
+
+        thread_b = threading.Thread(
+            target=self._refund,
+            args=(results,),
+        )
+
+        thread_a.start()
+        thread_b.start()
+        thread_a.join()
+        thread_b.join()
+
+        self.assertEqual(
+            len(results),
+            2,
+        )
+
+        self.assertTrue(
+            all(
+                result[0] == "ok"
+                for result in results
+            ),
+            results,
+        )
+
+        self.assertEqual(
+            mock_post.call_count,
+            1,
+        )
+
+        payment = Payment.objects.get(
+            pk=self.payment.pk
+        )
+
+        self.assertEqual(
+            payment.refund_amount,
+            Decimal("400.00"),
+        )
+
+        self.assertEqual(
+            payment.refund_status,
+            "pending",
+        )
+
+        hold = BookingHold.objects.get(
+            booking=self.booking
+        )
+
+        self.assertEqual(
+            hold.refunded_amount,
+            Decimal("400.00"),
+        )
 
 class LastSeatBookingTests(APITestCase):
     def setUp(self):
@@ -2453,3 +2625,347 @@ class IncidentResolutionTests(APITestCase):
             ).count(),
             1,
         )
+
+class ConcurrentDriverAssignmentTests(TransactionTestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Concurrent Assignment Co",
+        )
+
+        self.manager = User.objects.create_user(
+            username="concurrent_assignment_manager",
+            password="password123",
+            phone_number="+254700000025",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.target_driver = Driver.objects.create(
+            company=self.company,
+            name="Target Driver",
+            phone_number="+254711111115",
+            bus_number="KAA 115E",
+            is_available=True,
+        )
+
+        self.other_driver_a = Driver.objects.create(
+            company=self.company,
+            name="Other Driver A",
+            phone_number="+254711111116",
+            bus_number="KAA 116F",
+            is_available=True,
+        )
+
+        self.other_driver_b = Driver.objects.create(
+            company=self.company,
+            name="Other Driver B",
+            phone_number="+254711111117",
+            bus_number="KAA 117G",
+            is_available=True,
+        )
+
+        self.route_a = Route.objects.create(
+            company=self.company,
+            name="Assignment Race A",
+            start_point="CBD",
+            end_point="Ngong",
+            price=Decimal("300.00"),
+        )
+
+        self.route_b = Route.objects.create(
+            company=self.company,
+            name="Assignment Race B",
+            start_point="CBD",
+            end_point="Karen",
+            price=Decimal("350.00"),
+        )
+
+        departure = timezone.now() + timezone.timedelta(hours=3)
+
+        self.trip_a = Trip.objects.create(
+            route=self.route_a,
+            driver=self.other_driver_a,
+            departure_at=departure,
+            capacity=10,
+            status="scheduled",
+        )
+
+        self.trip_b = Trip.objects.create(
+            route=self.route_b,
+            driver=self.other_driver_b,
+            departure_at=departure,
+            capacity=10,
+            status="scheduled",
+        )
+
+        self.passenger_a = User.objects.create_user(
+            username="assignment_passenger_a",
+            password="password123",
+            phone_number="+254700000026",
+        )
+
+        self.passenger_b = User.objects.create_user(
+            username="assignment_passenger_b",
+            password="password123",
+            phone_number="+254700000027",
+        )
+
+        self.booking_a = Booking.objects.create(
+            user=self.passenger_a,
+            route=self.route_a,
+            trip=self.trip_a,
+            total_amount=Decimal("300.00"),
+            status="pending",
+        )
+
+        self.booking_b = Booking.objects.create(
+            user=self.passenger_b,
+            route=self.route_b,
+            trip=self.trip_b,
+            total_amount=Decimal("350.00"),
+            status="pending",
+        )
+
+    def tearDown(self):
+        connections.close_all()
+
+    def _assign(self, booking_id, results, barrier):
+        close_old_connections()
+
+        try:
+            client = APIClient()
+            client.force_authenticate(user=self.manager)
+
+            barrier.wait()
+
+            response = client.post(
+                reverse(
+                    "bookings:assign-driver",
+                    kwargs={"booking_id": booking_id},
+                ),
+                {"driver_id": self.target_driver.id},
+                format="json",
+            )
+
+            results.append(response.status_code)
+
+        except Exception as exc:
+            results.append(f"error: {exc}")
+
+        finally:
+            connections.close_all()
+
+    @unittest.skipUnless(
+        connection.vendor == "postgresql",
+        "True row-level locking test requires PostgreSQL.",
+    )
+    def test_driver_cannot_be_assigned_to_two_same_time_trips_concurrently(self):
+        results = []
+        barrier = threading.Barrier(2)
+
+        thread_a = threading.Thread(
+            target=self._assign,
+            args=(
+                self.booking_a.id,
+                results,
+                barrier,
+            ),
+        )
+
+        thread_b = threading.Thread(
+            target=self._assign,
+            args=(
+                self.booking_b.id,
+                results,
+                barrier,
+            ),
+        )
+
+        thread_a.start()
+        thread_b.start()
+        thread_a.join()
+        thread_b.join()
+
+        connections.close_all()
+
+        self.assertEqual(
+            sorted(results),
+            [
+                status.HTTP_200_OK,
+                status.HTTP_409_CONFLICT,
+            ],
+            results,
+        )
+
+        self.trip_a.refresh_from_db()
+        self.trip_b.refresh_from_db()
+
+        assigned_count = sum(
+            [
+                self.trip_a.driver_id == self.target_driver.id,
+                self.trip_b.driver_id == self.target_driver.id,
+            ]
+        )
+
+        self.assertEqual(
+            assigned_count,
+            1,
+        )
+
+        self.assertEqual(
+            Trip.objects.filter(
+                driver=self.target_driver,
+                departure_at=self.trip_a.departure_at,
+                status__in={
+                    "scheduled",
+                    "boarding",
+                    "departed",
+                },
+            ).count(),
+            1,
+        )
+
+
+class CancellationTripStateRaceTests(TransactionTestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Cancellation Race Co",
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Cancellation Race Driver",
+            phone_number="+254711111118",
+            bus_number="KAA 118H",
+        )
+
+        self.manager = User.objects.create_user(
+            username="cancellation_race_manager",
+            password="password123",
+            phone_number="+254700000028",
+            company=self.company,
+            role="company_manager",
+        )
+
+        self.passenger = User.objects.create_user(
+            username="cancellation_race_passenger",
+            password="password123",
+            phone_number="+254700000029",
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="Cancellation Race Route",
+            start_point="CBD",
+            end_point="Ngong",
+            price=Decimal("800.00"),
+        )
+
+        self.trip = Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=3),
+            capacity=10,
+            status="scheduled",
+        )
+
+        self.booking = Booking.objects.create(
+            user=self.passenger,
+            route=self.route,
+            trip=self.trip,
+            total_amount=Decimal("800.00"),
+            status="confirmed",
+            verification_pin="1234",
+        )
+
+    def tearDown(self):
+        connections.close_all()
+
+    @unittest.skipUnless(
+        connection.vendor == "postgresql",
+        "True row-level locking test requires PostgreSQL.",
+    )
+    def test_cancellation_rechecks_trip_state_after_trip_lock(self):
+        """
+        Hold the Trip lock, change the trip to boarding, then let
+        cancellation proceed. Cancellation must see the locked/current
+        Trip state and reject the request.
+        """
+        results = []
+        ready = threading.Event()
+
+        def cancel():
+            close_old_connections()
+
+            try:
+                client = APIClient()
+                client.force_authenticate(user=self.passenger)
+
+                ready.set()
+
+                response = client.post(
+                    reverse(
+                        "bookings:cancel-booking",
+                        kwargs={"booking_id": self.booking.id},
+                    ),
+                    {
+                        "fault_party": "passenger",
+                    },
+                    format="json",
+                )
+
+                results.append(response.status_code)
+
+            except Exception as exc:
+                results.append(
+                    f"error: {exc}"
+                )
+
+            finally:
+                connections.close_all()
+
+        close_old_connections()
+
+        with transaction.atomic():
+            locked_trip = (
+                Trip.objects
+                .select_for_update()
+                .get(pk=self.trip.pk)
+            )
+
+            locked_trip.status = "boarding"
+            locked_trip.save(update_fields=["status"])
+
+            worker = threading.Thread(
+                target=cancel,
+            )
+            worker.start()
+
+            ready.wait(timeout=5)
+
+            import time
+            time.sleep(0.15)
+
+        worker.join(timeout=5)
+
+        connections.close_all()
+
+        self.assertEqual(
+            results,
+            [409],
+            results,
+        )
+
+        self.booking.refresh_from_db()
+        self.trip.refresh_from_db()
+
+        self.assertEqual(
+            self.trip.status,
+            "boarding",
+        )
+
+        self.assertEqual(
+            self.booking.status,
+            "confirmed",
+        )
+

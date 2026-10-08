@@ -136,7 +136,9 @@ class ParcelPaymentTests(APITestCase):
         self.assertEqual(self.hook(amount=100).status_code, 200)
         self.assertEqual(self.hook(currency='USD').status_code, 200)
         self.assertEqual(self.status(), 'pending_payment')
-        self.assertEqual(alert.call_count, 2)
+        # Both deliveries carry the same reference (one Paystack transaction),
+        # so the admins are alerted once, not once per delivery.
+        self.assertEqual(alert.call_count, 1)
 
     @patch('notifications.sms.send_admin_alert_sms')
     def test_payment_for_cancelled_parcel_alerts_admin(self, alert):

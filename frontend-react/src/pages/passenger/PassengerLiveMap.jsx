@@ -125,62 +125,6 @@ function formatEta(minutes) {
   return `${Math.round(minutes)} min`;
 }
 
-function useAnimatedPosition(target) {
-  const [pos, setPos] = useState(target);
-  const currentRef = useRef(target);
-  const lastChangeRef = useRef(0);
-
-  useEffect(() => {
-    if (!target) return undefined;
-
-    const startedAt = performance.now();
-    const gap = lastChangeRef.current
-      ? startedAt - lastChangeRef.current
-      : 10000;
-
-    lastChangeRef.current = startedAt;
-
-    // Glide for as long as the gap since the previous update.
-    const duration = Math.min(Math.max(gap, 800), 12000);
-    const from = currentRef.current;
-    const jump = from ? haversineKm(from, target) : null;
-
-    // First fix, or a big jump: place the bus there, don't slide.
-    if (!from || jump == null || jump > 2) {
-      currentRef.current = target;
-      const id = window.requestAnimationFrame(() => setPos(target));
-      return () => window.cancelAnimationFrame(id);
-    }
-
-    let frame = 0;
-    let lastPaint = 0;
-
-    const tick = (now) => {
-      const t = Math.min(1, (now - startedAt) / duration);
-
-      if (now - lastPaint > 80 || t === 1) {
-        lastPaint = now;
-
-        const next = [
-          from[0] + (target[0] - from[0]) * t,
-          from[1] + (target[1] - from[1]) * t,
-        ];
-
-        currentRef.current = next;
-        setPos(next);
-      }
-
-      if (t < 1) frame = window.requestAnimationFrame(tick);
-    };
-
-    frame = window.requestAnimationFrame(tick);
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [target]);
-
-  return target ? pos || target : null;
-}
-
 function MapResize() {
   const map = useMap();
 
@@ -205,28 +149,6 @@ function buildCumulative(geometry) {
   return cum;
 }
 
-function snapToRoute(geometry, point) {
-  if (!geometry || geometry.length < 2 || !point) return null;
-  const kx = 111.32 * Math.cos((point[0] * Math.PI) / 180);
-  const ky = 110.574;
-  let best = null;
-
-  for (let i = 0; i < geometry.length - 1; i += 1) {
-    const a = geometry[i];
-    const b = geometry[i + 1];
-    const ax = (a[1] - point[1]) * kx, ay = (a[0] - point[0]) * ky;
-    const bx = (b[1] - point[1]) * kx, by = (b[0] - point[0]) * ky;
-    const dx = bx - ax, dy = by - ay;
-    const len2 = dx * dx + dy * dy;
-    const t = len2
-      ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2))
-      : 0;
-    const d = Math.hypot(ax + t * dx, ay + t * dy);
-    if (!best || d < best.distKm) best = { distKm: d, index: i, t };
-  }
-  return best;
-}
-
 function pointAtDistance(geometry, cum, s) {
   const total = cum[cum.length - 1];
   const d = Math.max(0, Math.min(total, s));
@@ -249,69 +171,6 @@ function pointAtDistance(geometry, cum, s) {
 }
 
 
-
-function useRouteAnimatedPosition(target, geometry) {
-  const cum = useMemo(() => buildCumulative(geometry), [geometry]);
-  const [state, setState] = useState({ position: target, heading: 0 });
-  const sRef = useRef(null);
-  const lastChangeRef = useRef(0);
-
-  useEffect(() => {
-    if (!target) return undefined;
-
-    const snap = cum ? snapToRoute(geometry, target) : null;
-
-    // Not on the route (or no route): show raw GPS, no snapping.
-    if (!snap || snap.distKm > 0.15) {
-      sRef.current = null;
-      setState((prev) => ({ position: target, heading: prev.heading }));
-      return undefined;
-    }
-
-    const toS =
-      cum[snap.index] + snap.t * (cum[snap.index + 1] - cum[snap.index]);
-    const fromS = sRef.current ?? toS;
-
-    const startedAt = performance.now();
-    const gap = lastChangeRef.current
-      ? startedAt - lastChangeRef.current
-      : 5000;
-    lastChangeRef.current = startedAt;
-    const duration = Math.min(Math.max(gap, 800), 12000);
-
-    // Big jump: place it, don't slide 2 km across the map.
-    if (Math.abs(toS - fromS) > 2) {
-      sRef.current = toS;
-      setState(pointAtDistance(geometry, cum, toS));
-      return undefined;
-    }
-
-    let frame = 0;
-    let lastPaint = 0;
-
-    const tick = (now) => {
-      const t = Math.min(1, (now - startedAt) / duration);
-      const s = fromS + (toS - fromS) * t; // constant speed, like Uber
-      sRef.current = s;
-
-      if (now - lastPaint > 33 || t === 1) {
-        lastPaint = now;
-        const next = pointAtDistance(geometry, cum, s);
-        setState((prev) => ({
-          position: next.position,
-          // keep old heading if barely moving or reversing
-          heading: next.heading,
-        }));
-      }
-      if (t < 1) frame = window.requestAnimationFrame(tick);
-    };
-
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
-  }, [target, geometry, cum]);
-
-  return state;
-}
 
 function useDemoDriver(geometry) {
   const enabled =
@@ -492,7 +351,7 @@ export default function PassengerLiveMap({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [following, setFollowing] = useState(false);
-  const driverHistoryRef = useRef([]);
+  const [driverHistory, setDriverHistory] = useState([]);
   const pickupAlertSentRef = useRef(false);
 
 
@@ -512,15 +371,15 @@ export default function PassengerLiveMap({
       const now = Date.now();
 
       if (nextDriver) {
-        driverHistoryRef.current = [
-          ...driverHistoryRef.current.filter(
+        setDriverHistory((previous) => [
+          ...previous.filter(
             (item) => now - item.time < 15 * 60 * 1000
           ),
           {
             position: nextDriver,
             time: now,
           },
-        ].slice(-8);
+        ].slice(-8));
       }
 
       setLive({ ...data, _fetchedAt: now });
@@ -603,8 +462,6 @@ export default function PassengerLiveMap({
     [live]
   );
 
-  const geometryCacheRef = useRef({ key: '', positions: [] });
-
   const geometry = useMemo(() => {
     const source =
       bookingRouteGeometry ||
@@ -617,17 +474,7 @@ export default function PassengerLiveMap({
       live?.route?.geometry ||
       live?.route?.route_geometry;
 
-    const positions = routePositions(source);
-    const n = positions.length;
-    const key = n
-      ? [n, positions[0]?.join(','), positions[n - 1]?.join(','), positions[n >> 1]?.join(',')].join('|')
-      : '';
-
-    if (geometryCacheRef.current.key === key) {
-      return geometryCacheRef.current.positions;
-    }
-    geometryCacheRef.current = { key, positions };
-    return positions;
+    return routePositions(source);
   }, [bookingRouteGeometry, live]);
 
 
@@ -903,30 +750,12 @@ export default function PassengerLiveMap({
     pickupRouteIndex,
   ]);
 
-  const distanceToDestinationKm = useMemo(() => {
-    if (
-      geometry.length < 2 ||
-      driverRouteIndex < 0
-    ) {
-      return null;
-    }
-
-    return routeDistanceKm(
-      geometry,
-      driverRouteIndex,
-      destinationRouteIndex
-    );
-  }, [
-    geometry,
-    driverRouteIndex,
-    destinationRouteIndex,
-  ]);
 
   const remainingDistanceKm =
     busUnreliable || busPastPickup ? null : distanceToPickupKm;
 
   const driverSpeedKmh = useMemo(() => {
-    const history = driverHistoryRef.current;
+    const history = driverHistory;
 
     if (history.length < 2) {
       return 25;
@@ -954,7 +783,7 @@ export default function PassengerLiveMap({
     const speed = distance / elapsedHours;
 
     return Math.min(Math.max(speed, 8), 80);
-  }, [driverPosition]);
+  }, [driverHistory, driverPosition]);
 
   const etaMinutes = useMemo(() => {
     if (

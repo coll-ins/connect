@@ -51,8 +51,31 @@ a.svc-item:hover { transform: translateY(-2px); border-color: rgba(98,217,175,.3
 .svc-pick-meta { color: #b9f7df; font-weight: 800; font-size: 13px; white-space: nowrap; }
 
 /* ---- Route planner ---- */
-.rp-routes { max-height: 230px; overflow-y: auto; margin-bottom: 0; padding-right: 4px; }
-.rp-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.rp-routes {
+  max-height: none;
+  overflow: visible;
+  margin-bottom: 18px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rp-routes .svc-pick {
+  min-height: 62px;
+  text-align: left;
+}
+
+.rp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.rp-grid > .svc-card:first-child {
+  min-width: 0;
+}
 .rp-modes { display: flex; gap: 8px; flex-wrap: wrap; }
 .rp-mode { padding: 9px 14px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; color: #cbd8e6; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); }
 .rp-mode.active { color: #04130e; background: #62d9af; border-color: #62d9af; }
@@ -66,3 +89,115 @@ a.svc-item:hover { transform: translateY(-2px); border-color: rgba(98,217,175,.3
 .rp-warn { padding: 10px 12px; border-radius: 12px; color: #fde68a; background: rgba(120,83,15,.28); border: 1px solid rgba(245,189,79,.35); font-size: 13px; }
 .rp-stats { display: flex; gap: 14px; flex-wrap: wrap; color: #b9f7df; font-weight: 700; font-size: 13px; }
 @media (max-width: 900px) { .rp-grid { grid-template-columns: 1fr; } .rp-map { height: 380px; } }
+
+/* ============================================================
+   CONNECT ROUTE PLANNER — FINAL POLISH
+   ============================================================ */
+
+.rp-routes .svc-pick {
+  border-radius: 14px;
+  transition:
+    border-color .18s ease,
+    background .18s ease,
+    transform .18s ease,
+    box-shadow .18s ease;
+}
+
+.rp-routes .svc-pick:hover {
+  transform: translateY(-1px);
+}
+
+.rp-routes .svc-pick.selected {
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, .18),
+    0 10px 30px rgba(0, 0, 0, .18);
+}
+
+.rp-map {
+  height: 600px;
+  margin-top: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow:
+    0 18px 45px rgba(0,0,0,.20),
+    inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.rp-map .leaflet-container {
+  background: #07111d;
+}
+
+.rp-side {
+  position: sticky;
+  top: 18px;
+  gap: 14px;
+}
+
+.rp-side .svc-card {
+  border-radius: 16px;
+}
+
+.rp-modes {
+  padding: 3px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
+.rp-mode {
+  border: 0;
+  background: transparent;
+  padding: 9px 13px;
+}
+
+.rp-mode:hover {
+  background: rgba(255,255,255,.06);
+}
+
+.rp-mode.active {
+  box-shadow: 0 5px 18px rgba(98,217,175,.14);
+}
+
+.rp-hint {
+  line-height: 1.55;
+}
+
+.rp-stats {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(98,217,175,.055);
+  border: 1px solid rgba(98,217,175,.10);
+}
+
+@media (max-width: 1150px) {
+  .rp-routes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rp-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rp-side {
+    position: static;
+  }
+}
+
+@media (max-width: 700px) {
+  .rp-routes {
+    grid-template-columns: 1fr;
+  }
+
+  .rp-map {
+    height: 430px;
+  }
+
+  .rp-modes {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .rp-mode {
+    white-space: nowrap;
+  }
+}

@@ -23,7 +23,7 @@ const nav = [
   ["/driver/trips", "Today's Trips", CalendarDays],
   ["/driver/passengers", "Passengers", Users],
   ["/driver/location", "Live Location", MapPin],
-  ["/driver/boarding", "Boarding", CheckCircle2],
+  ["/driver/boarding", "Pickup Manifest", CheckCircle2],
   ["/driver/jobs", "Parcels & Hires", Package],
   ["/driver/profile", "Profile", User],
 ];
@@ -32,13 +32,15 @@ function pageTitle(path) {
   if (path.startsWith("/driver/trips")) return "Today's Trips";
   if (path.startsWith("/driver/passengers")) return "Passengers";
   if (path.startsWith("/driver/location")) return "Live Location";
-  if (path.startsWith("/driver/boarding")) return "Boarding";
+  if (path.startsWith("/driver/boarding")) return "Pickup Manifest";
   if (path.startsWith("/driver/jobs")) return "Parcels & Hires";
   if (path.startsWith("/driver/profile")) return "Profile";
   return "Overview";
 }
 
 function getDriverName(driver) {
+
+
   return (
     driver?.user?.username ||
     driver?.username ||
@@ -56,6 +58,66 @@ function getCompanyName(driver) {
 }
 
 export default function DriverPortal() {
+
+  const verifyPassenger = async (booking) => {
+    if (!booking?.booking_id) return;
+
+    if (booking.status === "completed") {
+      window.alert("This passenger has already been verified.");
+      return;
+    }
+
+    if (booking.status !== "confirmed") {
+      window.alert(
+        `This booking cannot be verified while its status is "${
+          booking.status || "unknown"
+        }".`
+      );
+      return;
+    }
+
+    const passengerName =
+      booking.passenger?.name ||
+      booking.passenger_name ||
+      booking.passenger ||
+      `Booking #${booking.booking_id}`;
+
+    const confirmed = window.confirm(
+      `Passenger name: ${passengerName}\n\nIs this your name?`
+    );
+
+    if (!confirmed) return;
+
+    const pin = window.prompt(
+      `Ask ${passengerName} for their boarding PIN, then enter it here:`
+    );
+
+    if (!pin || !pin.trim()) return;
+
+    try {
+      await apiRequest(
+        `/bookings/${booking.booking_id}/verify-boarding/`,
+        {
+          method: "POST",
+          body: {
+            boarding_pin: pin.trim(),
+          },
+        },
+      );
+
+      window.alert(
+        `${passengerName} has been verified successfully.`
+      );
+
+      window.location.reload();
+    } catch (err) {
+      window.alert(
+        err?.message ||
+          "Unable to verify this passenger. Please check the PIN and try again."
+      );
+    }
+  };
+
   const location = useLocation();
   const { logout } = useAuth();
 
@@ -493,7 +555,7 @@ export default function DriverPortal() {
             </section>
           )}
 
-          {/* BOARDING */}
+          {/* PICKUP MANIFEST */}
           {active === "/driver/boarding" && (
             <section className="driver-panel">
 
@@ -503,18 +565,18 @@ export default function DriverPortal() {
                     TRIP OPERATIONS
                   </span>
 
-                  <h2>Boarding Verification</h2>
+                  <h2>Pickup Manifest</h2>
                 </div>
               </div>
 
               <p className="driver-panel-description">
-                Select a passenger booking to verify
-                boarding.
+                Passengers assigned to this trip and where
+                they need to be picked up.
               </p>
 
               {bookings.length === 0 ? (
                 <div className="driver-empty">
-                  No passenger bookings available.
+                  No passenger pickups assigned.
                 </div>
               ) : (
                 <div className="driver-list">
@@ -529,13 +591,42 @@ export default function DriverPortal() {
                       </div>
 
                       <div className="driver-list-content">
-                        <strong>
-                          {b.passenger ||
-                            `Booking #${b.booking_id}`}
-                        </strong>
+                        <button
+                          type="button"
+                          onClick={() => verifyPassenger(b)}
+                          disabled={b.status === "completed"}
+                          style={{
+                            border: "0",
+                            padding: 0,
+                            background: "transparent",
+                            color: "inherit",
+                            font: "inherit",
+                            fontWeight: 700,
+                            textAlign: "left",
+                            cursor:
+                              b.status === "completed"
+                                ? "default"
+                                : "pointer",
+                            opacity:
+                              b.status === "completed" ? 0.65 : 1,
+                          }}
+                        >
+                          {b.passenger || "Passenger"}
+                        </button>
 
                         <span>
-                          Booking #{b.booking_id}
+                          Pickup:{" "}
+                          {b.pickup_stage_name ||
+                            b.pickup_location ||
+                            "Not specified"}
+                        </span>
+
+                        <span>
+                          Seats: {b.seats || 1}
+                          {" • "}
+                          {b.status === "completed"
+                            ? "Verified"
+                            : b.status || "pending"}
                         </span>
                       </div>
                     </article>

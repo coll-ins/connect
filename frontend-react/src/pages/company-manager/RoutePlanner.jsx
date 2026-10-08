@@ -35,7 +35,6 @@ function Fit({ points, tick }) {
   useEffect(() => {
     if (points.length > 1) map.fitBounds(points, { padding: [30, 30], maxZoom: 15 });
     else if (points.length === 1) map.setView(points[0], 14);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick, map]);
   return null;
 }
@@ -79,12 +78,6 @@ export default function RoutePlanner() {
     } catch (e) { setError(e.message); }
   }, [routeId]);
 
-  useEffect(() => { loadRoutes(); }, [loadRoutes]);
-  useEffect(() => {
-    if (!routeId) { setStages([]); return; }
-    loadStages(true);
-  }, [routeId, loadStages]);
-
   const choose = (r) => {
     setRouteId(String(r.id));
     setDraft(null); setOffRoute([]); setVia([]); setPending(null);
@@ -95,6 +88,19 @@ export default function RoutePlanner() {
     setEnd(el !== null && eg !== null ? { name: r.end_point || '', latitude: el, longitude: eg } : null);
     setTick((t) => t + 1);
   };
+
+  useEffect(() => { loadRoutes(); }, [loadRoutes]);
+
+  useEffect(() => {
+    if (!routes?.length || routeId) return;
+    choose(routes[0]);
+  }, [routes, routeId]);
+
+  useEffect(() => {
+    if (!routeId) { setStages([]); return; }
+    loadStages(true);
+  }, [routeId, loadStages]);
+
 
   const onPick = (ll) => {
     setError(''); setNote('');

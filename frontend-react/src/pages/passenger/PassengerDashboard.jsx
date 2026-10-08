@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import AppShell from '../../components/layout/AppShell';
-import ConnectMap from '../../components/maps/ConnectMap';
 import PassengerLiveMap from './PassengerLiveMap';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
 import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
@@ -299,7 +298,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     setJourneyMode(j.mode);
     setCompany(j.company);
     setRoute(j.route);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
   // Each journey step becomes a history entry.
@@ -312,7 +310,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if (target !== current.search) {
       navigate({ pathname: current.pathname, search: target });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journeyStep, journeyMode, company, route]);
 
   const selectedCompany = useMemo(
@@ -354,12 +351,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     setSelectedStage(stage);
     setOtherPickup('');
     setJourneyStep('trips');
-  };
-
-  const chooseOtherPickup = () => {
-    setError('');
-    setSelectedStage(null);
-    setOtherPickup('');
   };
 
   const goBack = () => {

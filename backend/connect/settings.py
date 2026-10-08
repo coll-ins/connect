@@ -215,7 +215,21 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     # Start low; raise to a year once HTTPS is confirmed working.
-    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '3600'))
+    SECURE_HSTS_SECONDS = int(
+        os.getenv('SECURE_HSTS_SECONDS', '3600')
+    )
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = (
+        os.getenv(
+            'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+            'False'
+        ).lower() == 'true'
+    )
+    SECURE_HSTS_PRELOAD = (
+        os.getenv(
+            'SECURE_HSTS_PRELOAD',
+            'False'
+        ).lower() == 'true'
+    )
 
 
 # Self-service platform-admin signup. On for local dev, off by default in
@@ -226,9 +240,69 @@ ALLOW_ADMIN_SIGNUP = os.getenv(
 
 
 # Throttle counters must be shared across workers and survive restarts.
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'django_cache',
+REDIS_CACHE_URL = (
+    os.getenv('REDIS_CACHE_URL', '').strip()
+    or _REDIS_URL
+)
+
+if REDIS_CACHE_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': (
+                'django.core.cache.backends.redis.RedisCache'
+            ),
+            'LOCATION': REDIS_CACHE_URL,
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': (
+                'django.core.cache.backends.db.DatabaseCache'
+            ),
+            'LOCATION': 'django_cache',
+        }
+    }
+
+
+# --- round-2 hardening ---
+# Sessions + CSRF are the only auth in use (rest_framework.authtoken is not installed).
+REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] = [
+    'rest_framework.authentication.SessionAuthentication',
+]
+# 0 = never trust X-Forwarded-For. Set NUM_PROXIES=1 in production behind nginx.
+REST_FRAMEWORK['NUM_PROXIES'] = int(os.getenv('NUM_PROXIES', '0'))
+
+if not DEBUG:
+    # Private-network CORS is for local development only.
+    CORS_ALLOWED_ORIGIN_REGEXES = []
+    for _required in ('ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL'):
+        if not os.getenv(_required):
+            raise ValueError(f'CRITICAL: {_required} must be set in production.')
+    if not ADMIN_ALERT_PHONE_NUMBERS:
+        raise ValueError(
+            'CRITICAL: ADMIN_ALERT_PHONE_NUMBERS must be set in production '
+            '(unapplied payments are reported there).'
+        )
+
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '10/hour'
+
+from decimal import Decimal
+PLATFORM_FEE_PER_SEAT = Decimal("20.00")  # KES the platform keeps per seat
+PLATFORM_CHARTER_FEE_PERCENT = Decimal("10.00")  # percent of a completed bus-hire quote kept by the platform
+PLATFORM_PARCEL_FEE_PERCENT = Decimal("10.00")  # percent of a delivered parcel price kept by the platform
+
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 8}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
+import sys
+if 'test' in sys.argv:
+    # Tests only: fast hashing makes the suite several times quicker.
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
+MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
+PENDING_BOOKING_TTL_MINUTES = 20    # expire_pending_bookings cancels unpaid bookings older than this

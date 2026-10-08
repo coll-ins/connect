@@ -19,6 +19,7 @@ from users.permissions import (
 from wallets.models import Wallet
 from .models import Company, Route, Trip, PickupStage
 from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
+from users.identity import is_driver_account_for
 
 
 @api_view(['GET'])
@@ -316,7 +317,37 @@ def manage_route(request, route_id):
         )
 
     if request.method == 'DELETE':
-        route.delete()
+        try:
+            with transaction.atomic():
+                locked_route = (
+                    Route.objects
+                    .select_for_update()
+                    .get(pk=route.pk)
+                )
+
+                has_trip_history = locked_route.trips.exists()
+                has_booking_history = locked_route.bookings.exists()
+
+                if has_trip_history or has_booking_history:
+                    return Response(
+                        {
+                            'error': (
+                                'This route has operational history and '
+                                'cannot be deleted. Keep it for historical '
+                                'reference and use a new route for future '
+                                'operations.'
+                            )
+                        },
+                        status=status.HTTP_409_CONFLICT
+                    )
+
+                locked_route.delete()
+
+        except Route.DoesNotExist:
+            return Response(
+                {'error': 'Route not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         return Response(
             {
@@ -529,18 +560,22 @@ def company_analytics(request, company_id):
 @api_view(['POST', 'PUT', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def update_trip_status(request, trip_id, *args, **kwargs):
-    """Update a trip's status."""
+    """Update a trip's status using the operational state machine."""
     try:
-        trip = Trip.objects.select_related('route__company').get(id=trip_id)
+        trip = (
+            Trip.objects
+            .select_related('route__company')
+            .get(id=trip_id)
+        )
     except Trip.DoesNotExist:
-        return Response({'error': 'Trip not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Trip not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
     user = request.user
     company = trip.route.company
 
-    # Trip status is an operational action.
-    # Managers and Operators can update trips for their own company.
-    # Superusers can update trips for any company.
     allowed = (
         user.is_superuser
         or (
@@ -551,7 +586,10 @@ def update_trip_status(request, trip_id, *args, **kwargs):
 
     if not allowed:
         return Response(
-            {'error': 'You are not authorized to manage this company\'s trips.'},
+            {
+                'error':
+                'You are not authorized to manage this company\'s trips.'
+            },
             status=status.HTTP_403_FORBIDDEN
         )
 
@@ -562,23 +600,75 @@ def update_trip_status(request, trip_id, *args, **kwargs):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    valid_statuses = [
-    'scheduled',
-    'boarding',
-    'departed',
-    'completed',
-    'cancelled',
-    ]
-
     new_status = str(new_status).strip().lower()
+
+    valid_statuses = {
+        'scheduled',
+        'boarding',
+        'departed',
+        'completed',
+        'cancelled',
+    }
 
     if new_status not in valid_statuses:
         return Response(
-            {'error': f'Invalid status. Choose from: {valid_statuses}'},
+            {
+                'error': (
+                    'Invalid status. Choose from: '
+                    f'{sorted(valid_statuses)}'
+                )
+            },
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    current_status = trip.status
+
+    allowed_transitions = {
+        'scheduled': {'scheduled', 'boarding', 'cancelled'},
+        'boarding': {'boarding', 'departed', 'cancelled'},
+        'departed': {'departed', 'completed'},
+        'completed': {'completed'},
+        'cancelled': {'cancelled'},
+    }
+
+    if new_status not in allowed_transitions[current_status]:
+        return Response(
+            {
+                'error': (
+                    f'Invalid trip transition: '
+                    f'{current_status} -> {new_status}.'
+                ),
+                'current_status': current_status,
+                'requested_status': new_status,
+            },
+            status=status.HTTP_409_CONFLICT
+        )
+
     with transaction.atomic():
+        trip = (
+            Trip.objects
+            .select_for_update()
+            .select_related('route__company')
+            .get(pk=trip.pk)
+        )
+
+        # Re-check against the locked current state so two concurrent
+        # status updates cannot bypass the transition rules.
+        current_status = trip.status
+
+        if new_status not in allowed_transitions[current_status]:
+            return Response(
+                {
+                    'error': (
+                        f'Invalid trip transition: '
+                        f'{current_status} -> {new_status}.'
+                    ),
+                    'current_status': current_status,
+                    'requested_status': new_status,
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
         trip.status = new_status
         trip.save(update_fields=['status'])
 
@@ -638,12 +728,6 @@ def create_trip(request):
         company=company
     )
 
-    driver = get_object_or_404(
-        Driver,
-        id=driver_id,
-        company=company
-    )
-
     try:
         capacity = int(capacity)
     except (TypeError, ValueError):
@@ -679,6 +763,48 @@ def create_trip(request):
         )
 
     with transaction.atomic():
+        driver = get_object_or_404(
+            Driver.objects.select_for_update(),
+            id=driver_id,
+            company=company,
+        )
+
+        if not driver.is_available:
+            return Response(
+                {
+                    'error': (
+                        'This driver is currently unavailable and '
+                        'cannot be assigned to a new trip.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
+        conflicting_trip = (
+            Trip.objects
+            .filter(
+                driver=driver,
+                departure_at=departure,
+                status__in={
+                    'scheduled',
+                    'boarding',
+                    'departed',
+                },
+            )
+            .exists()
+        )
+
+        if conflicting_trip:
+            return Response(
+                {
+                    'error': (
+                        'This driver is already assigned to another '
+                        'active trip at the requested departure time.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
         trip = Trip.objects.create(
             route=route,
             driver=driver,
@@ -942,7 +1068,15 @@ def route_map_data(request, route_id):
             return Response({"error": "Trip not found."}, status=status.HTTP_404_NOT_FOUND)
 
         if trip.route_id != route.id:
-            return Response({"error": "Trip does not belong to this route."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Trip does not belong to this route."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    can_see_private_trip_data = (
+        trip is not None
+        and _can_see_route_passengers(request.user, route, trip)
+    )
 
     stages = route.pickup_stages.filter(is_active=True).order_by("order", "id")
     stage_data = []
@@ -970,7 +1104,7 @@ def route_map_data(request, route_id):
 
         passengers = []
 
-        if trip and _can_see_route_passengers(request.user, route, trip):
+        if can_see_private_trip_data:
             for booking in booking_qs.select_related("user").order_by(
                 "created_at",
                 "id",
@@ -1022,6 +1156,46 @@ def route_map_data(request, route_id):
     })
 
 
+def _can_access_route_trip_map(user, route, trip):
+    """
+    Authorize access to a trip-specific operational map.
+
+    Public users may browse a route map without a trip selected.
+    Trip-specific operational data is restricted to:
+    - platform admins
+    - company staff from the route's company
+    - the assigned driver
+    - a passenger who actually booked the trip
+    """
+    if not user or not user.is_authenticated:
+        return False
+
+    if user.is_superuser:
+        return True
+
+    if getattr(user, 'role', None) in {
+        'company_manager',
+        'company_auditor',
+        'company_operator',
+    }:
+        return (
+            user.company_id is not None
+            and user.company_id == route.company_id
+        )
+
+    if getattr(user, 'role', None) == 'driver':
+        driver = trip.driver
+        return (
+            driver is not None
+            and is_driver_account_for(user, driver)
+        )
+
+    return Booking.objects.filter(
+        trip=trip,
+        user=user,
+    ).exists()
+
+
 def _can_see_route_passengers(user, route, trip):
     """Passenger names, phones and positions are private."""
     if not user or not user.is_authenticated:
@@ -1033,7 +1207,7 @@ def _can_see_route_passengers(user, route, trip):
         return user.company_id is not None and user.company_id == route.company_id
     if role == 'driver':
         driver = trip.driver
-        return driver is not None and driver.phone_number == user.phone_number
+        return driver is not None and is_driver_account_for(user, driver)
     return False
 
 
@@ -1117,18 +1291,90 @@ def route_plan(request, route_id):
 
     stages = list(route.pickup_stages.filter(is_active=True).order_by('order', 'id'))
 
-    def key(lat, lng):
-        return (lat - s_lat) * (e_lat - s_lat) + (lng - s_lng) * (e_lng - s_lng)
+    def fallback_key(lat, lng):
+        return (
+            (lat - s_lat) * (e_lat - s_lat)
+            + (lng - s_lng) * (e_lng - s_lng)
+        )
 
-    stage_pts = [(float(s.latitude), float(s.longitude)) for s in stages]
-    vias.sort(key=lambda p: key(*p))
-    waypoints, vi = [(s_lat, s_lng)], 0
-    for pt in stage_pts:
-        while vi < len(vias) and key(*vias[vi]) <= key(*pt):
-            waypoints.append(vias[vi])
-            vi += 1
-        waypoints.append(pt)
-    waypoints.extend(vias[vi:])
+    controls = []
+
+    for index, stage in enumerate(stages):
+        controls.append({
+            'kind': 'stage',
+            'lat': float(stage.latitude),
+            'lng': float(stage.longitude),
+            'order': int(stage.order or 0),
+            'index': index,
+        })
+
+    for index, point in enumerate(vias):
+        controls.append({
+            'kind': 'via',
+            'lat': float(point[0]),
+            'lng': float(point[1]),
+            'order': 0,
+            'index': index,
+        })
+
+    # When a saved route already exists, use that route as the
+    # authority for the ordering of new control points.
+    #
+    # This is much safer than projecting everything onto the
+    # straight start -> end line, because real Nairobi routes
+    # bend, loop, and sometimes temporarily move away from the
+    # final destination.
+    existing_positions = []
+
+    if (
+        isinstance(route.geometry, dict)
+        and route.geometry.get('type') == 'LineString'
+        and len(route.geometry.get('coordinates') or []) >= 2
+    ):
+        for control in controls:
+            loc = locate_on_line(
+                route.geometry,
+                control['lat'],
+                control['lng'],
+            )
+
+            if loc is None:
+                existing_positions = []
+                break
+
+            existing_positions.append(loc[1])
+
+    if existing_positions and len(existing_positions) == len(controls):
+        for control, along_m in zip(controls, existing_positions):
+            control['along_m'] = along_m
+
+        controls.sort(
+            key=lambda item: (
+                item['along_m'],
+                item['kind'] != 'stage',
+                item['order'],
+                item['index'],
+            )
+        )
+    else:
+        # No established route exists yet. Fall back to the
+        # previous deterministic ordering.
+        controls.sort(
+            key=lambda item: (
+                fallback_key(item['lat'], item['lng']),
+                item['kind'] != 'stage',
+                item['order'],
+                item['index'],
+            )
+        )
+
+    waypoints = [(s_lat, s_lng)]
+
+    for control in controls:
+        waypoints.append(
+            (control['lat'], control['lng'])
+        )
+
     waypoints.append((e_lat, e_lng))
     if len(waypoints) > 30:
         return Response(

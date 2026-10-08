@@ -71,7 +71,7 @@ export function CharterNew() {
     count: '', contactName: '', contactPhone: '', notes: '',
   });
   const set = (patch) => setF((v) => ({ ...v, ...patch }));
-  const earliest = localInput(new Date(Date.now() + 25 * 3600 * 1000));
+  const [earliest] = useState(() => localInput(new Date(Date.now() + 25 * 3600 * 1000)));
 
   useEffect(() => {
     apiRequest('/charters/companies/')
@@ -199,7 +199,6 @@ export function CharterDetail() {
       verify();
       setParams({}, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const pay = async () => {

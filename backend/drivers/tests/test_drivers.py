@@ -1,9 +1,12 @@
+from decimal import Decimal
+from bookings.models import Booking
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from companies.models import Company
+from companies.models import Company, Route, Trip
 from drivers.models import Driver
 
 User = get_user_model()
@@ -685,3 +688,96 @@ class DriversAppTests(APITestCase):
             response.data["id"],
             self.driver.id,
         )
+
+
+class DriverHistoryDeletionTests(APITestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            name="Driver History Test Co",
+        )
+
+        self.manager = User.objects.create_user(
+            username="driver_history_manager",
+            password="password123",
+            phone_number="+254700000031",
+            role="company_manager",
+            company=self.company,
+        )
+
+        self.passenger = User.objects.create_user(
+            username="driver_history_passenger",
+            password="password123",
+            phone_number="+254700000032",
+        )
+
+        self.driver = Driver.objects.create(
+            company=self.company,
+            name="Protected History Driver",
+            phone_number="+254711111121",
+            bus_number="KAA 121K",
+        )
+
+        self.route = Route.objects.create(
+            company=self.company,
+            name="Driver History Route",
+            start_point="CBD",
+            end_point="Karen",
+            price=Decimal("600.00"),
+        )
+
+    def test_driver_with_trip_history_cannot_be_deleted(self):
+        Trip.objects.create(
+            route=self.route,
+            driver=self.driver,
+            departure_at=timezone.now() + timezone.timedelta(hours=4),
+            capacity=14,
+            status="completed",
+        )
+
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.delete(
+            reverse(
+                "drivers:driver-detail",
+                kwargs={"driver_id": self.driver.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertTrue(
+            Driver.objects.filter(pk=self.driver.pk).exists()
+        )
+
+    def test_driver_with_booking_history_cannot_be_deleted(self):
+        Booking.objects.create(
+            user=self.passenger,
+            route=self.route,
+            trip=None,
+            driver=self.driver,
+            total_amount=Decimal("600.00"),
+            status="cancelled",
+        )
+
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.delete(
+            reverse(
+                "drivers:driver-detail",
+                kwargs={"driver_id": self.driver.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        self.assertTrue(
+            Driver.objects.filter(pk=self.driver.pk).exists()
+        )
+
+
