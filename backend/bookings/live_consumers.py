@@ -42,7 +42,13 @@ class BookingLiveConsumer(AsyncJsonWebsocketConsumer):
         if not booking:
             return False
 
-        if user.is_superuser or booking.user_id == user.id:
+        if user.is_superuser:
+            return True
+
+        if booking.status in ("cancelled", "no_show", "completed"):
+            return False
+
+        if booking.user_id == user.id:
             return True
 
         role = getattr(user, "role", None)
