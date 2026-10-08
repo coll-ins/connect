@@ -3019,6 +3019,12 @@ def booking_live_location(request, booking_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
+    if booking.status in ('cancelled', 'no_show', 'completed') and not is_platform_admin:
+        return Response(
+            {'error': 'This booking is no longer active.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
     driver = booking.driver
     passenger_user = booking.user
 
