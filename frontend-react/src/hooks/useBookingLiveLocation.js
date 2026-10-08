@@ -9,9 +9,10 @@ export default function useBookingLiveLocation(bookingId, enabled = true) {
   const [error, setError] = useState('');
 
   const requestInFlight = useRef(false);
+  const stopped = useRef(false);
 
   const refreshLocation = useCallback(async () => {
-    if (!bookingId || !enabled || requestInFlight.current) {
+    if (!bookingId || !enabled || requestInFlight.current || stopped.current) {
       return;
     }
 
@@ -26,6 +27,10 @@ export default function useBookingLiveLocation(bookingId, enabled = true) {
       setLiveLocation(data);
       setError('');
     } catch (err) {
+      if ([403, 404, 409].includes(err.status)) {
+        stopped.current = true;
+        setLiveLocation(null);
+      }
       setError(err.message || 'Unable to load live location.');
     } finally {
       requestInFlight.current = false;
@@ -40,6 +45,7 @@ export default function useBookingLiveLocation(bookingId, enabled = true) {
       return undefined;
     }
 
+    stopped.current = false;
     refreshLocation();
 
     const interval = window.setInterval(

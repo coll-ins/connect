@@ -59,7 +59,10 @@ export async function apiRequest(endpoint, options = {}) {
         message = Array.isArray(first) ? first[0] : (first || message);
       }
     }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
   return data;
 }
