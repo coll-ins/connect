@@ -28,3 +28,9 @@ htmlcov/
 *.backup*
 *.before-*
 backups/
+
+*.bak
+*.bak-*
+*.before-*
+*.backup
+*.save
