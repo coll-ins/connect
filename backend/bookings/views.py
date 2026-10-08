@@ -4473,6 +4473,11 @@ def driver_end_trip(request, driver_id):
 
     with transaction.atomic():
         trip = Trip.objects.select_for_update().get(pk=trip.pk)
+        if trip.status not in ('boarding', 'departed'):
+            return Response(
+                {'error': 'This trip is no longer active.'},
+                status=status.HTTP_409_CONFLICT,
+            )
         settled, protected = settle_unboarded_no_shows(
             trip, claims=refund_claims
         )
