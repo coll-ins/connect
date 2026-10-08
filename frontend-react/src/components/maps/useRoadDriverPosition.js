@@ -223,7 +223,6 @@ export function useRoadDriverPosition(target, geometry) {
 
     const goal = segRef.current.to;
     const shown = shownRef.current;
-    console.log('[BUS]', 'reading', d.toFixed(3), 'goal', goal.toFixed(3), 'shown', shown.toFixed(3), 'behindCount', backCountRef.current);
 
     // Same reading again (e.g. route object re-created): do nothing.
     if (Math.abs(d - goal) < 1e-9) return;
