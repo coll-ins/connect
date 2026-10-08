@@ -1,0 +1,6 @@
+# Install on the server as /etc/cron.d/connect. Edit APP and the user field.
+APP=/srv/connect/backend
+*/5  * * * * deploy cd $APP && flock -n /tmp/connect-expire.lock  .venv/bin/python manage.py expire_pending_bookings >> /var/log/connect/expire.log 2>&1
+*/10 * * * * deploy cd $APP && flock -n /tmp/connect-noshow.lock  .venv/bin/python manage.py process_noshows >> /var/log/connect/noshows.log 2>&1
+*/30 * * * * deploy cd $APP && flock -n /tmp/connect-reconcile.lock .venv/bin/python manage.py reconcile_refunds >> /var/log/connect/reconcile.log 2>&1
+# reconcile_refunds --resend and settle_company --apply stay manual on purpose.
