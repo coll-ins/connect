@@ -306,3 +306,18 @@ if 'test' in sys.argv:
 
 MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
 PENDING_BOOKING_TTL_MINUTES = 20    # expire_pending_bookings cancels unpaid bookings older than this
+
+
+# --- Production hardening: only active when DJANGO_PRODUCTION=1 ---------------
+import os as _os  # noqa: E402
+
+if _os.environ.get('DJANGO_PRODUCTION') == '1':
+    if DEBUG:
+        raise RuntimeError('DEBUG must be False when DJANGO_PRODUCTION=1.')
+    if len(SECRET_KEY) < 50 or SECRET_KEY.startswith('django-insecure-'):
+        raise RuntimeError('SECRET_KEY is too weak for production.')
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 3600  # raise to 31536000 once HTTPS is proven stable

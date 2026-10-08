@@ -13,6 +13,8 @@ from rest_framework.response import Response
 from .models import CustomUser
 from .throttles import LoginPhoneThrottle
 from .serializers import UserSerializer, CompanyStaffSerializer
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 
 def normalize_phone_number(phone_number):
@@ -333,9 +335,11 @@ def company_staff(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    if len(password) < 6:
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
         return Response(
-            {'error': 'password must be at least 6 characters.'},
+            {'error': ' '.join(exc.messages)},
             status=status.HTTP_400_BAD_REQUEST
         )
 
