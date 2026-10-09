@@ -1,4 +1,8 @@
 import logging
+from datetime import timedelta
+
+from django.conf import settings
+from django.utils import timezone
 from math import asin, cos, radians, sin, sqrt
 
 from asgiref.sync import async_to_sync
@@ -26,20 +30,87 @@ def _distance_km(a_lat, a_lng, b_lat, b_lng):
     return round(6371.0 * 2 * asin(sqrt(h)), 2)
 
 
+def location_freshness(driver, now=None):
+    """Return server-authoritative GPS freshness; missing fixes are always stale."""
+    now = now or timezone.now()
+    try:
+        threshold = max(1, int(getattr(settings, "LOCATION_STALE_SECONDS", 120)))
+    except (TypeError, ValueError):
+        threshold = 120
+
+    if (
+        driver is None
+        or getattr(driver, "latitude", None) is None
+        or getattr(driver, "longitude", None) is None
+    ):
+        return {"is_stale": True, "location_age_seconds": None}
+
+    updated = getattr(driver, "location_updated_at", None)
+    if updated is None:
+        return {"is_stale": True, "location_age_seconds": None}
+    try:
+        age = max(0, int((now - updated).total_seconds()))
+    except (TypeError, AttributeError):
+        return {"is_stale": True, "location_age_seconds": None}
+    return {"is_stale": age > threshold, "location_age_seconds": age}
+
+
+def trip_is_live(trip, now=None):
+    """A booking is trackable only while boarding/departed and within 12 hours."""
+    now = now or timezone.now()
+    if trip is None or str(getattr(trip, "status", "")).lower() not in {"boarding", "departed"}:
+        return False
+    departure = getattr(trip, "departure_at", None)
+    if departure is None:
+        return False
+    try:
+        return departure >= now - timedelta(hours=12)
+    except TypeError:
+        return False
+
+
+def location_freshness_for_booking(booking_id):
+    """Freshness and trip-live state for the passenger live-location response."""
+    from bookings.models import Booking
+
+    booking = (
+        Booking.objects.select_related("driver", "trip")
+        .filter(pk=booking_id)
+        .first()
+    )
+    if booking is None:
+        return {
+            "is_stale": True,
+            "location_age_seconds": None,
+            "is_trip_live": False,
+        }
+    driver = booking.driver if getattr(booking, "driver_id", None) else None
+    trip = getattr(booking, "trip", None)
+    return {
+        **location_freshness(driver),
+        "is_trip_live": trip_is_live(trip),
+    }
+
+
 def _payload(booking, driver):
     p_lat = _f(booking.passenger_latitude)
     p_lng = _f(booking.passenger_longitude)
     d_lat = _f(driver.latitude) if driver else None
     d_lng = _f(driver.longitude) if driver else None
     updated = getattr(driver, "location_updated_at", None) if driver else None
+    freshness = location_freshness(driver)
+    trip = getattr(booking, "trip", None)
 
     return {
         "type": "location",
         "booking_id": booking.id,
+        **freshness,
+        "is_trip_live": trip_is_live(trip),
         "driver": {
             "latitude": d_lat,
             "longitude": d_lng,
             "location_updated_at": updated.isoformat() if updated else None,
+            **freshness,
         },
         "passenger": {"latitude": p_lat, "longitude": p_lng},
         "distance_km": _distance_km(p_lat, p_lng, d_lat, d_lng),

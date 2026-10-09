@@ -1329,6 +1329,7 @@ def confirm_cash_payment(request, booking_id):
                         'company_operator',
                     }
                     and user.company_id == booking.route.company_id
+                    and can_handle_route(user, booking.route_id)
                 )
             )
 
@@ -1489,9 +1490,16 @@ def create_booking(request):
                 .get(id=trip_id)
             )
 
-            if (
-                trip.status != 'scheduled'
-                or trip.departure_at <= timezone.now()
+            if not (
+                (
+                    trip.status == 'scheduled'
+                    and trip.departure_at > timezone.now()
+                )
+                or (
+                    trip.status == 'boarding'
+                    and trip.departure_at
+                    > timezone.now() - _boarding_book_window()
+                )
             ):
                 return Response(
                     {
@@ -1526,6 +1534,29 @@ def create_booking(request):
                 pickup_location = pickup_stage.name
             else:
                 pickup_location = legacy_pickup_location
+
+            if trip.status == 'boarding':
+                _first_stage = (
+                    PickupStage.objects
+                    .filter(route_id=trip.route_id, is_active=True)
+                    .order_by('order', 'id')
+                    .first()
+                )
+                if (
+                    pickup_stage is None
+                    or _first_stage is None
+                    or pickup_stage.id != _first_stage.id
+                ):
+                    return Response(
+                        {
+                            'error': (
+                                'Boarding has started. Only the first '
+                                'stage can be booked now. '
+                                'Only the first stage can be booked.'
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
             # Cap unpaid bookings per user so one account cannot hold seats it
             # never pays for. The user row is locked so two simultaneous
@@ -1648,6 +1679,7 @@ def get_my_bookings(request):
             'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
+            'trip_status': trip.status if trip else None,
 
             'company_name': (
                 route.company.name
@@ -1780,6 +1812,11 @@ def get_all_bookings(request):
         bookings = Booking.objects.filter(
             route__company_id=request.user.company_id
         )
+
+        # A route-restricted operator only sees their assigned routes.
+        _scope = operator_route_ids(request.user)
+        if _scope is not None:
+            bookings = bookings.filter(route_id__in=_scope)
 
     else:
         return Response(
@@ -1935,6 +1972,9 @@ def assign_driver(request, booking_id):
                 'company_operator',
             }
             and user.company_id == booking.route.company_id
+            # A route-restricted operator may only act on their assigned
+            # routes (matches verify_boarding / cash / walk-in / trips).
+            and can_handle_route(user, booking.route_id)
         )
     )
 
@@ -2783,6 +2823,7 @@ def verify_boarding(request, booking_id):
                         'company_operator',
                     }
                     and user.company_id == booking.route.company_id
+                    and can_handle_route(user, booking.route_id)
                 )
             )
 
@@ -3012,6 +3053,7 @@ def booking_live_location(request, booking_id):
     - Company staff belonging to the booking's company
     - Platform/superuser
     """
+    from .live_signals import location_freshness_for_booking
     booking = (
         Booking.objects
         .select_related(
@@ -3067,6 +3109,31 @@ def booking_live_location(request, booking_id):
             {'error': 'This booking is no longer active.'},
             status=status.HTTP_409_CONFLICT,
         )
+
+    # Passenger live tracking is available only for a confirmed,
+    # actively boarding or departed trip with an assigned driver.
+    # Preserve the existing access rules for staff, drivers and admins.
+    if is_passenger and not is_platform_admin:
+        trip_status = (
+            str(booking.trip.status or '').lower()
+            if booking.trip else ''
+        )
+        if (
+            booking.status != 'confirmed'
+            or trip_status not in ('boarding', 'departed')
+            or booking.driver_id is None
+        ):
+            return Response(
+                {
+                    'error': (
+                        'Live tracking is available only when your '
+                        'confirmed trip is boarding or departed and '
+                        'has an assigned driver.'
+                    ),
+                    'trip_status': trip_status or None,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
     driver = booking.driver
     passenger_user = booking.user
@@ -3179,6 +3246,7 @@ def booking_live_location(request, booking_id):
                     else None
                 ),
             },
+            **location_freshness_for_booking(booking_id),
         },
         status=status.HTTP_200_OK,
     )
@@ -3273,6 +3341,9 @@ def set_stage_departure(request, booking_id):
                 'company_operator',
             }
             and user.company_id == booking.route.company_id
+            # A route-restricted operator may only act on their assigned
+            # routes (matches verify_boarding / cash / walk-in / trips).
+            and can_handle_route(user, booking.route_id)
         )
     )
 
@@ -4522,7 +4593,6 @@ def driver_end_trip(request, driver_id):
     ) or (
         trips.filter(
             status='departed',
-            departure_at__gte=timezone.now() - _dt.timedelta(hours=12),
         ).order_by('-departure_at', '-id').first()
     )
 
@@ -4675,3 +4745,220 @@ def booking_replacement_trips(request, booking_id):
             })
 
     return Response(result, status=status.HTTP_200_OK)
+
+
+def _boarding_book_window():
+    """How long past its departure time a boarding trip stays bookable."""
+    from .services import BOARDING_BOOKABLE_WINDOW
+    return BOARDING_BOOKABLE_WINDOW
+
+
+# ============================================================
+# WALK-IN BOOKING AT THE FIRST STAGE
+# ============================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def walk_in_booking(request, trip_id):
+    """Operator/driver books and boards a cash passenger at the first stage.
+
+    Leaves the same trail as a normal cash booking that is later boarded:
+    booking completed, payment confirmed + settlement eligible, a
+    BoardingEvent, and the passenger's boarded_count incremented.
+    """
+    from django.contrib.auth import get_user_model
+    from django.db.models import F as _F, Sum
+    from notifications import sms as _sms
+    from users.phone import canonical_phone
+
+    raw_seats = request.data.get('seats', 1)
+    try:
+        if isinstance(raw_seats, bool):
+            raise ValueError
+        seats = int(str(raw_seats).strip())
+    except (TypeError, ValueError):
+        return Response({'error': 'seats must be a whole number.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if seats < 1 or seats > 20:
+        return Response({'error': 'seats must be between 1 and 20.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    phone = canonical_phone(str(request.data.get('phone_number', '')).strip())
+    if not phone:
+        return Response({'error': 'A valid passenger phone_number is required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    User = get_user_model()
+    actor = request.user
+
+    with transaction.atomic():
+        trip = (
+            Trip.objects.select_for_update(of=('self',))
+            .select_related('route', 'driver')
+            .filter(pk=trip_id).first()
+        )
+        if trip is None:
+            return Response({'error': 'Trip not found.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        authorized = (
+            actor.is_superuser
+            or (
+                actor.role in {'company_manager', 'company_operator'}
+                and actor.company_id == trip.route.company_id
+                and can_handle_route(actor, trip.route_id)
+            )
+            or is_driver_account_for(actor, trip.driver)
+        )
+        if not authorized:
+            return Response(
+                {'error': 'You cannot book passengers on this trip.'},
+                status=status.HTTP_403_FORBIDDEN)
+
+        if trip.status != 'boarding' or trip_has_departed(trip):
+            return Response(
+                {'error': 'Walk-in booking is only available while the '
+                          'trip is boarding.'},
+                status=status.HTTP_409_CONFLICT)
+
+        stage = (
+            PickupStage.objects
+            .filter(route_id=trip.route_id, is_active=True)
+            .order_by('order', 'id').first()
+        )
+        if stage is None:
+            return Response({'error': 'This route has no active first stage.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        taken = (
+            trip.bookings.exclude(status='cancelled')
+            .aggregate(total=Sum('seats'))['total'] or 0
+        )
+        available = trip.capacity - taken
+        if seats > available:
+            return Response(
+                {'error': f'Not enough seats available. Only {available} remaining.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        passenger = User.objects.filter(phone_number=phone).first()
+        if passenger is None:
+            base = f"walkin_{phone}".replace('+', '')
+            username, n = base, 1
+            while User.objects.filter(username=username).exists():
+                n += 1
+                username = f"{base}_{n}"
+            passenger = User.objects.create_user(
+                username=username, phone_number=phone, password=None)
+        elif passenger.role != 'passenger' or passenger.is_superuser:
+            return Response(
+                {'error': 'That phone number belongs to a staff account.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        total = trip.route.price * Decimal(str(seats))
+        booking = Booking.objects.create(
+            user=passenger, route=trip.route, driver=trip.driver, trip=trip,
+            pickup_location=stage.name, pickup_stage=stage, seats=seats,
+            total_amount=total, status='completed',
+        )
+        Payment.objects.create(
+            booking=booking, amount=total, method='cash', status='confirmed',
+            settlement_status='eligible', confirmed_at=timezone.now(),
+            provider_reference=None, idempotency_key=None,
+            refund_status='not_requested',
+        )
+        BoardingEvent.objects.create(
+            booking=booking, trip=trip, method='walkin', verified_by=actor)
+        User.objects.filter(pk=passenger.pk).update(
+            boarded_count=_F('boarded_count') + 1)
+
+        number = booking.booking_number
+        transaction.on_commit(
+            lambda: _sms.send_booking_sms(passenger.phone_number, number))
+
+    return Response({
+        'message': 'Walk-in passenger booked and boarded.',
+        'booking_id': booking.id,
+        'booking_number': number,
+        'seats': seats,
+        'amount': str(total),
+        'pickup_stage': stage.name,
+        'seats_remaining': available - seats,
+    }, status=status.HTTP_201_CREATED)
+
+
+from users.route_scope import (  # noqa: E402
+    can_handle_route,
+    operator_route_ids,
+)
+
+
+# ============================================================
+# STAFF ALERT FEED (derived; limited to the routes the staff member handles)
+# ============================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def staff_alerts(request):
+    """Cross-company alert feed for manager/operators, scoped to operator routes.
+
+    Derived from existing rows (no new table): cash payments awaiting
+    confirmation and confirmed bookings created in the last 24 hours, on trips
+    that are scheduled or boarding. Route-restricted operators only see their
+    assigned routes.
+    """
+    from datetime import timedelta
+
+    user = request.user
+    if (
+        not user.is_authenticated
+        or (
+            not user.is_superuser
+            and user.role not in {'company_manager', 'company_operator'}
+        )
+        or not user.company_id
+    ):
+        return Response(
+            {'error': 'Company staff authorization required'},
+            status=status.HTTP_403_FORBIDDEN)
+
+    base = (
+        Booking.objects
+        .filter(
+            route__company_id=user.company_id,
+            trip__status__in=['scheduled', 'boarding'],
+        )
+        .select_related('route', 'trip')
+    )
+
+    scope = operator_route_ids(user)
+    if scope is not None:
+        base = base.filter(route_id__in=scope)
+
+    cash = base.filter(
+        status='pending',
+        payment__method='cash',
+        payment__status='pending',
+    )
+    fresh = base.filter(
+        status='confirmed',
+        created_at__gte=timezone.now() - timedelta(hours=24),
+    )
+
+    rows = []
+    for kind, qs in (('cash_pending', cash), ('new_booking', fresh)):
+        for b in qs.order_by('-created_at')[:20]:
+            rows.append((b.created_at, {
+                'type': kind,
+                'booking_id': b.id,
+                'booking_number': b.booking_number,
+                'route_id': b.route_id,
+                'route_name': b.route.name,
+                'seats': b.seats,
+                'total_amount': str(b.total_amount),
+                'trip_id': b.trip_id,
+                'trip_departure': b.trip.departure_at,
+                'created_at': b.created_at,
+            }))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    items = [r[1] for r in rows[:20]]
+    return Response({'count': len(items), 'items': items})
