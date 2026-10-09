@@ -127,7 +127,7 @@ def classify_failure(exc, data):
     if data.get('currency') != 'KES' or amount is None or amount <= 0:
         return 'review', reason, amount
     code = getattr(exc, 'status_code', None)
-    if type(exc).__name__ in ('ParcelError', 'CharterError') and code in (None, 409):
+    if type(exc).__name__ in ('ParcelError', 'CharterError') and code == 409:
         return 'refund', reason, amount
     return 'retry', reason, amount
 
