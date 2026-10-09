@@ -538,8 +538,10 @@ def settle_unboarded_no_shows(trip, claims=None):
         booking.status = 'no_show'
         booking.save(update_fields=['status'])
 
-        booking.user.no_show_count += 1
-        booking.user.save(update_fields=['no_show_count'])
+        from django.db.models import F as _F
+        type(booking.user).objects.filter(pk=booking.user_id).update(
+            no_show_count=_F('no_show_count') + 1
+        )
         settled += 1
 
     return settled, 0
