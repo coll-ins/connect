@@ -15,6 +15,12 @@ class CustomUser(AbstractUser):
     phone_number = models.CharField(max_length=15, unique=True, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='passenger')
+    # Operator specialization: all_routes=True handles every route of the
+    # company; otherwise only the routes in assigned_routes (possibly none).
+    all_routes = models.BooleanField(default=True)
+    assigned_routes = models.ManyToManyField(
+        'companies.Route', blank=True, related_name='assigned_operators',
+    )
     company = models.ForeignKey(
         'companies.Company', 
         on_delete=models.SET_NULL, 
