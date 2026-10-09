@@ -320,6 +320,97 @@ function createPassengerIcon() {
 const vehicleIcon = createVehicleIcon();
 const passengerIcon = createPassengerIcon();
 
+/*
+ * ------------------------------------------------------------
+ * LIVE WEBSOCKET PUSH
+ * ------------------------------------------------------------
+ * The backend pushes a 'location' frame on every driver GPS save
+ * (BookingLiveConsumer). The socket is a fast path only: HTTP
+ * polling stays as the safety net for the full envelope (stages,
+ * incidents, trip status), so a dropped socket never breaks the map.
+ */
+function useLiveSocket(bookingId, onLocation) {
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!bookingId) return undefined;
+
+    let socket = null;
+    let closed = false;
+    let retryTimer = null;
+    let attempt = 0;
+
+    const scheduleRetry = () => {
+      if (closed) return;
+      attempt += 1;
+      retryTimer = window.setTimeout(connect, Math.min(1000 * attempt, 5000));
+    };
+
+    const connect = () => {
+      if (closed) return;
+
+      const scheme =
+        window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${scheme}://${window.location.host}/ws/bookings/${bookingId}/live/`;
+
+      try {
+        socket = new WebSocket(url);
+      } catch {
+        scheduleRetry();
+        return;
+      }
+
+      socket.onopen = () => {
+        attempt = 0;
+        setConnected(true);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg && msg.type === 'location') onLocation(msg);
+        } catch {
+          // A malformed frame must never break the live map.
+        }
+      };
+
+      socket.onerror = () => {
+        try {
+          socket.close();
+        } catch {
+          // ignore
+        }
+      };
+
+      socket.onclose = () => {
+        setConnected(false);
+        if (!closed) scheduleRetry();
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      window.clearTimeout(retryTimer);
+      setConnected(false);
+      if (socket) {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        try {
+          socket.close();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [bookingId, onLocation]);
+
+  return connected;
+}
+
 const stageDotIcon = L.divIcon({
   className: 'connect-stage-dot',
   html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #475569;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
@@ -400,13 +491,78 @@ export default function PassengerLiveMap({
     }
   }, [bookingId]);
 
+  /*
+   * Merge one pushed location frame into the polled envelope.
+   * Only the moving parts (driver/passenger coordinates + freshness)
+   * come from the socket; route, stages and incidents stay on HTTP.
+   */
+  const applyLivePush = useCallback((msg) => {
+    setLive((prev) => {
+      if (!prev) return prev; // wait for the first full HTTP payload
+
+      const now = Date.now();
+
+      return {
+        ...prev,
+        driver: { ...(prev.driver || {}), ...(msg.driver || {}) },
+        passenger: { ...(prev.passenger || {}), ...(msg.passenger || {}) },
+        distance_km:
+          typeof msg.distance_km === 'number'
+            ? msg.distance_km
+            : prev.distance_km,
+        is_stale:
+          typeof msg.is_stale === 'boolean'
+            ? msg.is_stale
+            : prev.is_stale,
+        location_age_seconds:
+          typeof msg.location_age_seconds === 'number'
+            ? msg.location_age_seconds
+            : prev.location_age_seconds,
+        is_trip_live:
+          typeof msg.is_trip_live === 'boolean'
+            ? msg.is_trip_live
+            : prev.is_trip_live,
+        _fetchedAt: now,
+      };
+    });
+
+    const pushedDriver = normalizePosition(msg.driver);
+    if (pushedDriver) {
+      setDriverHistory((previous) => {
+        const now = Date.now();
+        const last = previous[previous.length - 1];
+
+        // Skip duplicates so the speed estimate stays honest.
+        if (
+          last &&
+          last.position[0] === pushedDriver[0] &&
+          last.position[1] === pushedDriver[1]
+        ) {
+          return previous;
+        }
+
+        return [
+          ...previous.filter(
+            (item) => now - item.time < 15 * 60 * 1000
+          ),
+          { position: pushedDriver, time: now },
+        ].slice(-8);
+      });
+    }
+  }, []);
+
+  const socketConnected = useLiveSocket(bookingId, applyLivePush);
+
   useEffect(() => {
     loadLive();
 
-    const timer = window.setInterval(loadLive, 2000);
+    // Socket live: polls slow to a 10s safety net for the full
+    // envelope (stages/incidents/status). Socket down: fast 2s polls.
+    const interval = socketConnected ? 10000 : 2000;
+    const timer = window.setInterval(loadLive, interval);
 
     return () => window.clearInterval(timer);
-  }, [loadLive]);
+  }, [loadLive, socketConnected]);
 
   useEffect(() => {
     if (!bookingId || !navigator.geolocation) {
