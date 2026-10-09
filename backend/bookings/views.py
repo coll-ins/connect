@@ -2851,10 +2851,8 @@ def verify_boarding(request, booking_id):
                     str(qr_data).strip().encode('utf-8'),
                     expected.encode('utf-8'),
                 ):
-                    try:
-                        cache.incr(fail_key)
-                    except ValueError:
-                        cache.set(fail_key, 1, 900)
+                    cache.add(fail_key, 0, 900)
+                    cache.incr(fail_key)
                     return Response(
                         {'error': 'Invalid QR data.'},
                         status=status.HTTP_400_BAD_REQUEST
@@ -2885,10 +2883,8 @@ def verify_boarding(request, booking_id):
                     )
                     != str(boarding_pin)
                 ):
-                    try:
-                        cache.incr(fail_key)
-                    except ValueError:
-                        cache.set(fail_key, 1, 900)
+                    cache.add(fail_key, 0, 900)
+                    cache.incr(fail_key)
                     return Response(
                         {
                             'error': (

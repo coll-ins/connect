@@ -339,3 +339,8 @@ if not DEBUG and (
     or 'replace-with' in ADMIN_SIGNUP_CODE
 ):
     raise ValueError('CRITICAL: ADMIN_SIGNUP_CODE is a placeholder or too short.')
+
+
+# --- round 22: lockout counters need an atomic shared cache ---
+if not DEBUG and not globals().get('REDIS_CACHE_URL'):
+    raise ValueError("CRITICAL: REDIS_CACHE_URL must be set in production (atomic PIN/QR lockout counters).")

@@ -524,6 +524,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                         <span>TRIP</span>
                         <strong>{b.booking_number}</strong>
                         <small>{date(b.departure_at)}</small>
+                        {b.verification_pin && (
+                          <small>
+                            Boarding PIN{' '}
+                            <strong style={{ letterSpacing: '0.2em', fontSize: '1.4em' }}>
+                              {b.verification_pin}
+                            </strong>
+                          </small>
+                        )}
                       </div>
 
                       <div className="trip-route-visual">
