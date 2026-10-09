@@ -4524,6 +4524,18 @@ def driver_end_trip(request, driver_id):
             status=status.HTTP_409_CONFLICT,
         )
 
+    from django.conf import settings as _settings
+    min_minutes = getattr(_settings, 'TRIP_MIN_DURATION_MINUTES', 20)
+    if (
+        not user.is_superuser
+        and trip.departure_at + _dt.timedelta(minutes=min_minutes) > timezone.now()
+    ):
+        return Response(
+            {'error': f'A trip cannot be ended within {min_minutes} minutes of '
+                      'departure. Report an incident if something went wrong.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
     from bookings.services import run_refund_claims, settle_unboarded_no_shows
 
     refund_claims = []
