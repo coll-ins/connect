@@ -68,7 +68,9 @@ class RedTeamTripStateTests(APITestCase):
         self.assertEqual(self.owner.boarded_count, 1)
 
     def test_cannot_book_completed_or_departed_trip(self):
-        for st in ("completed", "boarding", "departed", "cancelled"):
+        # "boarding" is bookable at the first stage only; that behaviour is
+        # covered in test_boarding_stage_flow.py.
+        for st in ("completed", "departed", "cancelled"):
             with self.subTest(trip_status=st):
                 Trip.objects.filter(pk=self.trip.pk).update(status=st)
                 self.assertEqual(self._create(self.other).status_code, 400)

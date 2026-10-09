@@ -192,6 +192,7 @@ class BoardingEvent(models.Model):
     METHOD_CHOICES = [
         ('qr', 'QR Scan'),
         ('pin', 'PIN Entry'),
+        ('walkin', 'Walk-in at stage'),
     ]
 
     booking = models.OneToOneField(
@@ -204,7 +205,7 @@ class BoardingEvent(models.Model):
         on_delete=models.CASCADE,
         related_name='boarding_events'
     )
-    method = models.CharField(max_length=3, choices=METHOD_CHOICES)
+    method = models.CharField(max_length=10, choices=METHOD_CHOICES)
     verified_by = models.ForeignKey(
         CustomUser,
         on_delete=models.SET_NULL,

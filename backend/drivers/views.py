@@ -561,6 +561,7 @@ def driver_location(request, driver_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    _prev_fix = (driver.latitude, driver.longitude)
     driver.latitude = latitude
     driver.longitude = longitude
     driver.location_updated_at = timezone.now()
@@ -572,6 +573,15 @@ def driver_location(request, driver_id):
             'location_updated_at',
         ]
     )
+
+    try:
+        from bookings.departure import auto_depart_on_movement
+        auto_depart_on_movement(
+            driver, _prev_fix[0], _prev_fix[1], latitude, longitude
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('auto-depart hook failed')
 
     return Response(
         {

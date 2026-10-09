@@ -66,3 +66,11 @@ def send_admin_alert_sms(message):
         logger.error('Admin alert not sent (no ADMIN_ALERT_PHONE_NUMBERS): %s', message)
         return False
     return _send(f"CONNECT ALERT: {message}", numbers, 'admin-alert')
+
+
+def send_departure_sms(phone_number, booking_number, route_name):
+    message = (
+        f"Connect App: Your bus for {route_name} has left the stage.\n"
+        f"Booking {booking_number}. Open Live Map in the app to track it."
+    )
+    return _send(message, [phone_number], 'departure')

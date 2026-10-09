@@ -28,7 +28,7 @@ class RedTeamLiveHttpTests(APITestCase):
         self.trip = Trip.objects.create(
             route=self.route, driver=self.d1,
             departure_at=timezone.now() + timedelta(days=1),
-            capacity=10, status="scheduled")
+            capacity=10, status="boarding")
         mk = User.objects.create_user
         self.owner = mk(username="own", password="x", phone_number="0711000001")
         self.stranger = mk(username="str", password="x", phone_number="0711000002")
@@ -61,6 +61,22 @@ class RedTeamLiveHttpTests(APITestCase):
                          ("auditor", self.aud), ("driver", self.drv1)):
             with self.subTest(viewer=label):
                 self.assertEqual(self._get(u).status_code, 200)
+
+    def test_passenger_cannot_track_scheduled_trip(self):
+        Trip.objects.filter(pk=self.trip.pk).update(status="scheduled")
+        response = self._get(self.owner)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Live tracking is available only", response.data["error"])
+
+    def test_passenger_cannot_track_without_assigned_driver(self):
+        Booking.objects.filter(pk=self.booking.pk).update(driver=None)
+        response = self._get(self.owner)
+        self.assertEqual(response.status_code, 409)
+
+    def test_passenger_cannot_track_unconfirmed_booking(self):
+        Booking.objects.filter(pk=self.booking.pk).update(status="pending")
+        response = self._get(self.owner)
+        self.assertEqual(response.status_code, 409)
 
     def test_closed_booking_gives_no_location(self):
         for st in ("cancelled", "no_show", "completed"):

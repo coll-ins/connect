@@ -9,7 +9,7 @@ class Driver(models.Model):
     is_available = models.BooleanField(default=True)
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-    location_updated_at = models.DateTimeField(auto_now=True)
+    location_updated_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} - {self.bus_number}"

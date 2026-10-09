@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from bookings.models import Booking
 from django.contrib.auth import get_user_model
@@ -592,6 +593,7 @@ class DriversAppTests(APITestCase):
             response.status_code,
             status.HTTP_200_OK,
         )
+        self.assertIsNotNone(response.data["location_updated_at"])
 
         self.driver.refresh_from_db()
 
@@ -602,6 +604,15 @@ class DriversAppTests(APITestCase):
         self.assertAlmostEqual(
             self.driver.longitude,
             36.8219,
+        )
+        self.assertIsNotNone(self.driver.location_updated_at)
+        self.assertLess(
+            (timezone.now() - self.driver.location_updated_at).total_seconds(),
+            10,
+        )
+        self.assertEqual(
+            response.data["location_updated_at"],
+            self.driver.location_updated_at,
         )
 
     def test_driver_cannot_update_another_driver_location(self):
@@ -652,8 +663,12 @@ class DriversAppTests(APITestCase):
             "Superuser Updated",
         )
 
-    def test_invalid_coordinates_are_rejected(self):
+    def test_invalid_coordinates_are_rejected_without_refreshing_timestamp(self):
         self.client.force_authenticate(user=self.driver_user)
+
+        old_timestamp = timezone.now() - timedelta(hours=1)
+        self.driver.location_updated_at = old_timestamp
+        self.driver.save(update_fields=["location_updated_at"])
 
         url = reverse(
             "drivers:driver-location",
@@ -673,6 +688,9 @@ class DriversAppTests(APITestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+        self.driver.refresh_from_db()
+        self.assertEqual(self.driver.location_updated_at, old_timestamp)
 
     def test_my_driver_profile_returns_driver(self):
         self.client.force_authenticate(user=self.driver_user)

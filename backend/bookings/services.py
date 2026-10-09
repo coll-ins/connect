@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 import requests
@@ -5,6 +6,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import BookingHold
+
+# How long past its departure time a boarding trip stays bookable/payable.
+BOARDING_BOOKABLE_WINDOW = timedelta(hours=2)
 
 
 def trip_has_departed(trip):
@@ -18,7 +22,12 @@ def trip_has_departed(trip):
     """
     if not trip:
         return True
-    return trip.status not in ['scheduled', 'boarding'] or trip.departure_at <= timezone.now()
+    now = timezone.now()
+    if trip.status == 'scheduled':
+        return trip.departure_at <= now
+    if trip.status == 'boarding':
+        return trip.departure_at <= now - BOARDING_BOOKABLE_WINDOW
+    return True
 
 
 import logging
