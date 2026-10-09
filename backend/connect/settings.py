@@ -340,3 +340,8 @@ if not DEBUG and not REDIS_CACHE_URL:
 # --- round 28: money alerts are SMS; silently not sending them is a production failure ---
 if not DEBUG and (not AT_API_KEY or AT_USERNAME == 'sandbox'):
     raise ValueError("CRITICAL: AT_API_KEY and a live AT_USERNAME (not 'sandbox') must be set in production (refund/payment alerts are SMS).")
+
+
+# --- round 31: redirect without a trusted proxy header loops forever behind nginx ---
+if not DEBUG and SECURE_SSL_REDIRECT and not globals().get('SECURE_PROXY_SSL_HEADER'):
+    raise ValueError("CRITICAL: SECURE_SSL_REDIRECT is on but no TLS proxy header is trusted; set BEHIND_TLS_PROXY=True behind nginx (otherwise every request redirects in a loop).")
