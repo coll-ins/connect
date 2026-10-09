@@ -1524,3 +1524,47 @@
     padding: 18px;
   }
 }
+
+
+.operator-capacity-edit {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+.operator-capacity-edit label { display: grid; gap: 4px; font-size: 11px; opacity: .75; }
+.operator-capacity-edit input {
+  width: 88px; height: 34px; padding: 0 10px; color: inherit;
+  border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: rgba(255,255,255,.05);
+}
+.operator-capacity-edit button {
+  height: 34px; padding: 0 14px; border: 0; border-radius: 8px; cursor: pointer;
+  font-weight: 700; color: #03120d; background: #5fd9b0;
+}
+.operator-capacity-edit button:disabled { opacity: .4; cursor: not-allowed; }
+.operator-capacity-edit small { opacity: .8; }
+
+
+.operator-walkin {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+.operator-walkin strong { font-size: 12px; }
+.operator-walkin-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.operator-walkin-row input {
+  height: 36px; padding: 0 10px; color: inherit; min-width: 0;
+  border: 1px solid rgba(255,255,255,.18); border-radius: 8px;
+  background: rgba(255,255,255,.05);
+}
+.operator-walkin-row input[type="tel"] { flex: 1 1 200px; }
+.operator-walkin-row input[type="number"] { width: 70px; }
+.operator-walkin-row button {
+  height: 36px; padding: 0 14px; border: 0; border-radius: 8px; cursor: pointer;
+  font-weight: 700; color: #03120d; background: #5fd9b0;
+}
+.operator-walkin-row button:disabled { opacity: .4; cursor: not-allowed; }
+.walkin-ok { color: #7ee6c3; }
+.walkin-err { color: #ff8a8a; }

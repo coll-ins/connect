@@ -5165,3 +5165,33 @@
 
 /* Manager pages no longer draw their own sidebar; the layout provides it */
 .company-inner-page { display: block; width: 100%; min-height: 0; }
+
+
+/* Operator route assignments + manager capacity editor */
+.op-routes { margin-top: 24px; display: grid; gap: 12px; }
+.op-routes h3 { margin: 0; font-size: 16px; }
+.op-routes-hint { margin: 0; opacity: .7; font-size: 12px; }
+.op-routes-card {
+  display: grid; gap: 10px; padding: 14px 16px;
+  border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+  background: rgba(255,255,255,.04);
+}
+.op-routes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.op-routes-head span { opacity: .65; font-size: 12px; }
+.op-routes-head select {
+  margin-left: auto; height: 34px; padding: 0 10px; color: inherit;
+  border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: rgba(255,255,255,.06);
+}
+.op-routes-list { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; }
+.op-routes-list label { display: inline-flex; align-items: center; gap: 6px; }
+.op-routes-warn { color: #ffb86b; }
+.op-routes-card > button, .op-routes-capacity button {
+  justify-self: start; height: 34px; padding: 0 14px; border: 0; border-radius: 8px;
+  cursor: pointer; font-weight: 700; color: #03120d; background: #5fd9b0;
+}
+.op-routes-card > button:disabled, .op-routes-capacity button:disabled { opacity: .4; cursor: not-allowed; }
+.op-routes-capacity { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.op-routes-capacity input {
+  width: 80px; height: 34px; padding: 0 10px; color: inherit;
+  border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: rgba(255,255,255,.06);
+}

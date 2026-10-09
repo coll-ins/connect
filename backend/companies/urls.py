@@ -29,6 +29,21 @@ urlpatterns = [
         name='update_trip_status'
     ),
     path(
+        'trips/<int:trip_id>/capacity/',
+        views.update_trip_capacity,
+        name='update_trip_capacity'
+    ),
+    path(
+        'operator-routes/',
+        views.operator_route_assignments,
+        name='operator_route_assignments'
+    ),
+    path(
+        'operator-routes/<int:user_id>/',
+        views.set_operator_routes,
+        name='set_operator_routes'
+    ),
+    path(
         '<int:company_id>/analytics/',
         views.company_analytics,
         name='company_analytics'

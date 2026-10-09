@@ -17,73 +17,70 @@ export default function PassengerMapPage() {
       const data = await apiRequest('/bookings/my/');
       const bookings = Array.isArray(data) ? data : [];
 
-      // A booking the passenger tapped is shown as-is, whatever its
-      // departure time or status (only cancelled ones are skipped).
+      const isTrackable = (item) => {
+        const bookingStatus = String(item.status || '').toLowerCase();
+        const tripStatus = String(item.trip_status || '').toLowerCase();
+
+        return (
+          bookingStatus === 'confirmed' &&
+          ['boarding', 'departed'].includes(tripStatus) &&
+          Boolean(item.driver_id)
+        );
+      };
+
+      // An explicit booking request must never fall through to another trip.
       if (requestedBookingId) {
         const exact = bookings.find(
           (item) =>
-            String(item.booking_id || item.id) === String(requestedBookingId) &&
-            String(item.status || '').toLowerCase() !== 'cancelled',
+            String(item.booking_id || item.id) === String(requestedBookingId),
         );
 
-        if (exact) {
-          setBooking(exact);
-          setError('');
+        if (!exact) {
+          setBooking(null);
+          setError('That booking could not be found in your bookings.');
           return;
         }
+
+        if (!isTrackable(exact)) {
+          const bookingStatus = String(exact.status || '').toLowerCase();
+          const tripStatus = String(exact.trip_status || '').toLowerCase();
+
+          let message = 'This trip is not available for live tracking yet.';
+
+          if (['cancelled', 'completed', 'no_show'].includes(bookingStatus)) {
+            message = 'This booking is no longer active.';
+          } else if (['completed', 'cancelled'].includes(tripStatus)) {
+            message = tripStatus === 'completed'
+              ? 'This trip has already been completed.'
+              : 'This trip has been cancelled.';
+          } else if (bookingStatus !== 'confirmed') {
+            message = 'This booking is not confirmed.';
+          } else if (!['boarding', 'departed'].includes(tripStatus)) {
+            message = 'Live tracking becomes available when the trip starts boarding or departs.';
+          } else if (!exact.driver_id) {
+            message = 'A driver has not yet been assigned to this trip.';
+          }
+
+          setBooking(null);
+          setError(message);
+          return;
+        }
+
+        setBooking(exact);
+        setError('');
+        return;
       }
 
-      const now = Date.now();
-
+      // Without an explicit booking ID, select only an eligible live trip.
       const usable = bookings
-        .filter((item) => {
-          if (
-            requestedBookingId &&
-            String(item.booking_id || item.id) !== String(requestedBookingId)
-          ) {
-            return false;
-          }
-
-          const status = String(item.status || '').toLowerCase();
-
-          if (['cancelled', 'completed'].includes(status)) {
-            return false;
-          }
-
-          const departureValue =
-            item.departure_at ||
-            item.trip?.departure_at ||
-            item.trip_details?.departure_at;
-
-          if (!departureValue) {
-            return status === 'active' || status === 'confirmed';
-          }
-
-          const departure = new Date(departureValue).getTime();
-
-          return (
-            departure >= now ||
-            status === 'active' ||
-            status === 'confirmed'
-          );
-        })
+        .filter(isTrackable)
         .sort((a, b) => {
-          const aValue =
-            a.departure_at ||
-            a.trip?.departure_at ||
-            a.trip_details?.departure_at;
-
-          const bValue =
-            b.departure_at ||
-            b.trip?.departure_at ||
-            b.trip_details?.departure_at;
-
-          const aTime = aValue
-            ? new Date(aValue).getTime()
+          const aTime = a.departure_at
+            ? new Date(a.departure_at).getTime()
             : Number.MAX_SAFE_INTEGER;
 
-          const bTime = bValue
-            ? new Date(bValue).getTime()
+          const bTime = b.departure_at
+            ? new Date(b.departure_at).getTime()
             : Number.MAX_SAFE_INTEGER;
 
           return aTime - bTime;
@@ -91,7 +88,9 @@ export default function PassengerMapPage() {
 
       if (!usable.length) {
         setBooking(null);
-        setError('You do not have an upcoming trip to track yet.');
+        setError(
+          'You do not have an active trip to track yet. Live tracking is available once a confirmed trip is boarding or departed and has an assigned driver.',
+        );
         return;
       }
 

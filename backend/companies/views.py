@@ -431,6 +431,10 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
             route__company_id=user.company_id
         )
 
+        _scope = operator_route_ids(user)
+        if _scope is not None:
+            queryset = queryset.filter(route_id__in=_scope)
+
     elif comp_id:
         queryset = queryset.filter(
             route__company_id=comp_id
@@ -450,9 +454,12 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     # Company staff and superusers retain access to historical trips.
     if not is_company_staff and not user.is_superuser:
         from django.utils import timezone
+        from django.db.models import Q
+        from bookings.services import BOARDING_BOOKABLE_WINDOW as _win
+        _now = timezone.now()
         queryset = queryset.filter(
-            status='scheduled',
-            departure_at__gt=timezone.now(),
+            Q(status='scheduled', departure_at__gt=_now)
+            | Q(status='boarding', departure_at__gt=_now - _win)
         )
 
     data = [dict(item) for item in TripSerializer(queryset, many=True).data]
@@ -589,6 +596,7 @@ def update_trip_status(request, trip_id, *args, **kwargs):
         or (
             user.role in {'company_manager', 'company_operator'}
             and user.company_id == company.id
+            and can_handle_route(user, trip.route_id)
         )
     )
 
@@ -1476,3 +1484,174 @@ def route_health(request):
             'road_points': len(route.via_points or []),
         })
     return Response(results)
+
+
+@api_view(['PATCH', 'POST'])
+@permission_classes([IsAuthenticated])
+def update_trip_capacity(request, trip_id, *args, **kwargs):
+    """Change a trip's seat capacity without recreating the trip."""
+    from django.db.models import Sum
+
+    trip = (
+        Trip.objects.select_related('route__company')
+        .filter(pk=trip_id).first()
+    )
+    if trip is None:
+        return Response({'error': 'Trip not found'},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    user = request.user
+    allowed = (
+        user.is_superuser
+        or (
+            user.role in {'company_manager', 'company_operator'}
+            and user.company_id == trip.route.company_id
+            and can_handle_route(user, trip.route_id)
+        )
+    )
+    if not allowed:
+        return Response(
+            {'error': "You are not authorized to manage this company's trips."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    raw = request.data.get('capacity')
+    try:
+        if isinstance(raw, bool) or raw is None:
+            raise ValueError
+        text = str(raw).strip()
+        capacity = int(text)
+        if str(capacity) != text.lstrip('+'):
+            raise ValueError
+    except (TypeError, ValueError):
+        return Response({'error': 'capacity must be a whole number.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if capacity < 1 or capacity > 100:
+        return Response({'error': 'capacity must be between 1 and 100.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        locked = Trip.objects.select_for_update().get(pk=trip.pk)
+        if locked.status not in ('scheduled', 'boarding'):
+            return Response(
+                {'error': f'Capacity cannot be changed on a {locked.status} trip.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        taken = (
+            locked.bookings.exclude(status='cancelled')
+            .aggregate(total=Sum('seats'))['total'] or 0
+        )
+        if capacity < taken:
+            return Response(
+                {
+                    'error': f'{taken} seats are already booked; '
+                             'capacity cannot be lower.',
+                    'seats_taken': taken,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        locked.capacity = capacity
+        locked.save(update_fields=['capacity'])
+
+    return Response({
+        'message': 'Trip capacity updated.',
+        'trip_id': locked.id,
+        'capacity': locked.capacity,
+        'seats_taken': taken,
+        'seats_available': locked.capacity - taken,
+    }, status=status.HTTP_200_OK)
+
+
+def _operator_row(op):
+    return {
+        'id': op.id,
+        'username': op.username,
+        'phone_number': op.phone_number,
+        'all_routes': op.all_routes,
+        'route_ids': sorted(op.assigned_routes.values_list('id', flat=True)),
+    }
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def operator_route_assignments(request):
+    """Routes of the manager's company and which operator handles which."""
+    from django.contrib.auth import get_user_model
+    user = request.user
+    if not (user.is_superuser or user.role == 'company_manager'):
+        return Response({'error': 'Only a company manager can view this.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    company_id = (
+        request.query_params.get('company_id') if user.is_superuser
+        else user.company_id
+    )
+    if not company_id:
+        return Response({'error': 'Company assignment required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    ops = (
+        get_user_model().objects
+        .filter(company_id=company_id, role='company_operator')
+        .order_by('username')
+    )
+    routes = Route.objects.filter(company_id=company_id).order_by('name')
+    return Response({
+        'routes': [{'id': r.id, 'name': r.name} for r in routes],
+        'operators': [_operator_row(o) for o in ops],
+    })
+
+
+@api_view(['PATCH', 'POST'])
+@permission_classes([IsAuthenticated])
+def set_operator_routes(request, user_id):
+    """The manager chooses which routes an operator handles (or all of them)."""
+    from django.contrib.auth import get_user_model
+    user = request.user
+    if not (user.is_superuser or user.role == 'company_manager'):
+        return Response({'error': 'Only a company manager can assign routes.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    target = (
+        get_user_model().objects
+        .filter(pk=user_id, role='company_operator').first()
+    )
+    if target is None:
+        return Response({'error': 'Operator not found.'},
+                        status=status.HTTP_404_NOT_FOUND)
+    if not user.is_superuser and user.company_id != target.company_id:
+        return Response({'error': 'This operator belongs to another company.'},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    all_routes = request.data.get('all_routes')
+    if not isinstance(all_routes, bool):
+        return Response({'error': 'all_routes must be true or false.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    valid = []
+    if not all_routes:
+        raw = request.data.get('route_ids', [])
+        if not isinstance(raw, list):
+            return Response({'error': 'route_ids must be a list.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            wanted = {int(x) for x in raw if not isinstance(x, bool)}
+        except (TypeError, ValueError):
+            return Response({'error': 'route_ids must be whole numbers.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        valid = list(
+            Route.objects.filter(
+                company_id=target.company_id, id__in=wanted
+            ).values_list('id', flat=True)
+        )
+        if len(valid) != len(wanted):
+            return Response(
+                {'error': 'Every route must belong to the operator\'s company.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        target.all_routes = all_routes
+        target.save(update_fields=['all_routes'])
+        if not all_routes:
+            target.assigned_routes.set(valid)
+    return Response(_operator_row(target), status=status.HTTP_200_OK)
+
+
+from users.route_scope import can_handle_route, operator_route_ids  # noqa: E402

@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import './PassengerHomeRedesign.css';
 import PassengerLiveMap from './PassengerLiveMap';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
 import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
@@ -238,6 +239,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   useEffect(()=>{if(!company){setTrips([]);return} const q=route?`?route_id=${route}`:''; apiRequest(`/companies/${company}/trips/${q}`).then(d=>setTrips(Array.isArray(d)?d:[])).catch(e=>setError(e.message))},[company,route]);
 
   const selectedRoute=useMemo(()=>routes.find(r=>String(r.id)===String(route)),[routes,route]);
+  const firstStageId=(selectedRoute?.pickup_stages||[]).filter(st=>st.is_active!==false)[0]?.id;
+  const canBookTrip=(t)=>t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId));
   const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1);setPickup(user?.location||'Main Stage')};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
@@ -513,7 +516,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             ) : (
               <div className="modern-trip-list">
                 {bookings
-                  .filter((b) => b.status !== 'cancelled')
+                  .filter((b) => !['cancelled', 'completed', 'no_show'].includes(String(b.status || '').toLowerCase()))
                   .slice(0, 5)
                   .map((b) => (
                     <article
@@ -566,22 +569,54 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                       <div className="trip-action">
                         <strong>{money(b.total_amount)}</strong>
 
-                        <button
-                          type="button"
-                          className="glass-primary-button"
-                          disabled={!b.driver_id}
-                          onClick={() =>
-                            navigate(
-                              `/passenger/map?booking=${encodeURIComponent(
-                                b.booking_id || b.id
-                              )}`
+                        {(
+                          String(b.status || '').toLowerCase() === 'confirmed' &&
+                          ['boarding', 'departed'].includes(
+                            String(b.trip_status || '').toLowerCase()
+                          ) &&
+                          Boolean(b.driver_id)
+                        ) ? (
+                          <button
+                            type="button"
+                            className="glass-primary-button"
+                            onClick={() =>
+                              navigate(
+                                `/passenger/map?booking=${encodeURIComponent(
+                                  b.booking_id || b.id
+                                )}`
+                              )
+                            }
+                          >
+                            Track trip →
+                          </button>
+                        ) : (
+                          <span className="trip-status-label">
+                            {['cancelled', 'completed', 'no_show'].includes(
+                              String(b.status || '').toLowerCase()
                             )
-                          }
-                        >
-                          {b.driver_id
-                            ? 'Track trip →'
-                            : 'Driver pending'}
-                        </button>
+                              ? ({
+                                  cancelled: 'Booking cancelled',
+                                  completed: 'Booking completed',
+                                  no_show: 'No-show',
+                                }[String(b.status).toLowerCase()])
+                              : ['completed', 'cancelled'].includes(
+                                  String(b.trip_status || '').toLowerCase()
+                                )
+                                ? ({
+                                    completed: 'Trip completed',
+                                    cancelled: 'Trip cancelled',
+                                  }[String(b.trip_status).toLowerCase()])
+                                : String(b.status || '').toLowerCase() !== 'confirmed'
+                                  ? 'Booking not confirmed'
+                                  : !b.trip_status
+                                    ? 'Trip status unavailable'
+                                    : ['boarding', 'departed'].includes(
+                                        String(b.trip_status).toLowerCase()
+                                      ) && !b.driver_id
+                                      ? 'Driver pending'
+                                      : 'Trip scheduled'}
+                          </span>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -820,7 +855,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
               <span className="pickup-stage-info">
                 <strong>{stage.name}</strong>
-                <small>Pickup stage</small>
+                <small>{index === 0 ? 'Boarding point · book at the stage' : 'Pickup stage'}</small>
               </span>
 
               <span className="pickup-stage-arrow">→</span>
@@ -972,7 +1007,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                     <button
                       type="button"
                       className="glass-primary-button"
-                      disabled={t.status !== 'scheduled'}
+                      disabled={!canBookTrip(t)}
+                      title={t.status === 'boarding' && !canBookTrip(t) ? 'Boarding has started: only the first stage can be booked' : undefined}
                       onClick={() => startBooking(t)}
                     >
                       {t.status === 'scheduled'

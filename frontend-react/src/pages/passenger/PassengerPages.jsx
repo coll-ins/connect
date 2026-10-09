@@ -326,7 +326,7 @@ export function PassengerSeats() {
       title="Your reserved seats"
       description="See the seats attached to your active CONNECT bookings."
     >
-      <PassengerBookings />
+      <BookingsBody activeOnly />
     </PassengerPage>
   );
 }
@@ -370,7 +370,7 @@ export function PassengerHelp() {
   );
 }
 
-export function PassengerBookings() {
+function BookingsBody({ activeOnly = false }) {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -382,24 +382,32 @@ export function PassengerBookings() {
       .finally(() => setLoading(false));
   }, []);
 
+  const visible = activeOnly
+    ? bookings.filter(
+        (b) =>
+          ['pending', 'confirmed'].includes(
+            String(b.status || '').toLowerCase()
+          ) &&
+          !['completed', 'cancelled'].includes(
+            String(b.trip_status || '').toLowerCase()
+          )
+      )
+    : bookings;
+
   return (
-    <PassengerPage
-      eyebrow="MY BOOKINGS"
-      title="Your journeys"
-      description="View your upcoming, completed and cancelled CONNECT bookings."
-    >
+    <>
       {error && <div className="connect-alert connect-alert-error">{error}</div>}
 
       {loading ? (
         <div className="glass-empty">Loading your bookings…</div>
-      ) : !bookings.length ? (
+      ) : !visible.length ? (
         <div className="glass-empty">
           <strong>No bookings yet.</strong>
           <span>Book a seat from Find a Trip to see your journeys here.</span>
         </div>
       ) : (
         <div className="passenger-data-grid">
-          {bookings.map((booking) => (
+          {visible.map((booking) => (
             <article className="passenger-data-card" key={booking.booking_id}>
               <div className="data-card-top">
                 <div>
@@ -439,6 +447,18 @@ export function PassengerBookings() {
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+export function PassengerBookings() {
+  return (
+    <PassengerPage
+      eyebrow="MY BOOKINGS"
+      title="Your journeys"
+      description="View your upcoming, completed and cancelled CONNECT bookings."
+    >
+      <BookingsBody />
     </PassengerPage>
   );
 }
@@ -557,6 +577,14 @@ export function PassengerPayments() {
 
 export function PassengerProfile() {
   const { user } = useAuth();
+  const looksLikePhone = (v) => /^\+?[0-9\s-]{7,}$/.test(String(v || ''));
+  const phoneText =
+    user?.phone_number ||
+    user?.phone ||
+    (looksLikePhone(user?.name) ? user.name : null);
+  const realName =
+    user?.name && !looksLikePhone(user.name) ? user.name : null;
+  const displayName = realName || user?.username || 'Passenger';
 
   return (
     <PassengerPage
@@ -566,13 +594,13 @@ export function PassengerProfile() {
     >
       <div className="profile-glass-card">
         <div className="profile-avatar-large">
-          {(user?.name || 'U').charAt(0).toUpperCase()}
+          {displayName.charAt(0).toUpperCase()}
         </div>
 
         <div className="profile-main">
           <span className="glass-eyebrow">PASSENGER ACCOUNT</span>
-          <h2>{user?.name || 'Passenger'}</h2>
-          <p>{user?.phone_number || 'Phone number not available'}</p>
+          <h2>{displayName}</h2>
+          <p>{phoneText || 'Phone number not available'}</p>
         </div>
       </div>
 
@@ -580,7 +608,7 @@ export function PassengerProfile() {
         <div className="profile-detail">
           <UserRound size={20} />
           <span>Full name</span>
-          <strong>{user?.name || 'Not provided'}</strong>
+          <strong>{realName || 'Not provided'}</strong>
         </div>
 
         <div className="profile-detail">

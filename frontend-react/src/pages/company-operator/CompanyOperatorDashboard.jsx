@@ -438,6 +438,113 @@ function TripCard({ trip, onStatusChange, updating }) {
   );
 }
 
+function CapacityEditor({ trip, bookedSeats, onSaved }) {
+  const [value, setValue] = useState(String(trip.capacity || ''));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const status = String(trip.status || '').toLowerCase();
+  if (!['scheduled', 'boarding'].includes(status)) return null;
+  const dirty = Number(value) !== Number(trip.capacity);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await apiRequest(`/companies/trips/${trip.id}/capacity/`, {
+        method: 'PATCH',
+        body: { capacity: Number(value) },
+      });
+      onSaved(res?.capacity ?? Number(value));
+      setMsg('Saved');
+    } catch (e) {
+      setMsg(e?.message || 'Could not save');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="operator-capacity-edit">
+      <label>
+        <span>Seats</span>
+        <input
+          type="number"
+          min={Math.max(1, bookedSeats)}
+          max={100}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </label>
+      <button type="button" onClick={save} disabled={!dirty || busy}>
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+      {msg && <small role="status">{msg}</small>}
+    </div>
+  );
+}
+
+
+function WalkInForm({ trip, onDone }) {
+  const [phone, setPhone] = useState('');
+  const [seats, setSeats] = useState('1');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [ok, setOk] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setMsg('');
+    setOk(false);
+    try {
+      const res = await apiRequest(`/bookings/walk-in/${trip.id}/`, {
+        method: 'POST',
+        body: { phone_number: phone.trim(), seats: Number(seats) },
+      });
+      setOk(true);
+      setMsg(`Boarded ${res?.booking_number || ''} · ${res?.seats_remaining ?? '?'} seats left`);
+      setPhone('');
+      setSeats('1');
+      if (onDone) onDone();
+    } catch (err) {
+      setMsg(err?.message || 'Could not book this passenger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="operator-walkin" onSubmit={submit}>
+      <strong>Book at stage (cash)</strong>
+      <div className="operator-walkin-row">
+        <input
+          type="tel"
+          placeholder="Passenger phone e.g. 0712345678"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          required
+        />
+        <input
+          type="number"
+          min="1"
+          max="20"
+          value={seats}
+          onChange={(e) => setSeats(e.target.value)}
+          aria-label="Seats"
+        />
+        <button type="submit" disabled={busy || !phone.trim()}>
+          {busy ? 'Booking…' : 'Book & board'}
+        </button>
+      </div>
+      {msg && (
+        <small role="status" className={ok ? 'walkin-ok' : 'walkin-err'}>
+          {msg}
+        </small>
+      )}
+    </form>
+  );
+}
+
 export default function CompanyOperatorDashboard() {
   const { user, logout } = useAuth();
 
@@ -1148,6 +1255,25 @@ export default function CompanyOperatorDashboard() {
                     }}
                   />
                 </div>
+
+                <CapacityEditor
+                  trip={trip}
+                  bookedSeats={bookedSeats}
+                  onSaved={(cap) =>
+                    setTrips((cur) =>
+                      cur.map((t) =>
+                        t.id === trip.id ? { ...t, capacity: cap } : t
+                      )
+                    )
+                  }
+                />
+
+                {String(trip.status).toLowerCase() === 'boarding' && (
+                  <WalkInForm
+                    trip={trip}
+                    onDone={() => loadOperations(true)}
+                  />
+                )}
 
                 <div className="operator-capacity-footer">
                   <span>

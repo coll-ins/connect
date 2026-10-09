@@ -129,11 +129,20 @@ function MapResize() {
   const map = useMap();
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      map.invalidateSize();
-    }, 150);
+    const refresh = () => map.invalidateSize({ pan: false });
+    const timer = window.setTimeout(refresh, 150);
+    const container = map.getContainer();
+    let observer = null;
 
-    return () => window.clearTimeout(timer);
+    if (typeof ResizeObserver !== 'undefined' && container) {
+      observer = new ResizeObserver(refresh);
+      observer.observe(container);
+    }
+
+    return () => {
+      window.clearTimeout(timer);
+      if (observer) observer.disconnect();
+    };
   }, [map]);
 
   return null;
@@ -589,7 +598,11 @@ export default function PassengerLiveMap({
 
   const demoTarget = useDemoDriver(geometry);
 
-  const displayedDriverPosition = demoTarget || driverPosition;
+  // Simulation may override GPS only when the server confirms an active trip.
+  const displayedDriverPosition =
+    live?.is_trip_live === true && demoTarget
+      ? demoTarget
+      : driverPosition;
 
 
   const stages = useMemo(
@@ -669,7 +682,10 @@ export default function PassengerLiveMap({
     return Math.max(0, (live._fetchedAt - time) / 60000);
   }, [live]);
 
-  const busStale = locationAgeMin != null && locationAgeMin > 10;
+  const busStale =
+    typeof live?.is_stale === 'boolean'
+      ? live.is_stale
+      : locationAgeMin == null || locationAgeMin * 60 > 120;
   const busUnreliable = busOffRoute || busStale;
 
   const ageText =
@@ -686,20 +702,37 @@ export default function PassengerLiveMap({
     pickupRouteIndex >= 0 &&
     driverRouteIndex > pickupRouteIndex + 5;
 
-  let busStatus = 'Driver location is live';
+  const tripStatus = String(live?.trip_status || '').toLowerCase();
+  const inactiveTripStatuses = [
+    'completed', 'cancelled', 'ended', 'no_show', 'expired',
+  ];
+  const tripLifecycleLive =
+    live?.is_trip_live === true &&
+    !inactiveTripStatuses.includes(tripStatus);
 
-  if (!displayedDriverPosition) {
+  const tripIsLive =
+    Boolean(displayedDriverPosition) &&
+    !busStale &&
+    tripLifecycleLive;
+
+  let busStatus;
+
+  if (tripStatus === 'completed') {
+    busStatus = 'Trip completed';
+  } else if (!tripLifecycleLive) {
+    busStatus = live ? 'Trip is not active' : 'Checking trip status';
+  } else if (!displayedDriverPosition) {
     busStatus = 'Waiting for driver location';
   } else if (busStale) {
-    busStatus = `Last seen ${ageText} ago`;
+    busStatus = locationAgeMin == null
+      ? 'Driver location is offline'
+      : `Last seen ${ageText} ago`;
   } else if (busOffRoute) {
     busStatus = `Bus is ${formatDistance(busGapKm)} from the route`;
   } else if (busPastPickup) {
     busStatus = 'Bus has passed your pickup';
-  }
-
-  if (live?.trip_status === 'completed') {
-    busStatus = 'Trip completed';
+  } else {
+    busStatus = 'Driver location is live';
   }
 
   const remainingRoute = useMemo(() => {
@@ -1025,7 +1058,7 @@ export default function PassengerLiveMap({
             <MapFollow position={passengerPosition} />
           )}
 
-          {displayedDriverPosition && (
+          {tripIsLive && displayedDriverPosition && (
             <Marker
               ref={vehicleMarkerRef}
               position={displayedDriverPosition}
@@ -1072,9 +1105,13 @@ export default function PassengerLiveMap({
           </span>
         </div>
 
-        <div className="passenger-live-map__live">
+        <div
+          className="passenger-live-map__live"
+          style={tripIsLive ? undefined : { opacity: 0.6, filter: 'grayscale(1)' }}
+          aria-live="polite"
+        >
           <span />
-          LIVE
+          {tripIsLive ? 'LIVE' : 'OFFLINE'}
         </div>
       </header>
 
@@ -1248,9 +1285,13 @@ export default function PassengerLiveMap({
             </span>
           </div>
 
-          <div className="passenger-live-map__vehicle-live">
+          <div
+            className="passenger-live-map__vehicle-live"
+            style={tripIsLive ? undefined : { opacity: 0.6, filter: 'grayscale(1)' }}
+            aria-live="polite"
+          >
             <span />
-            LIVE
+            {tripIsLive ? 'LIVE' : 'OFFLINE'}
           </div>
         </div>
 

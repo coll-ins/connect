@@ -85,6 +85,164 @@ const sectionConfig = {
 };
 
 
+function OperatorRouteAssignments() {
+  const [state, setState] = useState({ routes: [], operators: [] });
+  const [drafts, setDrafts] = useState({});
+  const [saving, setSaving] = useState(null);
+  const [message, setMessage] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await apiRequest('/companies/operator-routes/');
+      setState(res || { routes: [], operators: [] });
+      setDrafts({});
+    } catch (e) {
+      setMessage(e?.message || 'Could not load operator routes.');
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const draftFor = (op) =>
+    drafts[op.id] || { all: op.all_routes, ids: op.route_ids };
+
+  const setDraft = (op, patch) =>
+    setDrafts((cur) => ({ ...cur, [op.id]: { ...draftFor(op), ...patch } }));
+
+  const toggle = (op, routeId) => {
+    const d = draftFor(op);
+    const ids = d.ids.includes(routeId)
+      ? d.ids.filter((x) => x !== routeId)
+      : [...d.ids, routeId];
+    setDraft(op, { ids });
+  };
+
+  const save = async (op) => {
+    const d = draftFor(op);
+    setSaving(op.id);
+    setMessage('');
+    try {
+      await apiRequest(`/companies/operator-routes/${op.id}/`, {
+        method: 'PATCH',
+        body: { all_routes: d.all, route_ids: d.all ? [] : d.ids },
+      });
+      setMessage(`Saved routes for ${op.username}.`);
+      await load();
+    } catch (e) {
+      setMessage(e?.message || 'Could not save.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (!state.operators.length) return null;
+
+  return (
+    <section className="op-routes">
+      <h3>Operator route assignments</h3>
+      <p className="op-routes-hint">
+        Choose which routes each operator handles. Operators only see and act
+        on the routes assigned to them.
+      </p>
+      {state.operators.map((op) => {
+        const d = draftFor(op);
+        const dirty =
+          d.all !== op.all_routes ||
+          (!d.all &&
+            JSON.stringify([...d.ids].sort()) !==
+              JSON.stringify([...op.route_ids].sort()));
+        return (
+          <div className="op-routes-card" key={op.id}>
+            <div className="op-routes-head">
+              <strong>{op.username}</strong>
+              <span>{op.phone_number}</span>
+              <select
+                value={d.all ? 'all' : 'selected'}
+                onChange={(e) => setDraft(op, { all: e.target.value === 'all' })}
+              >
+                <option value="all">All routes</option>
+                <option value="selected">Selected routes only</option>
+              </select>
+            </div>
+            {!d.all && (
+              <div className="op-routes-list">
+                {state.routes.map((r) => (
+                  <label key={r.id}>
+                    <input
+                      type="checkbox"
+                      checked={d.ids.includes(r.id)}
+                      onChange={() => toggle(op, r.id)}
+                    />
+                    {r.name}
+                  </label>
+                ))}
+                {d.ids.length === 0 && (
+                  <small className="op-routes-warn">
+                    No routes selected: this operator will see nothing.
+                  </small>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={!dirty || saving === op.id}
+              onClick={() => save(op)}
+            >
+              {saving === op.id ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        );
+      })}
+      {message && <small role="status">{message}</small>}
+    </section>
+  );
+}
+
+function TripCapacityEditor({ trip, onSaved }) {
+  const [value, setValue] = useState(String(trip.capacity || ''));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const st = String(trip.status || '').toLowerCase();
+  if (!['scheduled', 'boarding'].includes(st)) return null;
+  const dirty = Number(value) !== Number(trip.capacity);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      await apiRequest(`/companies/trips/${trip.id}/capacity/`, {
+        method: 'PATCH',
+        body: { capacity: Number(value) },
+      });
+      setMsg('Saved');
+      onSaved();
+    } catch (e) {
+      setMsg(e?.message || 'Could not save');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="op-routes-capacity">
+      <input
+        type="number"
+        min="1"
+        max="100"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        aria-label="Seats"
+      />
+      <button type="button" onClick={save} disabled={!dirty || busy}>
+        {busy ? 'Saving…' : 'Update seats'}
+      </button>
+      {msg && <small role="status">{msg}</small>}
+    </div>
+  );
+}
+
 function Input({ label, ...props }) {
   return (
     <label className="company-field">
@@ -825,6 +983,8 @@ export default function CompanyManagerSection({ section }) {
                 </div>
               )}
 
+              {section === 'operators' && <OperatorRouteAssignments />}
+
               {section === 'operators' && (
                 <div className="company-card-grid">
                   {data.map((operator) => (
@@ -942,6 +1102,7 @@ export default function CompanyManagerSection({ section }) {
                         </div>
 
                         <span>{Math.round(percentage)}% occupied</span>
+                        <TripCapacityEditor trip={trip} onSaved={load} />
                       </div>
                     );
                   })}
