@@ -95,8 +95,10 @@ class Command(BaseCommand):
                     booking.status = "no_show"
                     booking.save(update_fields=["status"])
 
-                    booking.user.no_show_count += 1
-                    booking.user.save(update_fields=["no_show_count"])
+                    from django.db.models import F as _F
+                    type(booking.user).objects.filter(pk=booking.user_id).update(
+                        no_show_count=_F('no_show_count') + 1
+                    )
                     bookings_settled += 1
 
                 expired_count = trip.bookings.filter(
