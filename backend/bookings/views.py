@@ -1640,6 +1640,7 @@ def get_my_bookings(request):
         data.append({
             'booking_id': b.id,
             'booking_number': b.booking_number,
+            'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
 

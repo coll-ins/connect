@@ -8,27 +8,6 @@ from rest_framework.throttling import SimpleRateThrottle
 from .models import BookingHold
 
 
-class BoardingVerifyThrottle(SimpleRateThrottle):
-    """
-    Custom throttle instead of ScopedRateThrottle + throttle_scope:
-    DRF's @api_view decorator does not forward a .throttle_scope
-    attribute to the generated view (verified — it silently does
-    nothing), so ScopedRateThrottle never actually saw a scope and
-    never throttled anything. This works because 'scope' is a
-    hardcoded class attribute here, with nothing depending on
-    per-view attribute forwarding.
-    """
-    scope = 'boarding_verify'
-
-    def get_cache_key(self, request, view):
-        if request.user and request.user.is_authenticated:
-            ident = request.user.pk
-        else:
-            ident = self.get_ident(request)
-        return self.cache_format % {'scope': self.scope, 'ident': ident}
-
-
-
 def trip_has_departed(trip):
     """
     True if this trip is gone: either already flagged 'departed' by

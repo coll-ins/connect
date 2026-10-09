@@ -93,3 +93,18 @@ class PinNeverLeaksTests(APITestCase):
         self.assertIn(PIN, self.client.get(url).content.decode())
         Booking.objects.filter(pk=self.booking.pk).update(status="cancelled")
         self.assertNotIn(PIN, self.client.get(url).content.decode())
+
+
+    def test_my_bookings_shows_pin_to_owner_only_while_confirmed(self):
+        url = reverse("bookings:get-my-bookings")
+        self.client.force_authenticate(user=self.owner)
+        self.assertIn(PIN, self.client.get(url).content.decode())
+        Booking.objects.filter(pk=self.booking.pk).update(status="cancelled")
+        self.assertNotIn(PIN, self.client.get(url).content.decode())
+
+    def test_auditor_receipt_search_works_and_hides_pin(self):
+        url = reverse("bookings:auditor-receipt-search") + f"?search={self.booking.booking_number}"
+        resp = self._get(self.auditor, url)
+        self.assertEqual(resp.status_code, 200, resp.content.decode()[:300])
+        self.assertIn(self.booking.booking_number, resp.content.decode())
+        self.assertNotIn(PIN, resp.content.decode())

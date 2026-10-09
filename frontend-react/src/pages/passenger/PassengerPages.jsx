@@ -420,6 +420,17 @@ export function PassengerBookings() {
                 <span>💳 {booking.payment_status}</span>
               </div>
 
+              {booking.verification_pin && (
+                <div className="data-card-details" style={{ marginTop: 8 }}>
+                  <span>
+                    Boarding PIN (show only to the driver){' '}
+                    <strong style={{ letterSpacing: '0.25em', fontSize: '1.5em' }}>
+                      {booking.verification_pin}
+                    </strong>
+                  </span>
+                </div>
+              )}
+
               <div className="data-card-bottom">
                 <strong>{money(booking.total_amount)}</strong>
                 <span>{booking.payment_method || 'Payment pending'}</span>
