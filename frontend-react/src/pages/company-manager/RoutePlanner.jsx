@@ -68,7 +68,7 @@ export default function RoutePlanner() {
       const map = {};
       rows.forEach((h) => { map[h.id] = h; });
       setHealth(map);
-    } catch (e) { /* advisory only; the planner works without it */ }
+    } catch { /* advisory only; the planner works without it */ }
   }, []);
 
   const route = routes?.find((r) => String(r.id) === routeId);

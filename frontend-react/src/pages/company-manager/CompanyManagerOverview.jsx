@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Activity,
   ArrowUpRight,
   Bus,
   CalendarDays,
   ClipboardList,
-  Menu,
   Route,
   ShieldCheck,
   Users,
@@ -47,7 +45,7 @@ function Stat({ icon: Icon, label, value, detail }) {
 }
 
 export default function CompanyManagerOverview() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const companyId = user?.company_id;
 
