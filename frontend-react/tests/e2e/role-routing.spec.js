@@ -108,3 +108,18 @@ test.describe('CONNECT role-specific navigation', () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem('user_session'))).toBeNull();
   });
 });
+
+test('unknown passenger subroute returns to passenger home', async ({ page }) => {
+  await stubApi(page, { profileRole: 'passenger' });
+
+  await page.addInitScript((user) => {
+    localStorage.setItem('user_session', JSON.stringify(user));
+  }, baseUser('passenger'));
+
+  await page.goto('/passenger/not-a-real-page');
+
+  await expect(page).toHaveURL(/\/passenger$/);
+  await expect(
+    page.getByRole('heading', { name: /Where are you going today\?/i }),
+  ).toBeVisible();
+});

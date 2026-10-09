@@ -51,6 +51,10 @@ function PassengerRoutes() {
         <Route path="charter" element={<CharterList />} />
         <Route path="charter/new" element={<CharterNew />} />
         <Route path="charter/:id" element={<CharterDetail />} />
+        <Route
+          path="*"
+          element={<Navigate to="/passenger" replace />}
+        />
       </Routes>
     </ProtectedRoute>
   );
