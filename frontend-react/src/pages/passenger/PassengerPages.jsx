@@ -253,6 +253,13 @@ export function PassengerRecords({ mode = 'receipts' }) {
                   <span>Status<strong>{selected.booking?.status}</strong></span>
                   <span>Created<strong>{date(selected.booking?.created_at)}</strong></span>
                   <span>Updated<strong>{date(selected.booking?.updated_at)}</strong></span>
+                  {selected.booking?.verification_pin && (
+                    <span>Boarding PIN (show only to the driver)
+                      <strong style={{ letterSpacing: '0.25em', fontSize: '1.5em' }}>
+                        {selected.booking.verification_pin}
+                      </strong>
+                    </span>
+                  )}
                 </div>
               </div>
 
