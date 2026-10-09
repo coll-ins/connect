@@ -836,6 +836,11 @@ def paystack_webhook(request):
     except json.JSONDecodeError:
         return HttpResponse(status=400)
 
+    # Paystack allows ONE webhook URL per mode, so refund events arrive here.
+    # The refund handler re-verifies the signature itself.
+    if str(event.get('event', '')).startswith('refund.'):
+        return paystack_refund_webhook(request)
+
     if event.get('event') != 'charge.success':
         return HttpResponse(status=200)
 

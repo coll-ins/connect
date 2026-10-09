@@ -29,7 +29,8 @@
 12. sudo cp /srv/connect/deploy/connect.cron /etc/cron.d/connect && sudo chmod 644 /etc/cron.d/connect
     sudo cp /srv/connect/deploy/logrotate-connect /etc/logrotate.d/connect
 13. /srv/connect/deploy/smoke_test.sh https://DOMAIN        # every line must PASS
-14. Paystack dashboard (Settings > API Keys & Webhooks): webhook URL https://DOMAIN/api/bookings/webhooks/paystack/
-15. Run backup.sh and restore_test.sh once on the VPS (as `connect` with the env loaded); configure rclone and set OFFSITE_REMOTE.
+14. Paystack dashboard (Settings > API Keys & Webhooks): set the webhook URL to https://DOMAIN/api/bookings/webhooks/paystack/
+    Paystack takes ONE URL per mode; refund.* events are routed to the refund handler internally.
+15. Run backup.sh and restore_test.sh once on the VPS (as `connect`, env loaded); configure rclone and set OFFSITE_REMOTE.
 16. Update procedure: git pull; pip install -r requirements.txt; migrate; collectstatic;
     systemctl restart connect-daphne@8001; sleep 8; systemctl restart connect-daphne@8002
