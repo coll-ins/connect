@@ -455,11 +455,18 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
             departure_at__gt=timezone.now(),
         )
 
-    serializer = TripSerializer(queryset, many=True)
-    return Response(
-        serializer.data,
-        status=status.HTTP_200_OK
-    )
+    data = [dict(item) for item in TripSerializer(queryset, many=True).data]
+    if not user.is_authenticated:
+        for item in data:
+            for key in _ANON_HIDDEN_TRIP_FIELDS:
+                item.pop(key, None)
+    return Response(data, status=status.HTTP_200_OK)
+
+# Driver identity is for logged-in users only (passengers, staff).
+_ANON_HIDDEN_TRIP_FIELDS = (
+    'driver', 'driver_id', 'driver_name', 'driver_bus_number',
+    'driver_phone', 'driver_phone_number', 'bus_number', 'driver_details',
+)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -507,11 +514,11 @@ def get_trip_details(request, trip_id, *args, **kwargs):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-    serializer = TripSerializer(trip)
-    return Response(
-        serializer.data,
-        status=status.HTTP_200_OK
-    )
+    data = dict(TripSerializer(trip).data)
+    if not user.is_authenticated:
+        for key in _ANON_HIDDEN_TRIP_FIELDS:
+            data.pop(key, None)
+    return Response(data, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

@@ -2867,21 +2867,16 @@ def verify_boarding(request, booking_id):
 
             elif boarding_pin:
                 from django.core.cache import cache
+                import hmac
                 fail_key = f'pin-fail:{booking.id}'
                 if cache.get(fail_key, 0) >= 5:
                     return Response(
                         {'error': 'Too many wrong PINs. Scan the QR code or wait 15 minutes.'},
                         status=status.HTTP_429_TOO_MANY_REQUESTS
                     )
-                if (
-                    str(
-                        getattr(
-                            booking,
-                            'verification_pin',
-                            ''
-                        )
-                    )
-                    != str(boarding_pin)
+                if not hmac.compare_digest(
+                    str(getattr(booking, 'verification_pin', '')).encode('utf-8'),
+                    str(boarding_pin).encode('utf-8'),
                 ):
                     cache.add(fail_key, 0, 900)
                     cache.incr(fail_key)

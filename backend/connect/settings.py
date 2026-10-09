@@ -316,6 +316,9 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
     # Start low. Raise to 31536000 only after HTTPS is confirmed stable.
     SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '3600'))
+    # W005/W021 are deliberate: no includeSubDomains/preload until HTTPS is proven on every
+    # subdomain. Any OTHER deploy warning still fails the release check.
+    SILENCED_SYSTEM_CHECKS = ['security.W005', 'security.W021']
     if os.getenv('BEHIND_TLS_PROXY', 'False').lower() == 'true':
         SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
@@ -328,5 +331,7 @@ if not DEBUG and (
 
 
 # --- round 22: lockout counters need an atomic shared cache ---
-if not DEBUG and not globals().get('REDIS_CACHE_URL'):
+if not DEBUG and not _REDIS_URL:
+    raise ValueError("CRITICAL: REDIS_URL must be set in production (shared WebSocket channel layer and lockout counters).")
+if not DEBUG and not REDIS_CACHE_URL:
     raise ValueError("CRITICAL: REDIS_CACHE_URL must be set in production (atomic PIN/QR lockout counters).")

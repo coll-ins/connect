@@ -80,3 +80,16 @@ class RedTeamQrBoardingTests(APITestCase):
         self.assertEqual(self._post(qr_data=f"{self.number}:{PIN}").status_code, 429)
         self.assertEqual(self._post(boarding_pin=PIN).status_code, 429)
         self.assertFalse(self._boarded())
+
+    def test_wrong_pins_lock_both_paths(self):
+        for i in range(5):
+            self.assertEqual(self._post(boarding_pin=f"00000{i}").status_code, 400)
+        self.assertEqual(self._post(boarding_pin=PIN).status_code, 429)
+        self.assertEqual(self._post(qr_data=f"{self.number}:{PIN}").status_code, 429)
+        self.assertFalse(self._boarded())
+
+    def test_four_wrong_pins_do_not_lock(self):
+        for i in range(4):
+            self.assertEqual(self._post(boarding_pin=f"00000{i}").status_code, 400)
+        self.assertEqual(self._post(boarding_pin=PIN).status_code, 200)
+        self.assertTrue(self._boarded())
