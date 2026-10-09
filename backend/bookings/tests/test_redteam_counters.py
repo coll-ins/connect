@@ -15,6 +15,7 @@ class AtomicCounterTests(SimpleTestCase):
             for name in filenames:
                 if name.endswith('.py'):
                     path = Path(dirpath) / name
-                    if 'no_show_count +=' in path.read_text():
+                    text = path.read_text()
+                    if 'no_show_count +=' in text or 'boarded_count +=' in text:
                         offenders.append(str(path.relative_to(ROOT)))
         self.assertEqual(offenders, [])

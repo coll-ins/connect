@@ -862,7 +862,7 @@ export default function DriverDashboard() {
                 type="button"
                 className="driver-boarding-submit"
                 onClick={board}
-                disabled={boardingSubmitting || boardingPin.length !== 4}
+                disabled={boardingSubmitting || boardingPin.length < 4}
               >
                 {boardingSubmitting ? (
                   <>

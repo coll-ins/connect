@@ -2833,9 +2833,27 @@ def verify_boarding(request, booking_id):
             # -------------------------------------------------
 
             if qr_data:
-                if str(qr_data) != str(
-                    booking.booking_number
+                # The QR carries "<booking_number>:<pin>". The booking number
+                # alone is visible to drivers and staff, so it proves nothing.
+                # Wrong scans share the PIN failure counter, so QR is not a
+                # way around the 5-tries limit.
+                import hmac
+                from django.core.cache import cache
+                fail_key = f'pin-fail:{booking.id}'
+                if cache.get(fail_key, 0) >= 5:
+                    return Response(
+                        {'error': 'Too many wrong attempts. Wait 15 minutes.'},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS
+                    )
+                expected = f'{booking.booking_number}:{booking.verification_pin}'
+                if not hmac.compare_digest(
+                    str(qr_data).strip().encode('utf-8'),
+                    expected.encode('utf-8'),
                 ):
+                    try:
+                        cache.incr(fail_key)
+                    except ValueError:
+                        cache.set(fail_key, 1, 900)
                     return Response(
                         {'error': 'Invalid QR data.'},
                         status=status.HTTP_400_BAD_REQUEST
@@ -2949,9 +2967,9 @@ def verify_boarding(request, booking_id):
 
             # Record successful boarding for integrity/reliability
             # calculations.
-            booking.user.boarded_count += 1
-            booking.user.save(
-                update_fields=['boarded_count']
+            from django.db.models import F as _F
+            type(booking.user).objects.filter(pk=booking.user_id).update(
+                boarded_count=_F('boarded_count') + 1
             )
 
             return Response(
