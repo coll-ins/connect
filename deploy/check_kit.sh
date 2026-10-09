@@ -15,6 +15,7 @@ need connect.env.example 'AT_API_KEY='
 need connect.cron 'process_noshows'
 need connect.cron 'reconcile_refunds'
 need connect.cron 'backup.sh'
+grep -q '^\*/5 .*process_unapplied' connect.cron && echo "ok   connect.cron: process_unapplied scheduled" || { echo "MISSING in connect.cron: scheduled process_unapplied"; fail=1; }
 need run_cmd.sh 'flock'
 need smoke_test.sh 'ALL PASS'
 need smoke_test.sh 'unsigned refund webhook refused'

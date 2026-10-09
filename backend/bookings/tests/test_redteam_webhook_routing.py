@@ -40,3 +40,22 @@ class WebhookRoutingTests(APITestCase):
             resp = _post(self.client, {"event": "transfer.success", "data": {}})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(m.call_count, 0)
+
+
+def _post_to(client, url, payload):
+    body = json.dumps(payload).encode()
+    sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body, hashlib.sha512).hexdigest()
+    return client.post(url, data=body, content_type="application/json",
+                       HTTP_X_PAYSTACK_SIGNATURE=sig)
+
+
+class RefundHandlerRobustnessTests(APITestCase):
+    def test_refund_event_for_unknown_transaction_is_not_a_server_error(self):
+        self.client.raise_request_exception = False
+        event = {"event": "refund.processed",
+                 "data": {"transaction_reference": "NOPE-123", "refund_reference": "r1"}}
+        for url in ("/api/bookings/webhooks/paystack/refund/",
+                    "/api/bookings/webhooks/paystack/"):
+            resp = _post_to(self.client, url, event)
+            self.assertLess(resp.status_code, 500, f"{url} returned {resp.status_code}")
+

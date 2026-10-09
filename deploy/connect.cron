@@ -3,7 +3,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5  * * * * connect /srv/connect/deploy/run_cmd.sh expire_pending_bookings
 */10 * * * * connect /srv/connect/deploy/run_cmd.sh process_noshows
 */15 * * * * connect /srv/connect/deploy/run_cmd.sh reconcile_refunds
-#*/10 * * * * connect /srv/connect/deploy/run_cmd.sh process_unapplied
+*/5  * * * * connect /srv/connect/deploy/run_cmd.sh process_unapplied
 15 2 * * *   connect bash -c 'set -a; . /etc/connect/connect.env; set +a; /srv/connect/deploy/backup.sh >> /var/log/connect/backup.log 2>&1'
-# process_unapplied: enable only after its code is reviewed (round 27 read).
+# process_unapplied: built for a 5-minute cron (see its docstring); retries are capped, refunds use a one-winner claim.
+# NEVER add --resend to reconcile_refunds in cron: a resend needs a human to check the Paystack dashboard first.
 # settle_company is NOT scheduled on purpose.

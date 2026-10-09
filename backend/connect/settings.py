@@ -335,3 +335,8 @@ if not DEBUG and not _REDIS_URL:
     raise ValueError("CRITICAL: REDIS_URL must be set in production (shared WebSocket channel layer and lockout counters).")
 if not DEBUG and not REDIS_CACHE_URL:
     raise ValueError("CRITICAL: REDIS_CACHE_URL must be set in production (atomic PIN/QR lockout counters).")
+
+
+# --- round 28: money alerts are SMS; silently not sending them is a production failure ---
+if not DEBUG and (not AT_API_KEY or AT_USERNAME == 'sandbox'):
+    raise ValueError("CRITICAL: AT_API_KEY and a live AT_USERNAME (not 'sandbox') must be set in production (refund/payment alerts are SMS).")
