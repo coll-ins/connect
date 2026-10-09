@@ -395,8 +395,8 @@ export default function DriverDashboard() {
       return;
     }
 
-    if (!/^\d{4}$/.test(pin)) {
-      setBoardingError('The boarding PIN must be exactly 4 digits.');
+    if (!/^\d{4,6}$/.test(pin)) {
+      setBoardingError('The boarding PIN must be 4 to 6 digits.');
       return;
     }
 
@@ -811,12 +811,12 @@ export default function DriverDashboard() {
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={4}
+                maxLength={6}
                 value={boardingPin}
                 onChange={(event) => {
                   const value = event.target.value
                     .replace(/\D/g, '')
-                    .slice(0, 4);
+                    .slice(0, 6);
 
                   setBoardingPin(value);
                   setBoardingError('');
@@ -831,13 +831,13 @@ export default function DriverDashboard() {
                     closeBoardingModal();
                   }
                 }}
-                placeholder="Enter 4-digit PIN"
+                placeholder="Enter boarding PIN"
                 autoFocus
                 disabled={boardingSubmitting}
               />
 
               <span className="driver-boarding-help">
-                Ask the passenger for the 4-digit PIN shown in their booking.
+                Ask the passenger for the PIN shown in their booking.
               </span>
 
               {boardingError && (
