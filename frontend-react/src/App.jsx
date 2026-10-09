@@ -60,6 +60,23 @@ function PassengerRoutes() {
   );
 }
 
+function DriverRoutes() {
+  return (
+    <ProtectedRoute allowedRoles={['driver']}>
+      <Routes>
+        <Route index element={<DriverPortal />} />
+        <Route path="trips" element={<DriverPortal />} />
+        <Route path="passengers" element={<DriverPortal />} />
+        <Route path="location" element={<DriverLiveLocation />} />
+        <Route path="boarding" element={<DriverPortal />} />
+        <Route path="jobs" element={<DriverPortal />} />
+        <Route path="profile" element={<DriverPortal />} />
+        <Route path="*" element={<Navigate to="/driver" replace />} />
+      </Routes>
+    </ProtectedRoute>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -69,23 +86,7 @@ function AppRoutes() {
 
       <Route path="/passenger/*" element={<PassengerRoutes />} />
 
-      <Route
-        path="/driver/location"
-        element={
-          <ProtectedRoute allowedRoles={["driver"]}>
-            <DriverLiveLocation />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/driver/*"
-        element={
-          <ProtectedRoute allowedRoles={["driver"]}>
-            <DriverPortal />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/driver/*" element={<DriverRoutes />} />
 
       <Route
         path="/company-manager/*"

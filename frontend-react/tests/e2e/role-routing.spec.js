@@ -123,3 +123,18 @@ test('unknown passenger subroute returns to passenger home', async ({ page }) =>
     page.getByRole('heading', { name: /Where are you going today\?/i }),
   ).toBeVisible();
 });
+
+test('unknown driver subroute returns to driver overview', async ({ page }) => {
+  await stubApi(page, { profileRole: 'driver' });
+
+  await page.addInitScript((user) => {
+    localStorage.setItem('user_session', JSON.stringify(user));
+  }, baseUser('driver'));
+
+  await page.goto('/driver/not-a-real-page');
+
+  await expect(page).toHaveURL(/\/driver$/);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Overview' }),
+  ).toBeVisible();
+});

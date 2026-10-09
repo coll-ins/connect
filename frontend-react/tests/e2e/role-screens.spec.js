@@ -106,3 +106,106 @@ test.describe('CONNECT role screen interactions', () => {
     ).toBeVisible();
   });
 });
+
+test('driver live-location screen sends simulated coordinates to the location endpoint', async ({ page, context }) => {
+  const simulatedLocation = {
+    latitude: -1.286389,
+    longitude: 36.817223,
+  };
+  let capturedGpsPayload = null;
+  let gpsPostCount = 0;
+
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation(simulatedLocation);
+
+  const driver = {
+    ...testUser('driver'),
+    id: 17,
+    username: 'E2E Driver',
+    latitude: simulatedLocation.latitude,
+    longitude: simulatedLocation.longitude,
+  };
+
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+
+    if (url.pathname === '/api/users/profile/') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: driver }),
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/drivers/me/') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(driver),
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/bookings/driver/17/') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          driver,
+          active_trip: null,
+          bookings: [],
+        }),
+      });
+      return;
+    }
+
+    if (
+      url.pathname === '/api/drivers/17/location/' &&
+      route.request().method() === 'POST'
+    ) {
+      capturedGpsPayload = route.request().postDataJSON();
+      gpsPostCount += 1;
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...driver,
+          ...simulatedLocation,
+        }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
+  });
+
+  await page.addInitScript((user) => {
+    localStorage.setItem('user_session', JSON.stringify(user));
+  }, driver);
+
+  await page.goto('/driver/location');
+
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'No assigned trip' }),
+  ).toBeVisible();
+
+  await expect.poll(() => capturedGpsPayload, { timeout: 10000 })
+    .toEqual(simulatedLocation);
+  expect(gpsPostCount).toBeGreaterThan(0);
+
+  await expect(page.getByText('GPS LIVE', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Locate me' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Toggle trip details' }).click();
+
+  await expect(page.locator('.driver-live-sheet')).toHaveClass(
+    /driver-live-sheet-open/,
+  );
+});
