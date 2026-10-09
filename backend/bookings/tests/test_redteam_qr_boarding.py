@@ -48,6 +48,10 @@ class RedTeamQrBoardingTests(APITestCase):
         patcher = patch("bookings.views.is_driver_account_for", return_value=True)
         patcher.start()
         self.addCleanup(patcher.stop)
+        throttle = patch(
+            "bookings.views.BoardingVerifyThrottle.allow_request", return_value=True)
+        throttle.start()
+        self.addCleanup(throttle.stop)
         self.url = reverse("bookings:verify-boarding", args=[self.booking.id])
         self.number = self.booking.booking_number
 
