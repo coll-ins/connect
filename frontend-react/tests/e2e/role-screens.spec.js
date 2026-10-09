@@ -79,7 +79,7 @@ test.describe('CONNECT role screen interactions', () => {
     await openRolePage(page, 'company_manager', '/company-manager');
 
     await expect(
-      page.getByRole('heading', { name: 'Test Company' }),
+      page.locator('h1').filter({ hasText: 'Test Company' }),
     ).toBeVisible();
 
     await page.getByRole('link', { name: /Manage routes/i }).click();

@@ -1,33 +1,34 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
-import Login from './pages/auth/Login';
-import Signup from './pages/auth/Signup';
+const Login = lazy(() => import('./pages/auth/Login'));
+const Signup = lazy(() => import('./pages/auth/Signup'));
 
-import PassengerDashboard from './pages/passenger/PassengerDashboard';
-import PassengerMapPage from './pages/passenger/PassengerMapPage';
-import PaymentReturn from './pages/passenger/PaymentReturn';
-import { DeliveryList, DeliveryDetail } from './pages/passenger/DeliveryPages';
-import { DeliveryNew } from './pages/passenger/DeliveryWizard';
-import { CharterList, CharterDetail } from './pages/passenger/CharterPages';
-import { CharterNew } from './pages/passenger/CharterWizard';
-import {
-  PassengerBookings,
-  PassengerWallet,
-  PassengerPayments,
-  PassengerProfile,
-  PassengerRecords,
-  PassengerSeats,
-  PassengerHelp,
-} from './pages/passenger/PassengerPages';
+const PassengerDashboard = lazy(() => import('./pages/passenger/PassengerDashboard'));
+const PassengerMapPage = lazy(() => import('./pages/passenger/PassengerMapPage'));
+const PaymentReturn = lazy(() => import('./pages/passenger/PaymentReturn'));
+const DeliveryList = lazy(() => import('./pages/passenger/DeliveryPages').then(m => ({ default: m.DeliveryList })));
+const DeliveryDetail = lazy(() => import('./pages/passenger/DeliveryPages').then(m => ({ default: m.DeliveryDetail })));
+const DeliveryNew = lazy(() => import('./pages/passenger/DeliveryWizard').then(m => ({ default: m.DeliveryNew })));
+const CharterList = lazy(() => import('./pages/passenger/CharterPages').then(m => ({ default: m.CharterList })));
+const CharterDetail = lazy(() => import('./pages/passenger/CharterPages').then(m => ({ default: m.CharterDetail })));
+const CharterNew = lazy(() => import('./pages/passenger/CharterWizard').then(m => ({ default: m.CharterNew })));
+const PassengerBookings = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerBookings })));
+const PassengerWallet = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerWallet })));
+const PassengerPayments = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerPayments })));
+const PassengerProfile = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerProfile })));
+const PassengerRecords = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerRecords })));
+const PassengerSeats = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerSeats })));
+const PassengerHelp = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerHelp })));
 
-import DriverPortal from "./pages/driver/DriverPortal.jsx";
-import DriverLiveLocation from "./pages/driver/DriverLiveLocation.jsx";
-import CompanyManagerRoutes from './pages/company-manager/CompanyManagerRoutes';
-import CompanyAuditorDashboard from './pages/company-auditor/CompanyAuditorDashboard';
-import CompanyOperatorDashboard from './pages/company-operator/CompanyOperatorDashboard';
-import PlatformAdminDashboard from './pages/platform-admin/PlatformAdminDashboard';
+const DriverPortal = lazy(() => import('./pages/driver/DriverPortal.jsx'));
+const DriverLiveLocation = lazy(() => import('./pages/driver/DriverLiveLocation.jsx'));
+const CompanyManagerRoutes = lazy(() => import('./pages/company-manager/CompanyManagerRoutes'));
+const CompanyAuditorDashboard = lazy(() => import('./pages/company-auditor/CompanyAuditorDashboard'));
+const CompanyOperatorDashboard = lazy(() => import('./pages/company-operator/CompanyOperatorDashboard'));
+const PlatformAdminDashboard = lazy(() => import('./pages/platform-admin/PlatformAdminDashboard'));
 
 function PassengerRoutes() {
   return (
@@ -134,7 +135,9 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <div className="app-shell">
-          <AppRoutes />
+          <Suspense fallback={<div role="status">Loading CONNECT...</div>}>
+            <AppRoutes />
+          </Suspense>
         </div>
       </BrowserRouter>
     </AuthProvider>
