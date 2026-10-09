@@ -35,3 +35,5 @@ backups/
 *.backup
 *.save
 routes_stages_backup.json
+*.before-*
+*.bak

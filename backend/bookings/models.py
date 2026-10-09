@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 from django.db import models
 from users.models import CustomUser
@@ -7,13 +7,13 @@ from drivers.models import Driver
 
 
 def generate_booking_number():
-    chars = ''.join(random.choices(string.ascii_uppercase, k=2))
-    nums = ''.join(random.choices(string.digits, k=5))
+    chars = ''.join(secrets.choice(string.ascii_uppercase) for _ in range(4))
+    nums = ''.join(secrets.choice(string.digits) for _ in range(6))
     return f"BK-{chars}{nums}"
 
 
 def generate_verification_pin():
-    return ''.join(random.choices(string.digits, k=4))
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
 
 
 class Booking(models.Model):
