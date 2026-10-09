@@ -9,4 +9,5 @@ export DEBUG=False SECRET_KEY="$(python -c 'import secrets;print(secrets.token_u
   ADMIN_ALERT_PHONE_NUMBERS=+254700000000 \
   ADMIN_SIGNUP_CODE="$(python -c 'import secrets;print(secrets.token_urlsafe(24))')" \
   REDIS_URL="${REDIS_URL-redis://127.0.0.1:6379/0}" REDIS_CACHE_URL=redis://127.0.0.1:6379/1
+python -c "import channels_redis, redis, daphne, whitenoise, psycopg2" || { echo "MISSING PROD DEPENDENCY"; exit 1; }
 python manage.py check --deploy --fail-level WARNING

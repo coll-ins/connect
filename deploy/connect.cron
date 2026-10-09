@@ -1,6 +1,7 @@
-# Install on the server as /etc/cron.d/connect. Edit APP and the user field.
-APP=/srv/connect/backend
-*/5  * * * * deploy cd $APP && flock -n /tmp/connect-expire.lock  .venv/bin/python manage.py expire_pending_bookings >> /var/log/connect/expire.log 2>&1
-*/10 * * * * deploy cd $APP && flock -n /tmp/connect-noshow.lock  .venv/bin/python manage.py process_noshows >> /var/log/connect/noshows.log 2>&1
-*/30 * * * * deploy cd $APP && flock -n /tmp/connect-reconcile.lock .venv/bin/python manage.py reconcile_refunds >> /var/log/connect/reconcile.log 2>&1
-# reconcile_refunds --resend and settle_company --apply stay manual on purpose.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/5  * * * * connect /srv/connect/deploy/run_cmd.sh expire_pending_bookings
+*/10 * * * * connect /srv/connect/deploy/run_cmd.sh process_noshows
+*/15 * * * * connect /srv/connect/deploy/run_cmd.sh reconcile_refunds
+15 2 * * *   connect bash -c 'set -a; . /etc/connect/connect.env; set +a; /srv/connect/deploy/backup.sh >> /var/log/connect/backup.log 2>&1'
+# NOT scheduled on purpose: settle_company. Add any 4th command after the Block 3 ls output is confirmed.
