@@ -350,25 +350,8 @@ export default function DriverDashboard() {
     );
   }, [driver, sendDriverLocation]);
 
-  useEffect(() => {
-    if (!driver || !navigator.geolocation) return undefined;
-
-    const watchId = navigator.geolocation.watchPosition(
-      sendDriverLocation,
-      () => {
-        setError('Unable to read your current GPS location.');
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 5000,
-      },
-    );
-
-    return () => {
-      navigator.geolocation.clearWatch(watchId);
-    };
-  }, [driver, sendDriverLocation]);
+  // Location is requested only on the live-location page or via locate(),
+  // not automatically when the dashboard opens after login.
 
   const openBoardingModal = (booking) => {
     setBoardingBooking(booking);
