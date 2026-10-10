@@ -31,8 +31,7 @@ class UsersTestSuite(APITestCase):
             "password": "StrongPassword123!",
             "password2": "StrongPassword123!",
             "phone_number": "+254700000000",
-            "first_name": "Test",
-            "last_name": "User",
+            "name": "Test User",
             "location": "Nairobi",
         }
         response = self.client.post(url, payload, format="json")

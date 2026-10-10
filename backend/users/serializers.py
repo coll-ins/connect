@@ -6,6 +6,9 @@ from rest_framework import serializers
 from .models import CustomUser
 
 
+NAME_PART = re.compile(r"^[^\W\d_]+(?:['’-][^\W\d_]+)*$")
+
+
 class UserSerializer(serializers.ModelSerializer):
     username = serializers.CharField(required=False, allow_blank=True)
     name = serializers.CharField(
@@ -31,6 +34,20 @@ class UserSerializer(serializers.ModelSerializer):
             'role': {'read_only': True},
             'company': {'read_only': True},
         }
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is None:
+            full = ' '.join(str(attrs.get('name') or '').split())
+            parts = full.split(' ') if full else []
+            if len(parts) < 2 or not all(
+                len(p) >= 2 and NAME_PART.match(p) for p in parts
+            ):
+                raise serializers.ValidationError({
+                    'name': 'Enter your first and last name, e.g. Collins Otieno.'
+                })
+            attrs['name'] = full
+        return attrs
 
     def create(self, validated_data):
         phone = validated_data['phone_number']

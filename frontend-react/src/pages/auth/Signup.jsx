@@ -16,7 +16,7 @@ export default function Signup() {
     <div className="brand-mark">C</div><p className="eyebrow">JOIN CONNECT</p><h1>Create your account</h1><p className="muted">Book rides quickly and keep every trip in one place.</p>
     {error && <div className="error">{error}</div>}
     <form onSubmit={submit} className="form-stack">
-      <label>Full name<input className="input" value={form.name} onChange={update('name')} placeholder="e.g. Collins Otieno" autoComplete="name" maxLength="150" required /></label>
+      <label>First and last name<input className="input" value={form.name} onChange={update('name')} placeholder="e.g. Collins Otieno" autoComplete="name" maxLength="150" pattern=" *[A-Za-z\u00C0-\u024F'’\-]{2,}( +[A-Za-z\u00C0-\u024F'’\-]{2,})+ *" title="Enter your first and last name, e.g. Collins Otieno" required /></label>
       <label>Phone number<input className="input" value={form.phone_number} onChange={update('phone_number')} placeholder="07XX XXX XXX" required /></label>
       <label>Usual location<input className="input" value={form.location} onChange={update('location')} placeholder="e.g. CBD" /></label>
       <label>Password<input className="input" type="password" minLength="6" value={form.password} onChange={update('password')} required /></label>

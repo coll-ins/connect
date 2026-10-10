@@ -210,8 +210,11 @@ def initialize_paystack_payment(request, booking_id):
 
     payload = {
         'email': (
-            getattr(request.user, 'email', None)
-            or f"user_{request.user.id}@connect.local"
+            request.user.email
+            if request.user.email and '@' in request.user.email
+            and '.' in request.user.email.split('@')[-1]
+            and ' ' not in request.user.email
+            else f"user_{request.user.id}@example.com"
         ),
         'amount': amount_in_cents,
         'currency': 'KES',
@@ -485,7 +488,10 @@ def initialize_mpesa_payment(request, booking_id):
     payload = {
         'email': (
             request.user.email
-            or f'user_{request.user.id}@connect.local'
+            if request.user.email and '@' in request.user.email
+            and '.' in request.user.email.split('@')[-1]
+            and ' ' not in request.user.email
+            else f'user_{request.user.id}@example.com'
         ),
         'amount': amount_in_cents,
         'currency': 'KES',
@@ -3821,6 +3827,10 @@ def get_driver_bookings(request, driver_id):
             "seats": booking.seats,
             "status": booking.status,
             "passenger": booking.user.username,
+            "passenger_name": (
+                booking.user.get_full_name().strip()
+                or ((booking.user.phone_number or "")[:6] + "…" + (booking.user.phone_number or "")[-3:])
+            ),
             "passenger_phone": booking.user.phone_number,
 
             "trip_id": trip.id,
@@ -3881,6 +3891,11 @@ def get_driver_bookings(request, driver_id):
                 booking.payment.status
                 if hasattr(booking, "payment")
                 else "unpaid"
+            ),
+            "payment_method": (
+                booking.payment.method
+                if hasattr(booking, "payment")
+                else None
             ),
         })
 
