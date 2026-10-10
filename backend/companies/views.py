@@ -389,10 +389,17 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     Company staff may only access trips belonging to their own company.
     Superusers may access every company.
     """
+    from django.db.models import Q as _Q, Sum as _Sum
+    from django.db.models.functions import Coalesce as _Coalesce
     queryset = Trip.objects.select_related(
         'route',
         'driver',
         'route__company',
+    ).annotate(
+        booked_annot=_Coalesce(
+            _Sum('bookings__seats', filter=~_Q(bookings__status='cancelled')),
+            0,
+        )
     )
 
     user = request.user

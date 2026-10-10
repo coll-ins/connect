@@ -676,3 +676,14 @@ class OperatorBookingAlertTests(Base):
         self.assertNotEqual(
             self.client.post(s1, {'minutes': 15}, format='json').status_code,
             403)
+
+
+class TripBookedSeatsTests(Base):
+    def test_trip_list_reports_booked_seats(self):
+        self._booking(2)
+        self._booking(3, status='cancelled')
+        self._booking(1, status='pending')
+        self.client.force_authenticate(user=self.manager)
+        resp = self.client.get(_company_url('get_trips'))
+        row = [t for t in resp.data if t['id'] == self.trip.id][0]
+        self.assertEqual(row['booked_seats'], 3)

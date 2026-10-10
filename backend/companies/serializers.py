@@ -114,6 +114,18 @@ class TripSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    booked_seats = serializers.SerializerMethodField()
+
+    def get_booked_seats(self, obj):
+        annotated = getattr(obj, 'booked_annot', None)
+        if annotated is not None:
+            return int(annotated)
+        from django.db.models import Sum
+        return (
+            obj.bookings.exclude(status='cancelled')
+            .aggregate(total=Sum('seats'))['total'] or 0
+        )
+
     class Meta:
         model = Trip
         fields = [
@@ -127,6 +139,7 @@ class TripSerializer(serializers.ModelSerializer):
             'departure_at',
             'capacity',
             'status',
+            'booked_seats',
         ]
         read_only_fields = [
             'id',
