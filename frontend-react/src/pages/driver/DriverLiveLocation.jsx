@@ -1,3 +1,4 @@
+import 'leaflet/dist/leaflet.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -608,6 +609,7 @@ export default function DriverLiveLocation() {
               <div style={{ margin: '12px 0' }}>
                 <select
                   value={reportType}
+                  className="connect-dark-select"
                   onChange={(e) => setReportType(e.target.value)}
                   style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)', color: '#fff', width: '100%', marginBottom: 8 }}
                 >

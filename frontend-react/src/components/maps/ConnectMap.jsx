@@ -104,6 +104,16 @@ function stageIcon(stage) {
     popupAnchor: [0, -70],
   });
 }
+const stageIconCache = new Map();
+
+function cachedStageIcon(stage) {
+  const key = `${stage?.order}|${stage?.name}|${stage?.passenger_count || 0}`;
+  if (!stageIconCache.has(key)) {
+    stageIconCache.set(key, stageIcon(stage));
+  }
+  return stageIconCache.get(key);
+}
+
 function MapResize({ height }) {
   const map = useMap();
 
@@ -393,6 +403,8 @@ export default function ConnectMap({
         center={center}
         zoom={zoom}
         scrollWheelZoom
+        wheelPxPerZoomLevel={120}
+        wheelDebounceTime={60}
         style={{
           height: '100%',
           width: '100%',
@@ -401,7 +413,8 @@ export default function ConnectMap({
       >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
 
         <MapResize height={height} />
@@ -457,7 +470,7 @@ export default function ConnectMap({
           <Marker
             key={`stage-${stage.id}`}
             position={stage.position}
-            icon={stageIcon(stage)}
+            icon={cachedStageIcon(stage)}
           >
             <Popup>
               <div style={{ minWidth: '230px' }}>

@@ -5036,3 +5036,13 @@
   }
 }
 
+
+
+/* Dark dropdown for incident report type */
+.connect-dark-select {
+  color-scheme: dark;
+}
+.connect-dark-select option {
+  background: #111827;
+  color: #ffffff;
+}
