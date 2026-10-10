@@ -338,9 +338,37 @@ function NewBookingCard({ booking, onAssign }) {
   );
 }
 
-function BookingRow({ booking, onAssign }) {
+function BookingRow({
+  booking,
+  onAssign,
+  onConfirmCash,
+  confirmingCash,
+  onSetStageDeparture,
+  departingBooking,
+}) {
   const bookingId = getBookingId(booking);
   const driver = getBookingDriver(booking);
+  const status = getBookingStatus(booking);
+  const paymentMethod = String(
+    booking.payment_method || booking.payment?.method || ''
+  ).toLowerCase();
+  const paymentStatus = String(
+    booking.payment_status || booking.payment?.status || ''
+  ).toLowerCase();
+
+  const canConfirmCash =
+    bookingId &&
+    paymentMethod === 'cash' &&
+    paymentStatus === 'pending' &&
+    ['pending', 'confirmed'].includes(status);
+
+  // The stage-departure clock only matters once the bus is
+  // boarding and the booking is actually on board.
+  const canSetDeparture =
+    bookingId && driver && status === 'confirmed';
+
+  const stageDepartureAt =
+    booking.stage_departure_at || booking.stageDepartureAt || null;
 
   return (
     <article className="operator-booking-row">
@@ -355,6 +383,7 @@ function BookingRow({ booking, onAssign }) {
           <span>
             {getBookingSeats(booking)} seat
             {Number(getBookingSeats(booking)) === 1 ? '' : 's'}
+            {paymentMethod ? ` · ${paymentMethod}` : ''}
           </span>
         </div>
       </div>
@@ -374,6 +403,55 @@ function BookingRow({ booking, onAssign }) {
         >
           Assign
         </button>
+      )}
+
+      {canConfirmCash && (
+        <button
+          type="button"
+          className="operator-small-button operator-small-button-accent"
+          onClick={() => onConfirmCash(booking)}
+          disabled={confirmingCash === bookingId}
+          title="Mark the cash handed to the conductor as received"
+        >
+          {confirmingCash === bookingId
+            ? 'Confirming…'
+            : 'Confirm cash'}
+        </button>
+      )}
+
+      {canSetDeparture && (
+        <label
+          className="operator-booking-departure"
+          title={
+            stageDepartureAt
+              ? `Stage departure set: ${new Date(stageDepartureAt).toLocaleTimeString()}`
+              : 'Tell passengers when the bus leaves this stage'
+          }
+        >
+          <span>LEAVES STAGE</span>
+          <select
+            value=""
+            disabled={departingBooking === bookingId}
+            onChange={(e) => {
+              if (e.target.value) {
+                onSetStageDeparture(booking, Number(e.target.value));
+              }
+            }}
+          >
+            <option value="">
+              {departingBooking === bookingId
+                ? 'Setting…'
+                : stageDepartureAt
+                  ? `Set ${new Date(stageDepartureAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : 'Set time'}
+            </option>
+            <option value="0">Now (departing)</option>
+            <option value="5">In 5 minutes</option>
+            <option value="10">In 10 minutes</option>
+            <option value="15">In 15 minutes</option>
+            <option value="30">In 30 minutes</option>
+          </select>
+        </label>
       )}
     </article>
   );
@@ -730,6 +808,100 @@ export default function CompanyOperatorDashboard() {
     }
   };
 
+  /*
+   * ------------------------------------------------------------
+   * CONFIRM A CASH PAYMENT (operator)
+   * ------------------------------------------------------------
+   * The passenger picks "cash" when booking; the money is handed
+   * to the conductor. This endpoint records the receipt so the
+   * booking becomes boardable — previously curl-only.
+   */
+  const [confirmingCash, setConfirmingCash] = useState(null);
+
+  const handleConfirmCash = async (booking) => {
+    const bookingId = getBookingId(booking);
+    if (!bookingId || confirmingCash) return;
+
+    const seats = Number(getBookingSeats(booking)) || 1;
+    const amount = Number(
+      booking.total_amount ?? booking.amount ?? 0
+    );
+    const label =
+      amount > 0
+        ? `KES ${amount.toLocaleString()}`
+        : `${seats} seat${seats === 1 ? '' : 's'}`;
+    const ok = window.confirm(
+      `Confirm cash payment for booking #${bookingId} (${label})? ` +
+      'This marks it paid and lets the passenger board.'
+    );
+    if (!ok) return;
+
+    setConfirmingCash(bookingId);
+    setError('');
+
+    try {
+      await apiRequest(
+        `/bookings/payments/${bookingId}/cash/confirm/`,
+        { method: 'POST' }
+      );
+      await loadOperations(true);
+    } catch (requestError) {
+      setError(
+        requestError?.message ||
+          'Unable to confirm the cash payment.'
+      );
+    } finally {
+      setConfirmingCash(null);
+    }
+  };
+
+  /*
+   * ------------------------------------------------------------
+   * SET STAGE DEPARTURE (operator)
+   * ------------------------------------------------------------
+   * Per-booking "bus leaves this stage in N minutes" clock that
+   * passengers see on their live map.
+   */
+  const [departingBooking, setDepartingBooking] = useState(null);
+
+  const handleSetStageDeparture = async (booking, minutes) => {
+    const bookingId = getBookingId(booking);
+    if (!bookingId || departingBooking) return;
+
+    setDepartingBooking(bookingId);
+    setError('');
+
+    try {
+      const result = await apiRequest(
+        `/bookings/${bookingId}/stage-departure/`,
+        {
+          method: 'POST',
+          body: { minutes },
+        }
+      );
+
+      // The bookings list payload does not carry this field,
+      // so mirror it locally to give immediate feedback.
+      const at = result?.stage_departure_at;
+      if (at) {
+        setBookings((current) =>
+          current.map((item) =>
+            getBookingId(item) === bookingId
+              ? { ...item, stage_departure_at: at }
+              : item
+          )
+        );
+      }
+    } catch (requestError) {
+      setError(
+        requestError?.message ||
+          'Unable to set the stage departure time.'
+      );
+    } finally {
+      setDepartingBooking(null);
+    }
+  };
+
   const openAssignment = (booking) => {
     setAssigningBooking(booking);
     setSelectedDriver(
@@ -1036,6 +1208,10 @@ export default function CompanyOperatorDashboard() {
               key={getBookingId(booking)}
               booking={booking}
               onAssign={openAssignment}
+              onConfirmCash={handleConfirmCash}
+              confirmingCash={confirmingCash}
+              onSetStageDeparture={handleSetStageDeparture}
+              departingBooking={departingBooking}
             />
           ))}
 

@@ -134,6 +134,24 @@ export default function StageManager({ companyId }) {
     }
   };
 
+  const approveStage = async (stage) => {
+    setError('');
+    setNote('');
+    setBusy(true);
+
+    try {
+      await apiRequest(`/companies/pickup-stages/${stage.id}/approve/`, {
+        method: 'POST',
+      });
+      setNote(`Approved “${stage.name}”.`);
+      await loadStages();
+    } catch (e) {
+      setError(e.message || 'Unable to approve the stage.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleActive = async (stage) => {
     setError('');
     setNote('');
@@ -287,22 +305,42 @@ export default function StageManager({ companyId }) {
               >
                 <span>
                   <strong>{s.order}.</strong> {s.name}
+                  {s.source === 'automatic' ? ' · auto' : ''}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => toggleActive(s)}
-                  disabled={busy}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 8,
-                    border: '1px solid rgba(128,128,128,0.4)',
-                    background: 'transparent',
-                    color: 'inherit',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {s.is_active ? 'Turn off' : 'Turn on'}
-                </button>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  {s.source === 'automatic' && (
+                    <button
+                      type="button"
+                      onClick={() => approveStage(s)}
+                      disabled={busy}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: '#2563eb',
+                        color: '#fff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Approve
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleActive(s)}
+                    disabled={busy}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(128,128,128,0.4)',
+                      background: 'transparent',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {s.is_active ? 'Turn off' : 'Turn on'}
+                  </button>
+                </span>
               </div>
             ))}
           </div>

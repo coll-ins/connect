@@ -933,6 +933,46 @@
   background: rgba(16,185,129,.16);
 }
 
+.operator-small-button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.operator-small-button-accent {
+  color: #fde68a;
+  background: rgba(245,158,11,.10);
+  border-color: rgba(245,158,11,.22);
+}
+
+.operator-small-button-accent:hover {
+  background: rgba(245,158,11,.18);
+}
+
+.operator-booking-departure {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+  letter-spacing: .08em;
+  color: #8fa3b8;
+}
+
+.operator-booking-departure select {
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.10);
+  color: #e5edf5;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.operator-booking-departure select:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
 .operator-count-chip {
   padding: 7px 10px;
   border-radius: 999px;

@@ -180,6 +180,17 @@ export default function RoutePlanner() {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
+  const approveStage = async (s) => {
+    setBusy(true); setError(''); setNote('');
+    try {
+      await apiRequest(`/companies/pickup-stages/${s.id}/approve/`, {
+        method: 'POST',
+      });
+      setNote(`Approved “${s.name}”.`);
+      await loadStages();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
   const toggleStage = async (s) => {
     setBusy(true); setError(''); setNote('');
     try {
@@ -371,7 +382,15 @@ export default function RoutePlanner() {
                     <div className="svc-list">
                       {stages.map((s) => (
                         <div key={s.id} className={`rp-stage ${s.is_active ? '' : 'off'}`}>
-                          <span><strong>{s.order}.</strong> {s.name}</span>
+                          <span>
+                            <strong>{s.order}.</strong> {s.name}
+                            {s.source === 'automatic' ? ' · auto' : ''}
+                          </span>
+                          {s.source === 'automatic' && (
+                            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => approveStage(s)}>
+                              Approve
+                            </button>
+                          )}
                           <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => toggleStage(s)}>
                             {s.is_active ? 'Remove' : 'Bring back'}
                           </button>
