@@ -1322,18 +1322,20 @@ def confirm_cash_payment(request, booking_id):
             # Cash payment confirmation is allowed for:
             # - Django superusers
             # - Company Managers for their own company
-            # - Company Operators for their own company
             # - The driver assigned to this booking's trip
+            # - Company Operators only if OPERATORS_CAN_CONFIRM_CASH is on
+            #   (off by default: money is not an operator job)
             #
             # Company Auditors are read-only.
             # Generic is_staff=True does not grant payment authority.
+            from django.conf import settings as _dj_settings
+            _cash_roles = {'company_manager'}
+            if getattr(_dj_settings, 'OPERATORS_CAN_CONFIRM_CASH', False):
+                _cash_roles.add('company_operator')
             is_authorized = (
                 user.is_superuser
                 or (
-                    user.role in {
-                        'company_manager',
-                        'company_operator',
-                    }
+                    user.role in _cash_roles
                     and user.company_id == booking.route.company_id
                     and can_handle_route(user, booking.route_id)
                 )
@@ -2130,6 +2132,150 @@ def assign_driver(request, booking_id):
         },
         status=status.HTTP_200_OK
     )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def move_booking_to_trip(request, booking_id):
+    """
+    Dispatcher action: move one active booking onto another bus of the
+    same route (for example when a bus is full). The target must be
+    scheduled or boarding and have enough free seats.
+    """
+    user = request.user
+
+    try:
+        booking = (
+            Booking.objects
+            .select_related('route__company')
+            .get(id=booking_id)
+        )
+    except Booking.DoesNotExist:
+        return Response(
+            {'error': 'Booking not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    is_allowed = (
+        user.is_superuser
+        or (
+            user.role in {'company_manager', 'company_operator'}
+            and user.company_id == booking.route.company_id
+            and can_handle_route(user, booking.route_id)
+        )
+    )
+    if not is_allowed:
+        return Response(
+            {'error': 'Manager or Operator authorization required'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        target_id = int(request.data.get('trip_id'))
+    except (TypeError, ValueError):
+        return Response(
+            {'error': 'trip_id is required.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if booking.trip_id is None:
+        return Response(
+            {'error': 'This booking is not linked to a trip.'},
+            status=status.HTTP_409_CONFLICT
+        )
+
+    if booking.status in {'completed', 'cancelled', 'no_show'}:
+        return Response(
+            {'error': f'Cannot move a booking with status: {booking.status}'},
+            status=status.HTTP_409_CONFLICT
+        )
+
+    if booking.trip_id == target_id:
+        return Response(
+            {'error': 'The booking is already on this trip.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    with transaction.atomic():
+        locked = {
+            tr.id: tr
+            for tr in Trip.objects.select_for_update().filter(
+                id__in=[booking.trip_id, target_id]
+            ).order_by('id')
+        }
+        old_trip = locked.get(booking.trip_id)
+        new_trip = locked.get(target_id)
+
+        if new_trip is None:
+            return Response(
+                {'error': 'Target trip not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if new_trip.route_id != booking.route_id:
+            return Response(
+                {'error': 'The target trip must be on the same route.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if old_trip.status not in ('scheduled', 'boarding'):
+            return Response(
+                {'error': 'The current trip has already left.'},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        now = timezone.now()
+        bookable = (
+            (new_trip.status == 'scheduled' and new_trip.departure_at > now)
+            or (
+                new_trip.status == 'boarding'
+                and new_trip.departure_at > now - _boarding_book_window()
+            )
+        )
+        if not bookable:
+            return Response(
+                {'error': 'The target trip is not open for passengers.'},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        taken_seats = (
+            new_trip.bookings
+            .exclude(status='cancelled')
+            .aggregate(total=Sum('seats'))
+            .get('total')
+            or 0
+        )
+        available_seats = new_trip.capacity - taken_seats
+        if booking.seats > available_seats:
+            return Response(
+                {
+                    'error': 'The target trip does not have enough free seats.',
+                    'available_seats': available_seats,
+                    'requested_seats': booking.seats,
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
+        booking.trip = new_trip
+        booking.driver = new_trip.driver
+        booking.save(update_fields=['trip', 'driver', 'updated_at'])
+
+    import logging
+    logging.getLogger(__name__).info(
+        'booking %s moved from trip %s to trip %s by user %s',
+        booking.id, old_trip.id, new_trip.id, user.pk,
+    )
+
+    return Response(
+        {
+            'message': 'Booking moved.',
+            'booking_id': booking.id,
+            'from_trip': old_trip.id,
+            'to_trip': new_trip.id,
+            'driver_id': new_trip.driver_id,
+        },
+        status=status.HTTP_200_OK
+    )
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

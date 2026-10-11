@@ -11,7 +11,9 @@ from rest_framework.test import APIClient
 from companies.models import Route, Trip
 from drivers.models import Driver
 
-PASSWORD = 'demo-pass-123'
+import os
+
+PASSWORD = os.environ.get('DEMO_PASSWORD', 'demo-pass-123')
 
 
 class Command(BaseCommand):
@@ -43,12 +45,13 @@ class Command(BaseCommand):
                 defaults={'name': name, 'phone_number': phone},
             )
             d.is_available = True
+            d.name = name
             d.latitude, d.longitude = float(stage.latitude), float(stage.longitude)
             d.save()
             return d
 
-        d1 = driver_for('DEMO-001', '+254799000010', 'Demo Driver')
-        d2 = driver_for('DEMO-002', '+254799000011', 'Demo Driver 2')
+        d1 = driver_for('DEMO-001', '+254799000010', 'Demo Driver (simulated)')
+        d2 = driver_for('DEMO-002', '+254799000011', 'Demo Driver 2 (simulated)')
 
         if opts['drive']:
             return self._drive(d1, stage)

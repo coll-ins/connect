@@ -687,3 +687,45 @@ class TripBookedSeatsTests(Base):
         resp = self.client.get(_company_url('get_trips'))
         row = [t for t in resp.data if t['id'] == self.trip.id][0]
         self.assertEqual(row['booked_seats'], 3)
+
+
+class ShowcaseStatusTests(Base):
+    def test_status_prints_trip_bookings_and_gps(self):
+        from io import StringIO
+        from django.core.management import call_command
+        Trip.objects.filter(pk=self.trip.pk).update(status='boarding')
+        self._booking(2)
+        Driver.objects.filter(pk=self.driver.pk).update(
+            latitude=STAGE_LAT, longitude=STAGE_LNG,
+            location_updated_at=timezone.now())
+        out = StringIO()
+        call_command('showcase_status', trip=self.trip.id, stdout=out)
+        text = out.getvalue()
+        self.assertIn('BOARDING', text)
+        self.assertIn('2/10', text)
+        self.assertIn('FRESH', text)
+        self.assertIn('pickup: CBD', text)
+
+
+class ShowcaseStatusDefaultTripTests(Base):
+    def test_default_prefers_the_boarding_demo_trip(self):
+        from io import StringIO
+        from django.core.management import call_command
+        d_board = Driver.objects.create(
+            name='DB', phone_number='+254700000921',
+            bus_number='DEMO-701', company=self.company)
+        d_later = Driver.objects.create(
+            name='DL', phone_number='+254700000922',
+            bus_number='DEMO-702', company=self.company)
+        boarding = Trip.objects.create(
+            route=self.route, driver=d_board,
+            departure_at=timezone.now() - dt.timedelta(minutes=3),
+            capacity=14, status='boarding')
+        Trip.objects.create(
+            route=self.route, driver=d_later,
+            departure_at=timezone.now() + dt.timedelta(hours=3),
+            capacity=14, status='scheduled')
+        out = StringIO()
+        call_command('showcase_status', stdout=out)
+        self.assertIn(f'TRIP {boarding.id} ', out.getvalue())
+        self.assertIn('BOARDING', out.getvalue())

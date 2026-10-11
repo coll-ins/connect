@@ -13,6 +13,7 @@ urlpatterns = [
     path('all/', views.get_all_bookings, name='get-all-bookings'),
     path('<int:booking_id>/', views.get_booking_detail, name='get-booking-detail'),
     path('<int:booking_id>/assign-driver/', views.assign_driver, name='assign-driver'),
+    path('<int:booking_id>/move-trip/', views.move_booking_to_trip, name='move-booking-to-trip'),
     path('<int:booking_id>/cancel/', views.cancel_booking, name='cancel-booking'),
     path('<int:booking_id>/resolve-incident/', views.resolve_incident_booking, name='resolve-incident-booking'),
     path('<int:booking_id>/replacement-trips/', views.booking_replacement_trips, name='booking-replacement-trips'),

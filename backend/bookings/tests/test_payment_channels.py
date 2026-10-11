@@ -176,6 +176,36 @@ class PaymentChannelTests(TestCase):
             response.data['bookings'][0],
         )
 
+    def test_driver_list_exposes_payment_method(self):
+        driver_user = User.objects.create_user(
+            username='driver_login_pm',
+            password='password123',
+            phone_number=self.driver.phone_number,
+            role='driver',
+        )
+        self.booking.status = 'confirmed'
+        self.booking.driver = self.driver
+        self.booking.save(update_fields=['status', 'driver'])
+        self.trip.status = 'boarding'
+        self.trip.save(update_fields=['status'])
+        Payment.objects.create(
+            booking=self.booking,
+            amount=Decimal('200.00'),
+            method='cash',
+            status='pending',
+            settlement_status='not_ready',
+            provider_reference='CONNECT-CASH-PM-TEST',
+            idempotency_key='CONNECT-CASH-PM-TEST',
+        )
+        self.client.force_authenticate(user=driver_user)
+        response = self.client.get(
+            reverse('bookings:get-driver-bookings', kwargs={'driver_id': self.driver.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.data['bookings'][0]
+        self.assertEqual(item['payment_status'], 'pending')
+        self.assertEqual(item['payment_method'], 'cash')
+
     def test_refund_processed_webhook_finalizes_hold_idempotently(self):
         payment = Payment.objects.create(
             booking=self.booking,
