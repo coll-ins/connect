@@ -4,7 +4,7 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -501,6 +501,8 @@ class OperatorRouteScopeTests(Base):
         self.assertEqual(walk(self.trip2).status_code, 403)
         self.assertEqual(walk(self.trip).status_code, 201)
 
+    # Operators confirm cash only when OPERATORS_CAN_CONFIRM_CASH is on.
+    @override_settings(OPERATORS_CAN_CONFIRM_CASH=True)
     def test_cash_confirm_and_boarding_blocked_on_other_routes(self):
         b = Booking.objects.create(
             user=self.passenger, route=self.route2, driver=self.driver2,

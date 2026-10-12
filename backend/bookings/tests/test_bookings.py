@@ -10,7 +10,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection, connections, transaction
 from django.urls import reverse
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -1084,6 +1084,8 @@ class BookingsAppTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    # Operators confirm cash only when OPERATORS_CAN_CONFIRM_CASH is on.
+    @override_settings(OPERATORS_CAN_CONFIRM_CASH=True)
     def test_confirm_cash_payment_wrong_method(self):
         operator = User.objects.create_user(
             username="cash_operator",
@@ -1136,6 +1138,8 @@ class BookingsAppTests(APITestCase):
         payment.refresh_from_db()
         self.assertEqual(payment.status, "confirmed")
 
+    # Operators confirm cash only when OPERATORS_CAN_CONFIRM_CASH is on.
+    @override_settings(OPERATORS_CAN_CONFIRM_CASH=True)
     def test_confirm_cash_payment_company_operator(self):
         payment = Payment.objects.create(
             booking=self.booking,
