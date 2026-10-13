@@ -200,6 +200,30 @@ function OperatorRouteAssignments() {
   );
 }
 
+const TRIP_STALE_HOURS = 12;
+
+function tripIsLog(trip) {
+  const status = String(trip?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'cancelled') return true;
+  const departure = trip?.departure_at
+    ? new Date(trip.departure_at).getTime()
+    : NaN;
+  if (Number.isNaN(departure)) return false;
+  return Date.now() - departure > TRIP_STALE_HOURS * 3600 * 1000;
+}
+
+function tripStateLabel(trip) {
+  const status = String(trip?.status || '').toLowerCase();
+  if (status === 'completed') return 'Completed';
+  if (status === 'cancelled') return 'Cancelled';
+  if (tripIsLog(trip)) {
+    if (status === 'scheduled') return 'Missed (never started)';
+    if (status === 'boarding') return 'Expired (never departed)';
+    if (status === 'departed') return 'Not ended';
+  }
+  return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
+}
+
 function TripCapacityEditor({ trip, onSaved }) {
   const [value, setValue] = useState(String(trip.capacity || ''));
   const [busy, setBusy] = useState(false);
@@ -301,6 +325,7 @@ export default function CompanyManagerSection({ section }) {
     price: '',
   });
 
+  const [tripView, setTripView] = useState('active');
   const [tripForm, setTripForm] = useState({
     route_id: '',
     driver_id: '',
@@ -487,6 +512,15 @@ export default function CompanyManagerSection({ section }) {
       setError(err.message);
     }
   };
+
+  const allTrips = Array.isArray(data) ? data : [];
+  const activeTrips = allTrips
+    .filter((t) => !tripIsLog(t))
+    .sort((x, y) => new Date(x.departure_at) - new Date(y.departure_at));
+  const logTrips = allTrips
+    .filter((t) => tripIsLog(t))
+    .sort((x, y) => new Date(y.departure_at) - new Date(x.departure_at));
+  const shownTrips = tripView === 'logs' ? logTrips : activeTrips;
 
   const createTrip = async (event) => {
     event.preventDefault();
@@ -888,7 +922,47 @@ export default function CompanyManagerSection({ section }) {
 
               {section === 'trips' && (
                 <div className="company-card-grid">
-                  {data.map((trip) => (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      alignItems: 'center',
+                    }}
+                  >
+                    {[
+                      ['active', `Active (${activeTrips.length})`],
+                      ['logs', `Logs (${logTrips.length})`],
+                    ].map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setTripView(key)}
+                        style={{
+                          padding: '7px 14px',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.18)',
+                          background:
+                            tripView === key ? '#5fd9b0' : 'transparent',
+                          color: tripView === key ? '#03120d' : 'inherit',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {shownTrips.length === 0 && (
+                    <div style={{ gridColumn: '1 / -1', opacity: 0.7 }}>
+                      {tripView === 'logs'
+                        ? 'No finished trips yet.'
+                        : 'No active trips.'}
+                    </div>
+                  )}
+                  {shownTrips.map((trip) => (
                     <div className="company-record-card" key={trip.id}>
                       <div className="company-record-icon">
                         <CalendarDays size={21} />
@@ -902,6 +976,9 @@ export default function CompanyManagerSection({ section }) {
                           {formatDate(trip.departure_at)}
                           {' · '}
                           {trip.driver_name || 'No driver'}
+                        </span>
+                        <span className="company-record-sub">
+                          #{trip.id} · {tripStateLabel(trip)}
                         </span>
                       </div>
 
@@ -1070,7 +1147,7 @@ export default function CompanyManagerSection({ section }) {
 
               {section === 'capacity' && (
                 <div className="company-capacity-grid">
-                  {data.map((trip) => {
+                  {activeTrips.map((trip) => {
                     const booked = Number(
                       trip.booked_seats || trip.seats_booked || 0
                     );
@@ -1083,7 +1160,7 @@ export default function CompanyManagerSection({ section }) {
                       <div className="company-capacity-card" key={trip.id}>
                         <div>
                           <span className="company-panel-kicker">
-                            {trip.status}
+                            #{trip.id} · {tripStateLabel(trip)}
                           </span>
 
                           <h3>

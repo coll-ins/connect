@@ -1,3 +1,4 @@
+import 'leaflet/dist/leaflet.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MapContainer,
@@ -451,6 +452,7 @@ export default function PassengerLiveMap({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [following, setFollowing] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [driverHistory, setDriverHistory] = useState([]);
   const pickupAlertSentRef = useRef(false);
 
@@ -1299,7 +1301,14 @@ export default function PassengerLiveMap({
       )}
 
       <section className="passenger-live-map__sheet">
-        <div className="passenger-live-map__handle" />
+        <div
+          role="button"
+          aria-label="Toggle trip details"
+          onClick={() => setSheetOpen((v) => !v)}
+          style={{ padding: '10px 0', cursor: 'pointer', touchAction: 'manipulation' }}
+        >
+          <div className="passenger-live-map__handle" />
+        </div>
 
         <div className="passenger-live-map__status-row">
           <div>
@@ -1320,6 +1329,17 @@ export default function PassengerLiveMap({
           </div>
         </div>
 
+        {!sheetOpen && (
+          <p
+            onClick={() => setSheetOpen(true)}
+            style={{ margin: '8px 0 4px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+          >
+            {busStatus}
+            {etaMinutes != null ? ` · ${formatEta(etaMinutes)} to pickup` : ''}
+          </p>
+        )}
+
+        {sheetOpen && (<>
         {(live?.incident || incidentMsg) && (
           <div
             style={{
@@ -1470,6 +1490,7 @@ export default function PassengerLiveMap({
             for a live position on the map.
           </div>
         )}
+      </>)}
       </section>
     </div>
   );

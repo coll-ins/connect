@@ -356,7 +356,10 @@ function BookingRow({
     booking.payment_status || booking.payment?.status || ''
   ).toLowerCase();
 
+  // Money is not an operator job; flip to true to bring the button back.
+  const operatorHandlesMoney = false;
   const canConfirmCash =
+    operatorHandlesMoney &&
     bookingId &&
     paymentMethod === 'cash' &&
     paymentStatus === 'pending' &&
@@ -395,13 +398,15 @@ function BookingRow({
 
       <StatusBadge status={getBookingStatus(booking)} />
 
-      {!driver && (
+      {(!driver ||
+        (booking.trip_id &&
+          ['pending', 'confirmed'].includes(status))) && (
         <button
           type="button"
           className="operator-small-button"
           onClick={() => onAssign(booking)}
         >
-          Assign
+          {driver ? 'Move / reassign' : 'Assign'}
         </button>
       )}
 
@@ -467,7 +472,7 @@ function TripCard({ trip, onStatusChange, updating }) {
 
         <div className="operator-trip-main">
           <span className="operator-eyebrow">DEPARTURE</span>
-          <h3>{getTripRoute(trip)}</h3>
+          <h3>{getTripRoute(trip)} <small style={{ opacity: 0.65, fontWeight: 600 }}>#{trip.id}</small></h3>
         </div>
 
         <StatusBadge status={trip.status} />
@@ -623,6 +628,18 @@ function WalkInForm({ trip, onDone }) {
   );
 }
 
+const TRIP_STALE_HOURS = 12;
+
+const tripIsLog = (trip) => {
+  const status = String(trip?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'cancelled') return true;
+  const departure = trip?.departure_at
+    ? new Date(trip.departure_at).getTime()
+    : NaN;
+  if (Number.isNaN(departure)) return false;
+  return Date.now() - departure > TRIP_STALE_HOURS * 3600 * 1000;
+};
+
 export default function CompanyOperatorDashboard() {
   const { user, logout } = useAuth();
 
@@ -634,6 +651,9 @@ export default function CompanyOperatorDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [assigningBooking, setAssigningBooking] = useState(null);
+  const [moveTarget, setMoveTarget] = useState('');
+  const [movingBooking, setMovingBooking] = useState(false);
+  const [moveError, setMoveError] = useState('');
   const [selectedDriver, setSelectedDriver] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [updatingTrip, setUpdatingTrip] = useState(null);
@@ -667,9 +687,10 @@ export default function CompanyOperatorDashboard() {
         ]);
 
         setTrips(
-          Array.isArray(tripData)
+          (Array.isArray(tripData)
             ? tripData
             : tripData?.results || []
+          ).filter((trip) => !tripIsLog(trip))
         );
 
         setDrivers(
@@ -712,9 +733,7 @@ export default function CompanyOperatorDashboard() {
     () =>
       bookings.filter(
         (booking) =>
-          !['cancelled', 'completed'].includes(
-            getBookingStatus(booking)
-          )
+          !['cancelled', 'completed', 'no_show'].includes(getBookingStatus(booking))
       ),
     [bookings]
   );
@@ -914,6 +933,8 @@ export default function CompanyOperatorDashboard() {
 
     setAssigningBooking(null);
     setSelectedDriver('');
+    setMoveTarget('');
+    setMoveError('');
   };
 
   const handleAssignDriver = async () => {
@@ -963,6 +984,56 @@ export default function CompanyOperatorDashboard() {
       );
     } finally {
       setSavingAssignment(false);
+    }
+  };
+
+  const getMoveTargets = () => {
+    if (!assigningBooking) return [];
+    const currentTripId = String(assigningBooking.trip_id ?? '');
+    const needed = Number(getBookingSeats(assigningBooking) || 1);
+
+    return trips
+      .filter((trip) => {
+        const st = String(trip.status || '').toLowerCase();
+        return (
+          ['scheduled', 'boarding'].includes(st) &&
+          String(trip.id) !== currentTripId
+        );
+      })
+      .map((trip) => {
+        const taken = bookings
+          .filter(
+            (b) =>
+              String(b.trip_id) === String(trip.id) &&
+              getBookingStatus(b) !== 'cancelled'
+          )
+          .reduce((sum, b) => sum + Number(getBookingSeats(b) || 0), 0);
+        return { trip, free: Number(trip.capacity || 0) - taken };
+      })
+      .filter(({ free }) => free >= needed);
+  };
+
+  const handleMoveBooking = async () => {
+    if (!assigningBooking || !moveTarget) return;
+
+    const bookingId = getBookingId(assigningBooking);
+
+    setMovingBooking(true);
+    setMoveError('');
+
+    try {
+      await apiRequest(`/bookings/${bookingId}/move-trip/`, {
+        method: 'POST',
+        body: { trip_id: Number(moveTarget) },
+      });
+      closeAssignment();
+      await loadOperations(true);
+    } catch (requestError) {
+      setMoveError(
+        requestError?.message || 'Unable to move the booking.'
+      );
+    } finally {
+      setMovingBooking(false);
     }
   };
 
@@ -1740,6 +1811,49 @@ export default function CompanyOperatorDashboard() {
               Driver accounts and driver records remain
               managed by the Company Manager.
             </p>
+
+            {assigningBooking?.trip_id && (
+              <div className="operator-modal-move">
+                <label
+                  className="operator-modal-label"
+                  htmlFor="operator-move-select"
+                >
+                  Or move this booking to another bus
+                </label>
+
+                <select
+                  id="operator-move-select"
+                  className="operator-driver-select"
+                  value={moveTarget}
+                  onChange={(event) => setMoveTarget(event.target.value)}
+                  disabled={movingBooking}
+                >
+                  <option value="">Choose a bus with free seats</option>
+                  {getMoveTargets().map(({ trip, free }) => (
+                    <option key={trip.id} value={trip.id}>
+                      {`Trip #${trip.id} • ${getTripRoute(trip)} • ${new Date(
+                        trip.departure_at
+                      ).toLocaleString()} • ${
+                        trip.driver_name || trip.driver?.name || 'No driver'
+                      } • ${free} free`}
+                    </option>
+                  ))}
+                </select>
+
+                {moveError && (
+                  <p className="operator-modal-note">{moveError}</p>
+                )}
+
+                <button
+                  type="button"
+                  className="operator-secondary-button"
+                  onClick={handleMoveBooking}
+                  disabled={!moveTarget || movingBooking}
+                >
+                  {movingBooking ? 'Moving...' : 'Move booking'}
+                </button>
+              </div>
+            )}
 
             <div className="operator-modal-actions">
               <button

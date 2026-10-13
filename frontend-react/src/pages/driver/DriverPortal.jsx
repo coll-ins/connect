@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Activity,
+  Banknote,
   Bus,
   CalendarDays,
   CheckCircle2,
@@ -57,9 +58,104 @@ function getCompanyName(driver) {
   );
 }
 
+const canConfirmCash = (b) =>
+  String(b?.payment_method || "").toLowerCase() === "cash" &&
+  String(b?.payment_status || "").toLowerCase() === "pending" &&
+  ["pending", "confirmed"].includes(String(b?.status || "").toLowerCase());
+
 export default function DriverPortal() {
 
-  const verifyPassenger = async (booking) => {
+  const confirmCash = async (booking) => {
+    const passengerName =
+      booking.passenger?.name ||
+      booking.passenger_name ||
+      booking.passenger ||
+      `Booking #${booking.booking_id}`;
+
+    if (
+      !window.confirm(
+        `Confirm you have received the cash from ${passengerName}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await apiRequest(
+        `/bookings/payments/${booking.booking_id}/cash/confirm/`,
+        { method: "POST" },
+      );
+
+      window.alert(`Cash from ${passengerName} confirmed.`);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      window.alert(err?.message || "Unable to confirm this cash payment.");
+    }
+  };
+
+  const pinName = (b) =>
+    b?.passenger?.name || b?.passenger_name ||
+    (typeof b?.passenger === "string" ? b.passenger : "") ||
+    `Booking #${b?.booking_id}`;
+
+  const verifyPassenger = (booking) => {
+    if (!booking?.booking_id) return;
+    if (booking.status === "completed") {
+      setFlash({ ok: true, text: `${pinName(booking)} is already boarded.` });
+      return;
+    }
+    if (booking.status !== "confirmed") {
+      setFlash({ ok: false, text: `Cannot board: booking is ${booking.status || "unknown"}.` });
+      return;
+    }
+    if (String(booking.payment_status || "").toLowerCase() !== "confirmed") {
+      setFlash({ ok: false, text: "Payment is not confirmed yet. Confirm cash first." });
+      return;
+    }
+    setPin("");
+    setPinError("");
+    setFlash(null);
+    setPinTarget(booking);
+  };
+
+  const submitPin = async () => {
+    if (pinBusy || !pinTarget) return;
+    const value = pin.trim();
+    if (!/^\d{4,6}$/.test(value)) {
+      setPinError("Enter the 4 to 6 digit PIN.");
+      return;
+    }
+    setPinBusy(true);
+    setPinError("");
+    try {
+      await apiRequest(`/bookings/${pinTarget.booking_id}/verify-boarding/`, {
+        method: "POST",
+        body: { boarding_pin: value },
+      });
+      const target = pinTarget;
+      setPinTarget(null);
+      setPin("");
+      let confirmed = false;
+      try {
+        const fresh = await apiRequest(`/bookings/driver/${driver?.id}/`);
+        const list = Array.isArray(fresh) ? fresh : fresh?.results || fresh?.bookings || [];
+        setBookings(list);
+        confirmed = list.some((b) => b.booking_id === target.booking_id && b.status === "completed");
+      } catch {
+        confirmed = false;
+      }
+      setFlash(confirmed
+        ? { ok: true, text: `${pinName(target)} boarded. Confirmed by server.` }
+        : { ok: false, text: `PIN accepted, but the server list does not show ${pinName(target)} as boarded yet. Refresh to check.` });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setPinError(err?.message || "Unable to verify. Try again.");
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const verifyPassengerLegacy = async (booking) => {
     if (!booking?.booking_id) return;
 
     if (booking.status === "completed") {
@@ -109,7 +205,7 @@ export default function DriverPortal() {
         `${passengerName} has been verified successfully.`
       );
 
-      window.location.reload();
+      setReloadKey((k) => k + 1);
     } catch (err) {
       window.alert(
         err?.message ||
@@ -125,6 +221,12 @@ export default function DriverPortal() {
   const [bookings, setBookings] = useState([]);
   const [error, setError] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [pinTarget, setPinTarget] = useState(null);
+  const [pin, setPin] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [flash, setFlash] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -172,6 +274,13 @@ export default function DriverPortal() {
     return () => {
       mounted = false;
     };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") setReloadKey((k) => k + 1);
+    }, 8000);
+    return () => window.clearInterval(t);
   }, []);
 
   const active =
@@ -192,6 +301,29 @@ export default function DriverPortal() {
 
   return (
     <div className="driver-app">
+      {pinTarget && (
+        <div style={{position:"fixed",inset:0,zIndex:10000,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:"#fff",color:"#111",borderRadius:16,padding:20,width:"100%",maxWidth:360}}>
+            <h3 style={{margin:"0 0 4px"}}>Board passenger</h3>
+            <p style={{margin:"0 0 12px"}}>{pinName(pinTarget)} · {pinTarget.booking_number || pinTarget.booking_id}</p>
+            <input
+              autoFocus
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => e.key === "Enter" && submitPin()}
+              placeholder="Boarding PIN"
+              style={{width:"100%",fontSize:24,letterSpacing:6,textAlign:"center",padding:12,borderRadius:10,border:"1px solid #999",boxSizing:"border-box"}}
+            />
+            {pinError && <p style={{color:"#b42828",margin:"10px 0 0",fontWeight:600}}>{pinError}</p>}
+            <div style={{display:"flex",gap:8,marginTop:14}}>
+              <button type="button" disabled={pinBusy} onClick={() => setPinTarget(null)} style={{flex:1,padding:12,borderRadius:10,border:"1px solid #999",background:"#fff"}}>Cancel</button>
+              <button type="button" disabled={pinBusy || pin.length < 4} onClick={submitPin} style={{flex:1,padding:12,borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontWeight:700,opacity:(pinBusy || pin.length < 4) ? 0.6 : 1}}>{pinBusy ? "Verifying..." : "Verify"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SIDEBAR */}
       <aside
@@ -325,7 +457,7 @@ export default function DriverPortal() {
         </header>
 
         {/* CONTENT */}
-        <div className="driver-content">
+        <div className="driver-content" style={{display:"flex",flexDirection:"column"}}>
 
           <div className="driver-page-heading">
             <div>
@@ -341,6 +473,62 @@ export default function DriverPortal() {
               </p>
             </div>
           </div>
+
+          {flash && (
+            <div onClick={() => setFlash(null)} style={{margin:"0 0 12px",padding:"12px 14px",borderRadius:12,fontWeight:700,cursor:"pointer",color:"#fff",background:flash.ok ? "#16a34a" : "#b42828"}}>
+              {flash.text}
+            </div>
+          )}
+
+
+          {active === "/driver" && (() => {
+            const st = (b) => String(b.status || "").toLowerCase();
+            const pay = (b) => String(b.payment_status || "").toLowerCase();
+            const rows = bookings
+              .filter((b) => !["cancelled", "no_show"].includes(st(b)))
+              .sort((a, b) => (st(a) === "completed") - (st(b) === "completed"));
+            const total = rows.filter((b) => ["confirmed", "completed"].includes(st(b))).length;
+            const boarded = rows.filter((b) => st(b) === "completed").length;
+            const pct = total ? Math.round((boarded / total) * 100) : 0;
+            const btn = {minHeight:44,padding:"0 16px",borderRadius:10,border:"none",fontWeight:700,color:"#fff",cursor:"pointer"};
+            return (
+              <section style={{order:5,margin:"16px 0 0",padding:18,borderRadius:16,border:"1px solid rgba(255,255,255,.12)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                  <h2 style={{margin:0,fontSize:18}}>Boarding desk</h2>
+                  <strong style={{padding:"6px 12px",borderRadius:999,background:"rgba(22,163,74,.18)"}}>Boarded {boarded} / {total}</strong>
+                </div>
+                <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,.1)",margin:"12px 0 4px"}}>
+                  <div style={{height:6,borderRadius:3,width:`${pct}%`,background:"#16a34a",transition:"width .4s"}} />
+                </div>
+                {rows.length === 0 && <p style={{opacity:.7,margin:"12px 0 0"}}>No passengers assigned yet.</p>}
+                {rows.map((b) => {
+                  const boardedRow = st(b) === "completed";
+                  const cashDue = canConfirmCash(b);
+                  const canBoard = st(b) === "confirmed" && pay(b) === "confirmed";
+                  const label = pay(b) === "failed" ? "Payment failed" : st(b) === "pending" ? "Awaiting payment" : st(b) || "unknown";
+                  return (
+                    <div key={b.booking_id} style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderTop:"1px solid rgba(255,255,255,.08)"}}>
+                      <div style={{minWidth:0}}>
+                        <strong>{pinName(b)}</strong>
+                        <div style={{fontSize:13,opacity:.75}}>
+                          {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seats || 1} seat(s)
+                        </div>
+                      </div>
+                      {boardedRow ? (
+                        <span style={{...btn,background:"#16a34a",cursor:"default",display:"inline-flex",alignItems:"center"}}>Boarded</span>
+                      ) : cashDue ? (
+                        <button type="button" style={{...btn,background:"#d97706"}} onClick={() => confirmCash(b)}>Confirm cash received</button>
+                      ) : canBoard ? (
+                        <button type="button" style={{...btn,background:"#2563eb"}} onClick={() => verifyPassenger(b)}>Verify PIN</button>
+                      ) : (
+                        <span style={{...btn,background:"#475569",cursor:"default",display:"inline-flex",alignItems:"center"}}>{label}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            );
+          })()}
 
           {error && (
             <div className="driver-error">
@@ -523,6 +711,32 @@ export default function DriverPortal() {
                         <span>
                           Seats: {b.seats || 1}
                         </span>
+                        <span>
+                          Payment: {b.payment_method || "-"} · {b.payment_status || "-"}
+                        </span>
+                        {canConfirmCash(b) && (
+                          <button
+                            type="button"
+                            onClick={() => confirmCash(b)}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              marginTop: 8,
+                              padding: "7px 12px",
+                              border: 0,
+                              borderRadius: 8,
+                              background: "#5fd9b0",
+                              color: "#03120d",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <Banknote size={14} />
+                            Confirm cash received
+                          </button>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -628,6 +842,32 @@ export default function DriverPortal() {
                             ? "Verified"
                             : b.status || "pending"}
                         </span>
+                        <span>
+                          Payment: {b.payment_method || "-"} · {b.payment_status || "-"}
+                        </span>
+                        {canConfirmCash(b) && (
+                          <button
+                            type="button"
+                            onClick={() => confirmCash(b)}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              marginTop: 8,
+                              padding: "7px 12px",
+                              border: 0,
+                              borderRadius: 8,
+                              background: "#5fd9b0",
+                              color: "#03120d",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <Banknote size={14} />
+                            Confirm cash received
+                          </button>
+                        )}
                       </div>
                     </article>
                   ))}

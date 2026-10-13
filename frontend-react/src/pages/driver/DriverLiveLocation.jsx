@@ -19,6 +19,15 @@ const formatDate = (value) =>
       })
     : '—';
 
+const webglOk = (() => {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch {
+    return false;
+  }
+})();
+
 export default function DriverLiveLocation() {
   const navigate = useNavigate();
 
@@ -28,6 +37,21 @@ export default function DriverLiveLocation() {
   const [error, setError] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [endingTrip, setEndingTrip] = useState(false);
+
+  const [leafletMap, setLeafletMap] = useState(null);
+  const [Vehicle3D, setVehicle3D] = useState(null);
+  const [vehicleReady, setVehicleReady] = useState(false);
+
+  useEffect(() => {
+    if (!webglOk) return undefined;
+    let alive = true;
+    import('../../components/maps/Vehicle3D')
+      .then((m) => alive && setVehicle3D(() => m.default))
+      .catch((e) => console.warn('3D vehicle unavailable', e));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const watchRef = useRef(null);
   const driverRef = useRef(null);
@@ -460,11 +484,24 @@ export default function DriverLiveLocation() {
           routeGeometry={routeGeometry}
           stages={stages}
           pickup={null}
-          showDriver
           showPassenger={false}
           height="100%"
           zoom={14}
+          showDriver={!vehicleReady}
+          onMapReady={setLeafletMap}
         />
+
+        {Vehicle3D && (
+          <Vehicle3D
+            map={leafletMap}
+            latitude={mapDriver?.latitude}
+            longitude={mapDriver?.longitude}
+            heading={mapDriver?.heading}
+            timestamp={mapDriver?.location_updated_at}
+            stale={gpsLost}
+            onReady={() => setVehicleReady(true)}
+          />
+        )}
 
         {gpsLost && (
           <div

@@ -130,6 +130,17 @@ function MapResize({ height }) {
   return null;
 }
 
+function MapReady({ onMapReady }) {
+  const map = useMap();
+
+  useEffect(() => {
+    onMapReady?.(map);
+    return () => onMapReady?.(null);
+  }, [map, onMapReady]);
+
+  return null;
+}
+
 function MapCenter({ routePositions }) {
   const map = useMap();
   const previousRoute = useRef('');
@@ -233,6 +244,7 @@ export default function ConnectMap({
   zoom = 14,
   showDriver = true,
   showPassenger = true,
+  onMapReady,
 }) {
   const driverGpsPosition =
     driver?.latitude != null && driver?.longitude != null
@@ -411,6 +423,8 @@ export default function ConnectMap({
           borderRadius: '16px',
         }}
       >
+        <MapReady onMapReady={onMapReady} />
+
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
