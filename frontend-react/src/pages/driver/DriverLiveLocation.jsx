@@ -35,12 +35,14 @@ export default function DriverLiveLocation() {
   const [activeTrip, setActiveTrip] = useState(null);
   const [location, setLocation] = useState(null);
   const [error, setError] = useState('');
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMin, setSheetMin] = useState(false);
   const [endingTrip, setEndingTrip] = useState(false);
 
   const [leafletMap, setLeafletMap] = useState(null);
   const [Vehicle3D, setVehicle3D] = useState(null);
   const [vehicleReady, setVehicleReady] = useState(false);
+  const [busPosition, setBusPosition] = useState(null);
+  const [busHeading, setBusHeading] = useState(null);
 
   useEffect(() => {
     if (!webglOk) return undefined;
@@ -489,14 +491,17 @@ export default function DriverLiveLocation() {
           zoom={14}
           showDriver={!vehicleReady}
           onMapReady={setLeafletMap}
+          onDriverPositionChange={setBusPosition}
+          onHeadingChange={setBusHeading}
         />
 
         {Vehicle3D && (
           <Vehicle3D
             map={leafletMap}
-            latitude={mapDriver?.latitude}
-            longitude={mapDriver?.longitude}
-            heading={mapDriver?.heading}
+            latitude={busPosition?.[0] ?? mapDriver?.latitude}
+            longitude={busPosition?.[1] ?? mapDriver?.longitude}
+            position={busPosition}
+            heading={busHeading ?? mapDriver?.heading}
             timestamp={mapDriver?.location_updated_at}
             stale={gpsLost}
             onReady={() => setVehicleReady(true)}
@@ -543,20 +548,34 @@ export default function DriverLiveLocation() {
 
       <section
         className={`driver-live-sheet ${
-          sheetOpen ? 'driver-live-sheet-open' : ''
+          sheetMin ? '' : 'driver-live-sheet-open'
         }`}
+        style={
+          sheetMin
+            ? {
+                height: 'auto',
+                minHeight: 0,
+                maxHeight: 'none',
+                overflow: 'hidden',
+                zIndex: 2000,
+              }
+            : { zIndex: 2000 }
+        }
       >
         <button
           type="button"
           className="driver-live-handle"
-          onClick={() => setSheetOpen((open) => !open)}
+          onClick={() => setSheetMin((minimized) => !minimized)}
           aria-label="Toggle trip details"
         >
           <span />
         </button>
 
         <div className="driver-live-sheet-header">
-          <div>
+          <div
+            onClick={() => setSheetMin((minimized) => !minimized)}
+            style={{ cursor: 'pointer' }}
+          >
             <span>LIVE TRIP</span>
 
             <h1>
@@ -574,6 +593,8 @@ export default function DriverLiveLocation() {
           </button>
         </div>
 
+        {!sheetMin && (
+          <>
         {activeTrip ? (
           <>
             <div className="driver-live-route">
@@ -852,6 +873,8 @@ export default function DriverLiveLocation() {
           <Navigation size={18} />
           Update my location
         </button>
+          </>
+        )}
       </section>
     </div>
   );

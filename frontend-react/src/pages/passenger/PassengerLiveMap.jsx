@@ -12,7 +12,19 @@ import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { apiRequest } from '../../api';
 import './PassengerLiveMap.css';
+import TiltedMapFrame, {
+  MAP_TILT_ENABLED,
+  MAP_TILT_ZOOM,
+} from '../../components/maps/TiltedMapFrame';
+import SmartFollow from '../../components/maps/SmartFollow';
+import {
+  MapZoomButtons,
+  NextStageBanner,
+} from '../../components/maps/MapNavOverlays';
+import RouteProgress from '../../components/maps/RouteProgress';
+import useRouteMatch from '../../components/maps/useRouteMatch';
 import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPosition';
+import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
 
 function normalizePosition(value) {
   if (!value) return null;
@@ -726,34 +738,6 @@ export default function PassengerLiveMap({
   const vehicleMarkerRef = useRef(null);
   const vehicleHeadingRef = useRef(0);
 
-  useEffect(() => {
-    if (!Number.isFinite(driverHeading)) return;
-
-    const markerElement =
-      vehicleMarkerRef.current?.getElement?.();
-
-    const vehicle =
-      markerElement?.querySelector(
-        '.passenger-vehicle-marker__bus'
-      );
-
-    if (!vehicle) return;
-
-    const previous = vehicleHeadingRef.current;
-
-    const diff =
-      ((driverHeading - previous + 540) % 360) - 180;
-
-    const next = previous + diff;
-
-    vehicleHeadingRef.current = next;
-
-    vehicle.style.transformOrigin = 'center center';
-    vehicle.style.transition = 'transform 0.35s ease-out';
-    vehicle.style.transform = `rotate(${next}deg)`;
-  }, [driverHeading, driverPosition]);
-
-
   const demoTarget = useDemoDriver(geometry);
 
   // Simulation may override GPS only when the server confirms an active trip.
@@ -761,11 +745,51 @@ export default function PassengerLiveMap({
     live?.is_trip_live === true && demoTarget
       ? demoTarget
       : driverPosition;
+  const routeMatchSource =
+    live?.is_trip_live === true && demoTarget
+      ? demoTarget
+      : driverTarget;
+  const routeMatch = useRouteMatch(geometry, routeMatchSource);
+  const matchedDriverPosition = routeMatch?.onRoute
+    ? displayedDriverPosition
+    : routeMatch?.position ?? displayedDriverPosition;
+  const gpsHeading = Number(live?.driver?.heading);
+  const matchedDriverHeading =
+    routeMatch?.onRoute && routeMatch.heading != null
+      ? routeMatch.heading
+      : Number.isFinite(gpsHeading)
+        ? gpsHeading
+        : driverHeading;
+
+  useEffect(() => {
+    if (!Number.isFinite(matchedDriverHeading)) return;
+
+    const markerElement =
+      vehicleMarkerRef.current?.getElement?.();
+    const vehicle = markerElement?.querySelector(
+      '.passenger-vehicle-marker__bus',
+    );
+    if (!vehicle) return;
+
+    const previous = vehicleHeadingRef.current;
+    const diff =
+      ((matchedDriverHeading - previous + 540) % 360) - 180;
+    const next = previous + diff;
+
+    vehicleHeadingRef.current = next;
+    vehicle.style.transformOrigin = 'center center';
+    vehicle.style.transition = 'transform 0.35s ease-out';
+    vehicle.style.transform = `rotate(${next}deg)`;
+  }, [matchedDriverHeading, matchedDriverPosition]);
 
 
   const stages = useMemo(
     () => (Array.isArray(live?.stages) ? live.stages : []),
     [live],
+  );
+  const stagesOnRoute = useMemo(
+    () => stagesAlongRoute(routeMatch?.route, stages),
+    [routeMatch?.route, stages],
   );
 
   const pickupStage = useMemo(() => {
@@ -804,8 +828,8 @@ export default function PassengerLiveMap({
   );
 
   const driverRouteIndex = useMemo(
-    () => nearestRouteIndex(displayedDriverPosition, geometry),
-    [displayedDriverPosition, geometry]
+    () => nearestRouteIndex(matchedDriverPosition, geometry),
+    [matchedDriverPosition, geometry]
   );
 
   const pickupRouteIndex = useMemo(
@@ -819,11 +843,11 @@ export default function PassengerLiveMap({
     () =>
       driverRouteIndex >= 0
         ? haversineKm(
-            displayedDriverPosition,
+            matchedDriverPosition,
             geometry[driverRouteIndex],
           )
         : null,
-    [displayedDriverPosition, geometry, driverRouteIndex],
+    [matchedDriverPosition, geometry, driverRouteIndex],
   );
 
   const busOffRoute = busGapKm != null && busGapKm > 1.5;
@@ -869,7 +893,7 @@ export default function PassengerLiveMap({
     !inactiveTripStatuses.includes(tripStatus);
 
   const tripIsLive =
-    Boolean(displayedDriverPosition) &&
+    Boolean(matchedDriverPosition) &&
     !busStale &&
     tripLifecycleLive;
 
@@ -879,7 +903,7 @@ export default function PassengerLiveMap({
     busStatus = 'Trip completed';
   } else if (!tripLifecycleLive) {
     busStatus = live ? 'Trip is not active' : 'Checking trip status';
-  } else if (!displayedDriverPosition) {
+  } else if (!matchedDriverPosition) {
     busStatus = 'Waiting for driver location';
   } else if (busStale) {
     busStatus = locationAgeMin == null
@@ -976,6 +1000,21 @@ export default function PassengerLiveMap({
     return Math.min(Math.max(speed, 8), 80);
   }, [driverHistory, driverPosition]);
 
+  const routeAlongM = routeMatch?.onRoute
+    ? routeMatch.alongM
+    : null;
+  const nextStage = useMemo(
+    () =>
+      routeAlongM != null
+        ? nextStageAhead(
+            stagesOnRoute,
+            routeAlongM,
+            driverSpeedKmh,
+          )
+        : null,
+    [routeAlongM, stagesOnRoute, driverSpeedKmh],
+  );
+
   const etaMinutes = useMemo(() => {
     if (
       remainingDistanceKm == null ||
@@ -988,7 +1027,7 @@ export default function PassengerLiveMap({
   }, [remainingDistanceKm, driverSpeedKmh]);
 
   const center =
-    displayedDriverPosition ||
+    matchedDriverPosition ||
     passengerPosition ||
     geometry[0] ||
     [-1.286389, 36.817223];
@@ -1078,21 +1117,33 @@ export default function PassengerLiveMap({
       }}
     >
       <div className="passenger-live-map__canvas">
-        <MapContainer
-          center={center}
-          zoom={15}
-          zoomControl={false}
-          attributionControl
-          className="passenger-live-map__leaflet"
-        >
+        <TiltedMapFrame heading={matchedDriverHeading}>
+          <MapContainer
+            center={center}
+            zoom={MAP_TILT_ENABLED ? MAP_TILT_ZOOM : 15}
+            zoomSnap={0}
+            zoomDelta={0.5}
+            zoomControl={false}
+            scrollWheelZoom="center"
+            touchZoom="center"
+            doubleClickZoom="center"
+            attributionControl
+            className="passenger-live-map__leaflet"
+          >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution="&copy; OpenStreetMap contributors"
           />
 
           <MapResize />
+          <SmartFollow
+            enabled={MAP_TILT_ENABLED}
+            position={matchedDriverPosition}
+            nextStageM={nextStage?.distanceM ?? null}
+          />
 
-          {geometry.length > 1 && (
+          {geometry.length > 1 &&
+            !(MAP_TILT_ENABLED && displayedDriverPosition) && (
             <MapRoute positions={geometry} />
           )}
 
@@ -1151,13 +1202,14 @@ export default function PassengerLiveMap({
               />
             </>
           )}
+          <RouteProgress split={routeMatch?.split} weight={6} />
 
           {busOffRoute &&
-            displayedDriverPosition &&
+            matchedDriverPosition &&
             geometry[driverRouteIndex] && (
             <Polyline
               positions={[
-                displayedDriverPosition,
+                matchedDriverPosition,
                 geometry[driverRouteIndex],
               ]}
               pathOptions={{
@@ -1212,14 +1264,14 @@ export default function PassengerLiveMap({
             </Marker>
           )}
 
-          {following && passengerPosition && (
+          {!MAP_TILT_ENABLED && following && passengerPosition && (
             <MapFollow position={passengerPosition} />
           )}
 
-          {tripIsLive && displayedDriverPosition && (
+          {tripIsLive && matchedDriverPosition && (
             <Marker
               ref={vehicleMarkerRef}
-              position={displayedDriverPosition}
+              position={matchedDriverPosition}
               icon={vehicleIcon}
             >
               <Popup>
@@ -1242,8 +1294,25 @@ export default function PassengerLiveMap({
               </Popup>
             </Marker>
           )}
-        </MapContainer>
+          </MapContainer>
+        </TiltedMapFrame>
       </div>
+      {MAP_TILT_ENABLED && (
+        <>
+          <MapZoomButtons
+            style={{
+              top: '45%',
+              bottom: 'max(20px, env(safe-area-inset-bottom))',
+            }}
+          />
+          <NextStageBanner
+            next={nextStage}
+            style={{
+              top: 'max(88px, calc(env(safe-area-inset-top) + 78px))',
+            }}
+          />
+        </>
+      )}
 
       <header className="passenger-live-map__topbar">
         <button

@@ -11,7 +11,16 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../../pages/passenger/PassengerLiveMap.css';
+import TiltedMapFrame, {
+  MAP_TILT_ENABLED,
+  MAP_TILT_ZOOM,
+} from './TiltedMapFrame';
+import SmartFollow from './SmartFollow';
+import { MapZoomButtons, NextStageBanner } from './MapNavOverlays';
+import RouteProgress from './RouteProgress';
+import useRouteMatch from './useRouteMatch';
 import { useRoadDriverPosition } from './useRoadDriverPosition';
+import { nextStageAhead, stagesAlongRoute } from './wazeNav';
 
 const DEFAULT_CENTER = [-1.286389, 36.817223];
 
@@ -244,7 +253,10 @@ export default function ConnectMap({
   zoom = 14,
   showDriver = true,
   showPassenger = true,
+  tilt = MAP_TILT_ENABLED,
   onMapReady,
+  onDriverPositionChange,
+  onHeadingChange,
 }) {
   const driverGpsPosition =
     driver?.latitude != null && driver?.longitude != null
@@ -285,11 +297,31 @@ export default function ConnectMap({
 
   const {
     position: driverPosition,
-    heading: driverHeading,
+    heading: rawDriverHeading,
   } = useRoadDriverPosition(
     driverGpsPosition,
     routePositions,
   );
+
+  const routeMatch = useRouteMatch(routePositions, driverGpsPosition);
+  const matchedPosition = routeMatch?.onRoute
+    ? driverPosition
+    : routeMatch?.position ?? driverPosition;
+  const gpsHeading = Number(driver?.heading);
+  const matchedHeading =
+    routeMatch?.onRoute && routeMatch.heading != null
+      ? routeMatch.heading
+      : Number.isFinite(gpsHeading)
+        ? gpsHeading
+        : rawDriverHeading;
+
+  useEffect(() => {
+    onHeadingChange?.(matchedHeading);
+  }, [matchedHeading, onHeadingChange]);
+
+  useEffect(() => {
+    onDriverPositionChange?.(matchedPosition);
+  }, [matchedPosition, onDriverPositionChange]);
 
   const stageMarkers = useMemo(
     () =>
@@ -309,6 +341,21 @@ export default function ConnectMap({
           ],
         })),
     [stages],
+  );
+
+  const stagesOnRoute = useMemo(
+    () => stagesAlongRoute(routeMatch?.route, stageMarkers),
+    [routeMatch?.route, stageMarkers],
+  );
+  const routeAlongM = routeMatch?.onRoute
+    ? routeMatch.alongM
+    : null;
+  const nextStage = useMemo(
+    () =>
+      routeAlongM != null
+        ? nextStageAhead(stagesOnRoute, routeAlongM, 25)
+        : null,
+    [routeAlongM, stagesOnRoute],
   );
 
   /*
@@ -356,7 +403,7 @@ export default function ConnectMap({
   const vehicleHeadingRef = useRef(0);
 
   useEffect(() => {
-    if (!Number.isFinite(driverHeading)) return;
+    if (!Number.isFinite(matchedHeading)) return;
 
     const markerElement =
       vehicleMarkerRef.current?.getElement?.();
@@ -372,7 +419,7 @@ export default function ConnectMap({
       vehicleHeadingRef.current;
 
     const diff =
-      ((driverHeading - previous + 540) %
+      ((matchedHeading - previous + 540) %
         360) -
       180;
 
@@ -391,12 +438,12 @@ export default function ConnectMap({
     vehicle.style.transform =
       `rotate(${next}deg)`;
   }, [
-    driverHeading,
-    driverPosition,
+    matchedHeading,
+    matchedPosition,
   ]);
 
   const center =
-    driverPosition ||
+    matchedPosition ||
     passengerPosition ||
     pickupPosition ||
     (routePositions.length
@@ -411,18 +458,24 @@ export default function ConnectMap({
       className="connect-map-wrapper"
       style={{ height }}
     >
-      <MapContainer
-        center={center}
-        zoom={zoom}
-        scrollWheelZoom
-        wheelPxPerZoomLevel={120}
-        wheelDebounceTime={60}
-        style={{
-          height: '100%',
-          width: '100%',
-          borderRadius: '16px',
-        }}
-      >
+      <TiltedMapFrame enabled={tilt} heading={matchedHeading}>
+        <MapContainer
+          center={center}
+          zoom={tilt ? MAP_TILT_ZOOM : zoom}
+          zoomSnap={0}
+          zoomDelta={0.5}
+          zoomControl={!tilt}
+          scrollWheelZoom="center"
+          touchZoom="center"
+          doubleClickZoom="center"
+          wheelPxPerZoomLevel={120}
+          wheelDebounceTime={60}
+          style={{
+            height: '100%',
+            width: '100%',
+            borderRadius: '16px',
+          }}
+        >
         <MapReady onMapReady={onMapReady} />
 
         <TileLayer
@@ -433,7 +486,12 @@ export default function ConnectMap({
 
         <MapResize height={height} />
 
-        <MapCenter routePositions={routePositions} />
+        {!tilt && <MapCenter routePositions={routePositions} />}
+        <SmartFollow
+          enabled={tilt}
+          position={matchedPosition}
+          nextStageM={nextStage?.distanceM ?? null}
+        />
 
         {routePositions.length > 1 && (
           <>
@@ -474,6 +532,7 @@ export default function ConnectMap({
             />
           </>
         )}
+        <RouteProgress split={routeMatch?.split} weight={7} />
 
         {/*
          * ------------------------------------------------------
@@ -629,10 +688,10 @@ export default function ConnectMap({
          * DRIVER
          * ------------------------------------------------------
          */}
-        {showDriver && driverPosition && (
+        {showDriver && matchedPosition && (
           <Marker
             ref={vehicleMarkerRef}
-            position={driverPosition}
+            position={matchedPosition}
             icon={driverIcon}
             zIndexOffset={1000}
           >
@@ -708,7 +767,10 @@ export default function ConnectMap({
             </Popup>
           </Marker>
         )}
-      </MapContainer>
+        </MapContainer>
+      </TiltedMapFrame>
+      {tilt && <MapZoomButtons />}
+      <NextStageBanner next={nextStage} />
     </div>
   );
 }
