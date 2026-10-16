@@ -3905,6 +3905,21 @@ def get_driver_bookings(request, driver_id):
         .first()
     )
 
+    # CONNECT-FIX: scheduled-trip fallback
+    # Nothing boarding or on the road: serve the driver's next scheduled
+    # trip so the map can show its route and pickup stages.
+    if not trip:
+        trip = (
+            _driver_trips
+            .filter(
+                status="scheduled",
+                departure_at__gte=now - _dt.timedelta(hours=1),
+                departure_at__lte=now + _dt.timedelta(hours=24),
+            )
+            .order_by("departure_at", "id")
+            .first()
+        )
+
     if not trip:
         return Response(
             {
