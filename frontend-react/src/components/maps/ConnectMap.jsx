@@ -23,6 +23,8 @@ import { useRoadDriverPosition } from './useRoadDriverPosition';
 import { nextStageAhead, stagesAlongRoute } from './wazeNav';
 
 import RoadLayer from './RoadLayer';
+import { buildRoute, snapStages } from './route';
+import './Stage3D.css';
 const DEFAULT_CENTER = [-1.286389, 36.817223];
 
 const driverIcon = L.divIcon({
@@ -78,40 +80,18 @@ function escapeHtml(value) {
 
 function stageIcon(stage) {
   const order = Number(stage?.order || 0);
-  const name = escapeHtml(stage?.name || 'Stage');
   const passengerCount = Number(stage?.passenger_count || 0);
-  const hasPassengers = passengerCount > 0;
-
+  const variant = order === 1 ? 'first' : 'default';
   return L.divIcon({
-    className: 'connect-stage-marker',
+    className: `stage3d stage3d--${variant}`,
     html: `
-      <div class="connect-stage-marker-wrap ${
-        hasPassengers ? 'connect-stage-has-passengers' : ''
-      }">
-
-        <div class="connect-stage-pin">
-          <span class="connect-stage-number">${order}</span>
-        </div>
-
-        <div class="connect-stage-label">
-          ${name}
-        </div>
-
-        ${
-          hasPassengers
-            ? `
-              <div class="connect-stage-passenger-badge">
-                👤 ${passengerCount}
-              </div>
-            `
-            : ''
-        }
-
-      </div>
+      <div class="stage3d__pin"><span>${order}</span></div>
+      <i class="stage3d__shadow"></i>
+      ${passengerCount > 0 ? `<b class="stage3d__badge">${passengerCount}</b>` : ''}
     `,
-    iconSize: [230, 105],
-    iconAnchor: [115, 70],
-    popupAnchor: [0, -70],
+    iconSize: [34, 44],
+    iconAnchor: [17, 42],
+    popupAnchor: [0, -38],
   });
 }
 const stageIconCache = new Map();
@@ -352,25 +332,22 @@ export default function ConnectMap({
     onDriverPositionChange?.(matchedPosition);
   }, [matchedPosition, onDriverPositionChange]);
 
-  const stageMarkers = useMemo(
-    () =>
-      stages
-        .filter(
-          (stage) =>
-            stage?.latitude != null &&
-            stage?.longitude != null &&
-            Number.isFinite(Number(stage.latitude)) &&
-            Number.isFinite(Number(stage.longitude)),
-        )
-        .map((stage) => ({
-          ...stage,
-          position: [
-            Number(stage.latitude),
-            Number(stage.longitude),
-          ],
-        })),
-    [stages],
-  );
+  const stageMarkers = useMemo(() => {
+    const valid = stages.filter(
+      (s) =>
+        s?.latitude != null && s?.longitude != null &&
+        Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude)),
+    );
+    const road = buildRoute(routeGeometry);
+    const snapped = road.pts.length > 1 ? snapStages(road, valid) : valid;
+    return snapped.map((s) => ({
+      ...s,
+      position:
+        s.snapped && s.offsetM <= 150
+          ? [s.lat, s.lng]
+          : [Number(s.latitude), Number(s.longitude)],
+    }));
+  }, [stages, routeGeometry]);
 
   const stagesOnRoute = useMemo(
     () => stagesAlongRoute(routeMatch?.route, stageMarkers),
@@ -798,7 +775,7 @@ export default function ConnectMap({
             </Popup>
           </Marker>
         )}
-        <RoadLayer geometry={routeGeometry} stages={stages} lat={driverLat} lng={driverLng} />
+        <RoadLayer geometry={routeGeometry} stages={stages} lat={driverLat} lng={driverLng} showStops={false} />
 </MapContainer>
       </TiltedMapFrame>
       {tilt && <MapZoomButtons />}

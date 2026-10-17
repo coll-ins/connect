@@ -34,11 +34,19 @@ export async function apiRequest(endpoint, options = {}) {
     config.body = JSON.stringify(config.body);
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20000);
   let response;
   try {
-    response = await fetch(url, config);
-  } catch {
-    throw new Error('Unable to connect to CONNECT. Make sure Django is running.');
+    response = await fetch(url, { ...config, signal: options.signal ?? controller.signal });
+  } catch (e) {
+    throw new Error(
+      e?.name === 'AbortError'
+        ? 'The server took too long to respond. Please try again.'
+        : 'Unable to connect to CONNECT. Make sure Django is running.',
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
   const contentType = response.headers.get('content-type') || '';

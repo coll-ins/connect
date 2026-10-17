@@ -62,7 +62,7 @@ function normalizeUser(data) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(getStoredUser);
-  const [booting, setBooting] = useState(true);
+  const booting = false; // render from stored session; revalidate in background
 
   const save = (data) => {
     const normalized = normalizeUser(data);
@@ -72,24 +72,17 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
+    if (!user) return undefined;
     let active = true;
-    (async () => {
-      try {
-        if (user) {
-          const profile = await apiRequest('/users/profile/');
-          if (active) save(profile);
-        }
-      } catch {
-        // A stale browser session is cleared only when the server rejects it.
-        if (active && user) {
+    apiRequest('/users/profile/')
+      .then((profile) => { if (active) save(profile); })
+      .catch((e) => {
+        // Only an explicit auth rejection ends the session; timeouts/5xx keep it.
+        if (active && (e?.status === 401 || e?.status === 403)) {
           setUser(null);
           localStorage.removeItem('user_session');
         }
-      } finally {
-        if (active) setBooting(false);
-      }
-    })();
-    if (!user) setBooting(false);
+      });
     return () => { active = false; };
   }, []);
 

@@ -9,6 +9,9 @@ import {
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiRequest } from '../../api';
+import { buildRoute, snapToRoute } from '../maps/route';
+
+const SNAP_MAX_M = 150;
 
 const NAIROBI = [-1.286389, 36.817223];
 
@@ -89,26 +92,44 @@ export default function StageManager({ companyId }) {
       ? [Number(form.latitude), Number(form.longitude)]
       : null;
 
+  const road = useMemo(
+    () => buildRoute(routes.find((r) => String(r.id) === String(routeId))?.geometry),
+    [routes, routeId],
+  );
+
   const pick = (latlng) => {
-    setNote('');
-    setForm((f) => ({
-      ...f,
-      latitude: latlng.lat.toFixed(6),
-      longitude: latlng.lng.toFixed(6),
-    }));
+    let { lat, lng } = latlng;
+    let msg = 'This route has no saved geometry, so the point is not snapped.';
+    if (road.pts.length > 1) {
+      const s = snapToRoute(road, lat, lng);
+      if (s && s.dist <= SNAP_MAX_M) {
+        lat = s.lat; lng = s.lng;
+        msg = `Snapped to the route (moved ${Math.round(s.dist)} m).`;
+      } else if (s) {
+        msg = `Warning: ${Math.round(s.dist)} m from the route. Click closer to the road.`;
+      }
+    }
+    setNote(msg);
+    setForm((f) => ({ ...f, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
   };
 
   const save = async () => {
     setError('');
     setNote('');
 
-    const lat = Number(form.latitude);
-    const lng = Number(form.longitude);
+    let lat = Number(form.latitude);
+    let lng = Number(form.longitude);
 
     if (!routeId) return setError('Choose a route first.');
     if (!form.name.trim()) return setError('Give the stage a name.');
     if (!picked || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       return setError('Click the map (or type valid coordinates) to place the stage.');
+    }
+
+    // snap typed coordinates too
+    if (road.pts.length > 1) {
+      const s = snapToRoute(road, lat, lng);
+      if (s && s.dist <= SNAP_MAX_M) { lat = s.lat; lng = s.lng; }
     }
 
     setBusy(true);
