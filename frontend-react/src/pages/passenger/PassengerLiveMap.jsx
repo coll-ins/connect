@@ -1131,10 +1131,10 @@ export default function PassengerLiveMap({
             className="passenger-live-map__leaflet"
           >
           <TileLayer
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url={import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'}
             maxZoom={19}
             keepBuffer={4}
-            attribution="&copy; OpenStreetMap contributors"
+            attribution={import.meta.env.VITE_MAP_TILE_ATTRIBUTION || '\u00a9 OpenStreetMap contributors'}
           />
 
           <MapResize />
