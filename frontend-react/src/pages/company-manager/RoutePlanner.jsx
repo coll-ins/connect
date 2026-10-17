@@ -129,7 +129,7 @@ export default function RoutePlanner() {
     try {
       const d = await apiRequest(`/companies/routes/${routeId}/plan/`, {
         method: 'POST',
-        body: { start, end, via, apply },
+        body: { start, end, via, apply, follow_stages: true },
       });
       setOffRoute(d.off_route_stages || []);
       if (apply) {
@@ -340,6 +340,9 @@ export default function RoutePlanner() {
                   {draft && (
                     <div className="rp-stats" style={{ marginTop: 14 }}>
                       <span>New line: {draft.distance_km} km</span>
+                      {draft.followed_stages?.length > 0 && (
+                        <span>Pulled through {draft.followed_stages.length} stage(s) the road missed</span>
+                      )}
                     </div>
                   )}
                   {health[route.id]?.status === 'check' && (
