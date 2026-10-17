@@ -177,13 +177,13 @@ export default function SmartFollow({
     if (
       !autoZoom ||
       now < current.manualUntil ||
-      now - current.lastZoomAt < 3000
+      now - current.lastZoomAt < 8000
     ) {
       return;
     }
 
     const target = clampZoom(speedToZoom(current.speedKmh, nextStageM));
-    if (Math.abs(target - map.getZoom()) > 0.25) {
+    if (Math.abs(target - map.getZoom()) > 0.75) {
       current.programmatic = true;
       current.lastZoomAt = now;
       map.setZoom(target, { animate: true });

@@ -22,6 +22,7 @@ import useRouteMatch from './useRouteMatch';
 import { useRoadDriverPosition } from './useRoadDriverPosition';
 import { nextStageAhead, stagesAlongRoute } from './wazeNav';
 
+import RoadLayer from './RoadLayer';
 const DEFAULT_CENTER = [-1.286389, 36.817223];
 
 const driverIcon = L.divIcon({
@@ -150,6 +151,29 @@ function MapReady({ onMapReady }) {
   return null;
 }
 
+const LABEL_MIN_ZOOM = 15;
+
+function ZoomLabels() {
+  const map = useMap();
+
+  useEffect(() => {
+    const el = map.getContainer();
+    const apply = () =>
+      el.classList.toggle(
+        'connect-labels-hidden',
+        map.getZoom() < LABEL_MIN_ZOOM,
+      );
+    apply();
+    map.on('zoom', apply);
+    return () => {
+      map.off('zoom', apply);
+      el.classList.remove('connect-labels-hidden');
+    };
+  }, [map]);
+
+  return null;
+}
+
 function MapCenter({ routePositions }) {
   const map = useMap();
   const previousRoute = useRef('');
@@ -258,10 +282,15 @@ export default function ConnectMap({
   onDriverPositionChange,
   onHeadingChange,
 }) {
-  const driverGpsPosition =
-    driver?.latitude != null && driver?.longitude != null
-      ? [Number(driver.latitude), Number(driver.longitude)]
-      : null;
+  const driverLat = driver?.latitude;
+  const driverLng = driver?.longitude;
+  const driverGpsPosition = useMemo(
+    () =>
+      driverLat != null && driverLng != null
+        ? [Number(driverLat), Number(driverLng)]
+        : null,
+    [driverLat, driverLng],
+  );
 
   const passengerPosition =
     passenger?.latitude != null && passenger?.longitude != null
@@ -477,6 +506,7 @@ export default function ConnectMap({
           }}
         >
         <MapReady onMapReady={onMapReady} />
+        <ZoomLabels />
 
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
@@ -697,19 +727,19 @@ export default function ConnectMap({
           >
             <Popup>
               <strong>
-                {driver.name || 'Driver'}
+                {driver?.name || 'Driver'}
               </strong>
 
               <br />
 
-              {driver.bus_number
-                ? `Bus: ${driver.bus_number}`
+              {driver?.bus_number
+                ? `Bus: ${driver?.bus_number}`
                 : 'Driver location'}
 
-              {driver.phone_number && (
+              {driver?.phone_number && (
                 <>
                   <br />
-                  Phone: {driver.phone_number}
+                  Phone: {driver?.phone_number}
                 </>
               )}
             </Popup>
@@ -767,7 +797,8 @@ export default function ConnectMap({
             </Popup>
           </Marker>
         )}
-        </MapContainer>
+        <RoadLayer geometry={routeGeometry} stages={stages} lat={driverLat} lng={driverLng} />
+</MapContainer>
       </TiltedMapFrame>
       {tilt && <MapZoomButtons />}
       <NextStageBanner next={nextStage} />

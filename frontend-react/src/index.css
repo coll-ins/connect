@@ -5046,3 +5046,8 @@
   background: #111827;
   color: #ffffff;
 }
+
+/* CONNECT-FIX: road layer icons */
+.bus-icon, .stop-icon { background: none; border: none; }
+.bus-rot { width: 44px; height: 44px; will-change: transform; filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+.stop-icon svg { filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }

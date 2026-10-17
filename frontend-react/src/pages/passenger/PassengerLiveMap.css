@@ -859,3 +859,7 @@
     font-size: 25px;
   }
 }
+
+.connect-labels-hidden .connect-stage-label {
+  visibility: hidden;
+}

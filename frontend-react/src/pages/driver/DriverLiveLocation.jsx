@@ -28,6 +28,10 @@ const webglOk = (() => {
   }
 })();
 
+// CONNECT-FIX: stable fallbacks so props do not change every render
+const EMPTY_GEOMETRY = { type: 'LineString', coordinates: [] };
+const EMPTY_LIST = [];
+
 export default function DriverLiveLocation() {
   const navigate = useNavigate();
 
@@ -113,7 +117,7 @@ export default function DriverLiveLocation() {
     // Keep the driver's map synchronized with the backend.
     // This is what allows the simulator and real GPS updates
     // to animate on the driver map.
-    const interval = setInterval(refresh, 10000);
+    const interval = setInterval(refresh, 5000);
 
     return () => {
       cancelled = true;
@@ -367,16 +371,28 @@ export default function DriverLiveLocation() {
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 5000);
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
+  const simMode =
+    window.location.search.includes('sim=1') ||
+    window.localStorage.getItem('sim') === '1';
+
   const gpsAgeSec = useMemo(() => {
     const t = Date.parse(mapDriver?.location_updated_at || '');
-    return Number.isFinite(t) ? Math.max(0, (nowTick - t) / 1000) : null;
-  }, [mapDriver, nowTick]);
+    if (!Number.isFinite(t)) return null;
+    return Math.max(0, (nowTick - t) / 1000);
+  }, [mapDriver?.location_updated_at, nowTick]);
 
-  const gpsLost = gpsAgeSec != null && gpsAgeSec > 120;
+  // Thresholds allow for the poll interval plus the 3 s post interval.
+  const gpsStatus =
+    gpsAgeSec == null ? 'NO_FIX'
+    : gpsAgeSec < 20 ? 'LIVE'
+    : gpsAgeSec < 45 ? 'DELAYED'
+    : 'LOST';
+
+  const gpsLost = gpsStatus === 'LOST' || gpsStatus === 'NO_FIX';
 
   /*
    * ------------------------------------------------------------
@@ -389,13 +405,10 @@ export default function DriverLiveLocation() {
    * The map receives the route exactly as stored on Route.geometry.
    * Bookings/passengers NEVER modify this geometry.
    */
-  const routeGeometry = activeTrip?.route_geometry || {
-    type: 'LineString',
-    coordinates: [],
-  };
+  const routeGeometry = activeTrip?.route_geometry || EMPTY_GEOMETRY;
 
-  const stages = activeTrip?.stages || [];
-  const bookings = activeTrip?.bookings || [];
+  const stages = activeTrip?.stages || EMPTY_LIST;
+  const bookings = activeTrip?.bookings || EMPTY_LIST;
 
   const passengerCount =
     activeTrip?.passenger_count ??
@@ -527,7 +540,10 @@ export default function DriverLiveLocation() {
               boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
             }}
           >
-            GPS signal lost · last update {Math.round(gpsAgeSec / 60)} min ago
+            {gpsStatus === 'NO_FIX'
+              ? 'No GPS fix yet'
+              : `GPS signal lost · last update ${Math.round(gpsAgeSec)} s ago`}
+            {simMode ? ' · simulator mode: start simulate_bus' : ''}
           </div>
         )}
 
@@ -540,9 +556,25 @@ export default function DriverLiveLocation() {
           Dashboard
         </button>
 
-        <div className="driver-live-status">
+        <div
+          className="driver-live-status"
+          style={{
+            background:
+              gpsStatus === 'LIVE'
+                ? undefined
+                : gpsStatus === 'DELAYED'
+                  ? 'rgba(200,140,0,0.92)'
+                  : 'rgba(180,40,40,0.92)',
+          }}
+        >
           <span />
-          GPS LIVE
+          {gpsStatus === 'LIVE'
+            ? simMode ? 'SIMULATED GPS LIVE' : 'GPS LIVE'
+            : gpsStatus === 'DELAYED'
+              ? `GPS DELAYED · ${Math.round(gpsAgeSec)}s`
+              : gpsStatus === 'LOST'
+                ? 'GPS LOST'
+                : 'WAITING FOR GPS'}
         </div>
       </div>
 
