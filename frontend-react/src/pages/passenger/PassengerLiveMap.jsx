@@ -1133,7 +1133,7 @@ export default function PassengerLiveMap({
           <TileLayer
             url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={19}
-            updateWhenZooming={false}
+            keepBuffer={4}
             attribution="&copy; OpenStreetMap contributors"
           />
 
