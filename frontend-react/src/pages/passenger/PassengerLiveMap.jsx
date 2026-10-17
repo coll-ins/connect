@@ -1,13 +1,7 @@
 import 'leaflet/dist/leaflet.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  useMap,
-} from 'react-leaflet';
+import { MapContainer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import BaseTileLayer from '../../components/maps/BaseTileLayer';
 import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { apiRequest } from '../../api';
@@ -1142,12 +1136,7 @@ export default function PassengerLiveMap({
             attributionControl
             className="passenger-live-map__leaflet"
           >
-          <TileLayer
-            url={import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'}
-            maxZoom={19}
-            keepBuffer={4}
-            attribution={import.meta.env.VITE_MAP_TILE_ATTRIBUTION || '\u00a9 OpenStreetMap contributors'}
-          />
+          <BaseTileLayer />
 
           <MapResize />
           <SmartFollow

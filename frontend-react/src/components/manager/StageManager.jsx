@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  CircleMarker,
-  Tooltip,
-  useMap,
-  useMapEvents,
-} from 'react-leaflet';
+import { MapContainer, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import BaseTileLayer from '../maps/BaseTileLayer';
 import 'leaflet/dist/leaflet.css';
 import { apiRequest } from '../../api';
 import { buildRoute, snapToRoute } from '../maps/route';
@@ -219,10 +213,7 @@ export default function StageManager({ companyId }) {
         <>
           <div style={{ height: 320, borderRadius: 14, overflow: 'hidden' }}>
             <MapContainer center={NAIROBI} zoom={12} style={{ height: '100%', width: '100%' }}>
-              <TileLayer
-                attribution="&copy; OpenStreetMap contributors"
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+              <BaseTileLayer />
               <FitStages stages={stages} />
               <ClickPicker onPick={pick} />
 

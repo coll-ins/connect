@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  CircleMarker,
-  useMap,
-} from 'react-leaflet';
+import { MapContainer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import BaseTileLayer from './BaseTileLayer';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../../pages/passenger/PassengerLiveMap.css';
@@ -476,12 +469,7 @@ export default function ConnectMap({
         <MapReady onMapReady={onMapReady} />
         <ZoomLabels />
 
-        <TileLayer
-          attribution={import.meta.env.VITE_MAP_TILE_ATTRIBUTION || '\u00a9 OpenStreetMap contributors'}
-          url={import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'}
-          maxZoom={19}
-          keepBuffer={4}
-        />
+        <BaseTileLayer />
 
         <MapResize height={height} />
 

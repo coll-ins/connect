@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, useMapEvents,
-} from 'react-leaflet';
+import { MapContainer, CircleMarker, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import BaseTileLayer from '../../components/maps/BaseTileLayer';
 import 'leaflet/dist/leaflet.css';
 import { Eye, Plus, Save } from 'lucide-react';
 
@@ -257,8 +256,7 @@ export default function RoutePlanner() {
 
                 <div className="rp-map">
                   <MapContainer center={NAIROBI} zoom={12} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer attribution="&copy; OpenStreetMap contributors"
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <BaseTileLayer />
                     <Fit points={fitPoints} tick={tick} />
                     <Clicks onPick={onPick} />
 
