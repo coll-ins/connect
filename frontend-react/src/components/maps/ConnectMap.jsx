@@ -512,6 +512,7 @@ export default function ConnectMap({
           attribution="&copy; OpenStreetMap contributors"
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
+          updateWhenZooming={false}
         />
 
         <MapResize height={height} />
