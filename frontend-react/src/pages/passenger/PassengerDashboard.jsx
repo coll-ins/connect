@@ -158,8 +158,8 @@ function PaymentModal({ booking, onClose, onPaid }) {
       </button>
     </div>}
 
-    {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">The M-PESA prompt is sent to the number saved on your CONNECT account. Authorize it on your phone.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
-    {step==='cash-success' && <div className="success">Cash selected. Your booking is ready for the driver/conductor to confirm according to the cash-payment flow.</div>}
+    {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">Authorize the M-PESA prompt on the phone that received it.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
+    {step==='cash-success' && <div className="success">Cash selected. Pay the driver in cash. Your boarding PIN will appear on your trip card as soon as the driver confirms the payment.</div>}
     {step==='paid' && <div className="payment-status"><div style={{fontSize:48}}>✓</div><h3>Payment confirmed</h3><p className="muted">Your booking is confirmed. Enjoy your trip.</p><button className="btn btn-primary" onClick={onClose}>Done</button></div>}
   </div></div>;
 }
@@ -237,6 +237,21 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   useEffect(()=>{apiRequest('/companies/').then(d=>setCompanies(Array.isArray(d)?d:[])).catch(e=>setError(e.message));refresh()},[refresh]);
   useEffect(()=>{if(!company){setRoutes([]);setTrips([]);return} apiRequest(`/companies/${company}/routes/`).then(d=>setRoutes(d||[])).catch(e=>setError(e.message))},[company]);
   useEffect(()=>{if(!company){setTrips([]);return} const q=route?`?route_id=${route}`:''; apiRequest(`/companies/${company}/trips/${q}`).then(d=>setTrips(Array.isArray(d)?d:[])).catch(e=>setError(e.message))},[company,route]);
+
+  // Cash bookings stay pending until the driver confirms the cash. Poll so the
+  // boarding PIN appears on the passenger's screen without a manual reload.
+  const awaitingCash = bookings.some((b) => (
+    b.payment_method === 'cash'
+    && b.payment_status === 'pending'
+    && !['cancelled', 'completed', 'no_show'].includes(String(b.status || '').toLowerCase())
+  ));
+  useEffect(() => {
+    if (!awaitingCash) return undefined;
+    const id = window.setInterval(() => {
+      if (!document.hidden) refresh();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [awaitingCash, refresh]);
 
   const selectedRoute=useMemo(()=>routes.find(r=>String(r.id)===String(route)),[routes,route]);
   const firstStageId=(selectedRoute?.pickup_stages||[]).filter(st=>st.is_active!==false)[0]?.id;
