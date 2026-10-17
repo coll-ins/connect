@@ -1,16 +1,25 @@
 import { TileLayer } from 'react-leaflet';
 
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-  navigator.serviceWorker
-    .register(`${import.meta.env.BASE_URL}tile-sw.js`)
-    .catch(() => {});
-}
+const KEY = import.meta.env.VITE_CARTO_KEY;
+
+const CARTO = {
+  url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${KEY}`,
+  subdomains: 'abcd',
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+};
+const OSM = {
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  subdomains: 'abc',
+  attribution: '&copy; OpenStreetMap contributors',
+};
 
 export default function BaseTileLayer() {
+  const src = KEY ? CARTO : OSM;
   return (
     <TileLayer
-      url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      url={src.url}
+      subdomains={src.subdomains}
+      attribution={src.attribution}
       maxZoom={19}
       keepBuffer={6}
       updateWhenZooming={false}
