@@ -155,64 +155,6 @@ export default function DriverPortal() {
     }
   };
 
-  const verifyPassengerLegacy = async (booking) => {
-    if (!booking?.booking_id) return;
-
-    if (booking.status === "completed") {
-      window.alert("This passenger has already been verified.");
-      return;
-    }
-
-    if (booking.status !== "confirmed") {
-      window.alert(
-        `This booking cannot be verified while its status is "${
-          booking.status || "unknown"
-        }".`
-      );
-      return;
-    }
-
-    const passengerName =
-      booking.passenger?.name ||
-      booking.passenger_name ||
-      booking.passenger ||
-      `Booking #${booking.booking_id}`;
-
-    const confirmed = window.confirm(
-      `Passenger name: ${passengerName}\n\nIs this your name?`
-    );
-
-    if (!confirmed) return;
-
-    const pin = window.prompt(
-      `Ask ${passengerName} for their boarding PIN, then enter it here:`
-    );
-
-    if (!pin || !pin.trim()) return;
-
-    try {
-      await apiRequest(
-        `/bookings/${booking.booking_id}/verify-boarding/`,
-        {
-          method: "POST",
-          body: {
-            boarding_pin: pin.trim(),
-          },
-        },
-      );
-
-      window.alert(
-        `${passengerName} has been verified successfully.`
-      );
-
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      window.alert(
-        err?.message ||
-          "Unable to verify this passenger. Please check the PIN and try again."
-      );
-    }
-  };
 
   const location = useLocation();
   const { logout } = useAuth();
