@@ -521,7 +521,7 @@ export default function DriverLiveLocation() {
           />
         )}
 
-        {gpsLost && (
+        {gpsLost && simMode && (
           <div
             role="status"
             style={{
@@ -540,10 +540,7 @@ export default function DriverLiveLocation() {
               boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
             }}
           >
-            {gpsStatus === 'NO_FIX'
-              ? 'No GPS fix yet'
-              : `GPS signal lost · last update ${Math.round(gpsAgeSec)} s ago`}
-            {simMode ? ' · simulator mode: start simulate_bus' : ''}
+            Simulator mode: start simulate_bus
           </div>
         )}
 
@@ -567,13 +564,19 @@ export default function DriverLiveLocation() {
                   : 'rgba(180,40,40,0.92)',
           }}
         >
-          <span />
+          <span
+            style={
+              gpsStatus === 'LIVE'
+                ? undefined
+                : { background: '#fff', boxShadow: 'none' }
+            }
+          />
           {gpsStatus === 'LIVE'
             ? simMode ? 'SIMULATED GPS LIVE' : 'GPS LIVE'
             : gpsStatus === 'DELAYED'
               ? `GPS DELAYED · ${Math.round(gpsAgeSec)}s`
               : gpsStatus === 'LOST'
-                ? 'GPS LOST'
+                ? `GPS LOST · last seen ${gpsAgeSec >= 60 ? Math.round(gpsAgeSec / 60) + ' min' : Math.round(gpsAgeSec) + ' s'} ago`
                 : 'WAITING FOR GPS'}
         </div>
       </div>
