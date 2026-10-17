@@ -25,6 +25,8 @@ import RouteProgress from '../../components/maps/RouteProgress';
 import useRouteMatch from '../../components/maps/useRouteMatch';
 import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPosition';
 import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
+import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '../../components/maps/route';
+import { stopIcon } from '../../components/maps/StopMarker';
 
 function normalizePosition(value) {
   if (!value) return null;
@@ -424,12 +426,6 @@ function useLiveSocket(bookingId, onLocation) {
   return connected;
 }
 
-const stageDotIcon = L.divIcon({
-  className: 'connect-stage-dot',
-  html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #475569;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>',
-  iconSize: [14, 14],
-  iconAnchor: [7, 7],
-});
 
 function createPickupIcon(label) {
   const safe = String(label || 'Pickup')
@@ -783,10 +779,26 @@ export default function PassengerLiveMap({
   }, [matchedDriverHeading, matchedDriverPosition]);
 
 
-  const stages = useMemo(
-    () => (Array.isArray(live?.stages) ? live.stages : []),
-    [live],
+  const liveStages = live?.stages;
+  const rawStages = useMemo(
+    () => (Array.isArray(liveStages) ? liveStages : []),
+    [liveStages],
   );
+
+  // Snap every stage onto the road geometry so pins sit on the route.
+  const stages = useMemo(() => {
+    if (!Array.isArray(geometry) || geometry.length < 2) return rawStages;
+    const road = buildRoadRoute({
+      coordinates: geometry.map((p) => (Array.isArray(p) ? [p[1], p[0]] : [p.lng ?? p.lon, p.lat])),
+    });
+    return rawStages.map((s) => {
+      const pos = normalizePosition(s);
+      if (!pos) return s;
+      const sn = snapPointToRoute(road, pos[0], pos[1]);
+      if (!sn || sn.dist > 150) return s;
+      return { ...s, latitude: sn.lat, longitude: sn.lng, lat: sn.lat, lng: sn.lng };
+    });
+  }, [rawStages, geometry]);
   const stagesOnRoute = useMemo(
     () => stagesAlongRoute(routeMatch?.route, stages),
     [routeMatch?.route, stages],
@@ -1241,7 +1253,7 @@ export default function PassengerLiveMap({
               <Marker
                 key={stage.id ?? stage.name}
                 position={position}
-                icon={stageDotIcon}
+                icon={stopIcon(Number(stage.order) || 1, Number(stage.order) === 1 ? 'first' : 'default')}
               >
                 <Popup>
                   <strong>

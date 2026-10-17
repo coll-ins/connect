@@ -44,6 +44,7 @@ export async function apiRequest(endpoint, options = {}) {
       e?.name === 'AbortError'
         ? 'The server took too long to respond. Please try again.'
         : 'Unable to connect to CONNECT. Make sure Django is running.',
+      { cause: e },
     );
   } finally {
     clearTimeout(timer);

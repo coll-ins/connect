@@ -69,15 +69,6 @@ const passengerIcon = L.divIcon({
   popupAnchor: [0, -25],
 });
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 function stageIcon(stage) {
   const order = Number(stage?.order || 0);
   const passengerCount = Number(stage?.passenger_count || 0);
