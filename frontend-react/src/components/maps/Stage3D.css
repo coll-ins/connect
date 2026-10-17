@@ -1,0 +1,13 @@
+.stage3d{background:none;border:0;position:relative}
+.stage3d__pin{width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+  background:linear-gradient(145deg,#ff6b4a,#c62d14);border:2px solid #fff;
+  box-shadow:0 6px 10px rgba(0,0,0,.4),inset 0 2px 3px rgba(255,255,255,.5);
+  display:grid;place-items:center;transition:transform .15s}
+.stage3d--first .stage3d__pin{background:linear-gradient(145deg,#34d399,#047857)}
+.stage3d__pin span{transform:rotate(45deg);color:#fff;font:700 12px/1 system-ui}
+.stage3d:hover .stage3d__pin{transform:rotate(-45deg) translate(3px,-3px) scale(1.08)}
+.stage3d__shadow{position:absolute;left:9px;bottom:0;width:16px;height:6px;border-radius:50%;
+  background:rgba(0,0,0,.35);filter:blur(2px)}
+.stage3d__badge{position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;
+  border-radius:9px;background:#2563eb;color:#fff;font:700 11px/18px system-ui;text-align:center;
+  border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.4)}

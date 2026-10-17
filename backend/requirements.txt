@@ -1,0 +1,15 @@
+# Add Django, Django REST Framework, and Africa's Talking dependencies here
+Django==5.2.18
+djangorestframework==3.18.3
+django-cors-headers==4.3.1
+python-dotenv==1.0.0
+africastalking==1.2.5
+psycopg2-binary==2.9.9
+dj-database-url==3.1.2
+gunicorn==26.2.0
+whitenoise==6.12.0
+requests>=2.31,<3
+channels==4.3.2
+daphne==4.2.3
+channels_redis==4.3.0
+redis==8.1.0

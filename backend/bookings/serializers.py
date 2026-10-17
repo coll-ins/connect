@@ -1,0 +1,122 @@
+from decimal import Decimal
+from rest_framework import serializers
+from companies.models import Trip
+from .models import Incident
+from drivers.models import Driver
+
+
+class BookingCreateSerializer(serializers.Serializer):
+    trip_id = serializers.IntegerField(required=True)
+    seats = serializers.IntegerField(
+        required=False,
+        default=1,
+        min_value=1,
+    )
+
+    # New structured pickup selection.
+    pickup_stage_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+    )
+
+    # Kept temporarily for compatibility with older clients.
+    pickup_location = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+
+    def validate_trip_id(self, value):
+        if not Trip.objects.filter(id=value).exists():
+            raise serializers.ValidationError("Trip does not exist.")
+        return value
+
+    def validate(self, attrs):
+        pickup_stage_id = attrs.get('pickup_stage_id')
+        pickup_location = attrs.get('pickup_location', '').strip()
+
+        if pickup_stage_id is None and not pickup_location:
+            raise serializers.ValidationError({
+                'pickup_stage_id': (
+                    'Select a recognized pickup stage.'
+                )
+            })
+
+        return attrs
+
+
+class AssignDriverSerializer(serializers.Serializer):
+    driver_id = serializers.IntegerField(required=True)
+
+    def validate_driver_id(self, value):
+        if not Driver.objects.filter(id=value).exists():
+            raise serializers.ValidationError("Driver does not exist.")
+        return value
+
+
+class PassengerLocationSerializer(serializers.Serializer):
+    # Browser GPS sends ~15 decimal places. Accept it and round to the
+    # 6 decimals the Booking model stores.
+    latitude = serializers.FloatField(min_value=-90, max_value=90)
+    longitude = serializers.FloatField(min_value=-180, max_value=180)
+
+    def validate_latitude(self, value):
+        return Decimal(f"{value:.6f}")
+
+    def validate_longitude(self, value):
+        return Decimal(f"{value:.6f}")
+
+class IncidentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for trip incidents.
+
+    Trip and reporter are controlled by the server.
+    """
+
+    trip_route = serializers.CharField(
+        source='trip.route.name',
+        read_only=True,
+    )
+
+    company_id = serializers.IntegerField(
+        source='trip.route.company_id',
+        read_only=True,
+    )
+
+    company_name = serializers.CharField(
+        source='trip.route.company.name',
+        read_only=True,
+    )
+
+    reported_by_name = serializers.CharField(
+        source='reported_by.username',
+        read_only=True,
+    )
+
+    class Meta:
+        model = Incident
+        fields = [
+            'id',
+            'trip',
+            'trip_route',
+            'company_id',
+            'company_name',
+            'reported_by',
+            'reported_by_name',
+            'incident_type',
+            'description',
+            'status',
+            'reported_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'trip',
+            'trip_route',
+            'company_id',
+            'company_name',
+            'reported_by',
+            'reported_by_name',
+            'reported_at',
+            'updated_at',
+        ]

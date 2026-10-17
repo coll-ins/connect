@@ -1,0 +1,115 @@
+/* CONNECT passenger home — dark, matches app shell */
+.passenger-home {
+  --ph-ink: #eaf3f6;
+  --ph-muted: #8aa0b5;
+  --ph-accent: #5fd9b0;
+  --ph-line: rgba(255,255,255,0.09);
+  --ph-card: rgba(255,255,255,0.04);
+  min-height: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 32px 0 24px;
+  color: var(--ph-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+}
+.passenger-home *, .passenger-home *::before, .passenger-home *::after { box-sizing: border-box; }
+
+.passenger-home .passenger-welcome { margin-bottom: 28px; }
+.passenger-home .welcome-orb { display: none; }
+.passenger-home .glass-eyebrow { color: var(--ph-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.passenger-home .passenger-welcome h1 {
+  margin: 10px 0; color: #fff; font-size: clamp(30px, 3.6vw, 42px);
+  font-weight: 800; line-height: 1.1; letter-spacing: -0.035em; max-width: 700px;
+}
+.passenger-home .passenger-welcome p { color: var(--ph-muted); font-size: 14px; max-width: 560px; }
+
+.passenger-home .journey-choice-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; align-items: stretch; }
+.passenger-home .journey-choice {
+  display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden;
+  border: 1px solid var(--ph-line); border-radius: 16px; color: var(--ph-ink);
+  background: var(--ph-card); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+.passenger-home .journey-choice::before,
+.passenger-home .journey-choice::after { display: none; }
+.passenger-home .journey-choice:hover { transform: translateY(-3px); border-color: rgba(95,217,176,.45); box-shadow: none; }
+.passenger-home .journey-choice:focus-visible { outline: 2px solid var(--ph-accent); outline-offset: 3px; }
+
+.passenger-home .journey-choice-image {
+  position: relative; inset: auto; width: 100%; height: 130px; flex: 0 0 130px;
+  background-size: cover; background-position: center; transition: none;
+}
+.passenger-home .journey-choice:hover .journey-choice-image { transform: none; }
+.passenger-home .journey-image-overlay { background: linear-gradient(180deg, rgba(3,12,21,.0), rgba(3,12,21,.35)); }
+.passenger-home .journey-icon {
+  top: 12px; right: 12px; width: 38px; height: 38px; border-radius: 10px; font-size: 18px;
+  background: rgba(8,20,32,.75); border: 1px solid rgba(255,255,255,.18); box-shadow: none;
+}
+.passenger-home .journey-choice-content { position: static; display: flex; flex: 1; flex-direction: column; align-items: flex-start; padding: 16px 18px 18px; }
+.passenger-home .journey-number { color: var(--ph-muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.passenger-home .journey-choice h2 { margin: 6px 0; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+.passenger-home .journey-choice p { margin: 0; color: var(--ph-muted); font-size: 12px; line-height: 1.55; }
+.passenger-home .journey-arrow { margin-top: auto; padding-top: 14px; color: var(--ph-accent); font-size: 12px; font-weight: 750; }
+
+.passenger-home .journey-section { padding: 36px 0 0; animation: none; }
+.passenger-home .journey-heading { margin-bottom: 16px; }
+.passenger-home .journey-heading h2 { margin: 8px 0; color: #fff; font-size: clamp(20px, 2.2vw, 26px); font-weight: 800; letter-spacing: -0.03em; }
+.passenger-home .journey-heading p { color: var(--ph-muted); font-size: 13px; }
+
+.passenger-home .modern-trip-list { gap: 10px; }
+.passenger-home .modern-trip-card {
+  grid-template-columns: minmax(130px, .8fr) minmax(160px, 1.2fr) minmax(160px, 1fr) minmax(160px, auto);
+  gap: 18px; padding: 16px 18px; border: 1px solid var(--ph-line); border-radius: 14px;
+  background: var(--ph-card); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.passenger-home .modern-trip-card:hover { transform: none; border-color: rgba(255,255,255,.18); }
+.passenger-home .trip-time-block span { color: var(--ph-muted); font-size: 9px; }
+.passenger-home .trip-time-block strong { color: #fff; font-size: 17px; overflow-wrap: anywhere; }
+.passenger-home .trip-time-block small { color: var(--ph-muted); font-size: 11px; }
+.passenger-home .trip-route-line span { border-color: var(--ph-accent); }
+.passenger-home .trip-route-line i { background: rgba(255,255,255,.2); }
+.passenger-home .trip-route-visual strong { color: #fff; font-size: 13px; }
+.passenger-home .trip-route-visual p { color: var(--ph-muted); font-size: 11px; }
+.passenger-home .trip-info span { padding: 5px 8px; border: 1px solid var(--ph-line); border-radius: 7px; color: #b6c6d4; background: rgba(255,255,255,.03); font-size: 11px; text-transform: capitalize; }
+.passenger-home .trip-action { flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.passenger-home .trip-action > strong { color: #fff; font-size: 14px; }
+.passenger-home .glass-primary-button {
+  min-height: 36px; padding: 0 14px; border: 0; border-radius: 9px; color: #03120d;
+  background: var(--ph-accent); box-shadow: none; font-size: 12px; font-weight: 800;
+}
+.passenger-home .glass-primary-button:hover:not(:disabled) { background: #7ee6c3; transform: none; box-shadow: none; }
+.passenger-home .trip-status-label { color: var(--ph-muted); font-size: 12px; }
+.passenger-home .glass-empty { min-height: 100px; border: 1px dashed rgba(255,255,255,.16); border-radius: 14px; color: var(--ph-muted); background: transparent; }
+.passenger-home .passenger-home-footer { justify-content: flex-start; flex-wrap: wrap; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--ph-line); color: var(--ph-muted); font-size: 11px; }
+
+@media (max-width: 1100px) {
+  .passenger-home .modern-trip-card { grid-template-columns: minmax(110px,.8fr) minmax(140px,1.3fr); }
+  .passenger-home .trip-info, .passenger-home .trip-action { grid-column: auto; justify-content: flex-start; }
+}
+@media (max-width: 760px) {
+  .passenger-home { padding-top: 20px; }
+  .passenger-home .journey-choice-grid { grid-template-columns: 1fr; gap: 12px; }
+  .passenger-home .journey-choice { display: grid; grid-template-columns: 110px minmax(0,1fr); }
+  .passenger-home .journey-choice-image { width: 110px; height: 100%; min-height: 150px; }
+  .passenger-home .modern-trip-card { grid-template-columns: 1fr; gap: 12px; }
+  .passenger-home .trip-action { justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--ph-line); }
+}
+
+/* Photos fully visible */
+.passenger-home .journey-choice-image {
+  height: auto;
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 10;
+  background-size: cover;
+  background-position: center 40%;
+}
+@media (max-width: 760px) {
+  .passenger-home .journey-choice-image {
+    aspect-ratio: auto;
+    min-height: 150px;
+  }
+}

@@ -1,0 +1,3 @@
+.stop-icon{background:none;border:0}
+.stop-icon svg{display:block;filter:drop-shadow(0 4px 3px rgba(0,0,0,.45));transition:transform .15s ease}
+.stop-icon:hover svg{transform:translateY(-3px)}

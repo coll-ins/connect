@@ -1,0 +1,18 @@
+[Unit]
+Description=CONNECT ASGI (daphne) on port %i
+After=network.target postgresql.service redis-server.service
+Requires=redis-server.service
+
+[Service]
+User=connect
+Group=connect
+WorkingDirectory=/srv/connect/backend
+EnvironmentFile=/etc/connect/connect.env
+ExecStart=/srv/connect/venv/bin/daphne -b 127.0.0.1 -p %i connect.asgi:application
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

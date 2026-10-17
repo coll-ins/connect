@@ -1,0 +1,1 @@
+/var/log/connect/*.log { weekly rotate 8 compress missingok notifempty copytruncate }
