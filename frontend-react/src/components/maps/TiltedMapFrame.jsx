@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import './TiltedMapFrame.css';
 
-const TILT_DEFAULT = true;
+const TILT_DEFAULT = false;
 
 const flatRequested =
   typeof window !== 'undefined' &&
