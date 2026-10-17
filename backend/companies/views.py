@@ -1254,7 +1254,7 @@ def route_plan(request, route_id):
     from django.utils import timezone
 
     from .geo import MAX_STAGE_OFFSET_M, locate_on_line
-    from .routing import RoutingError, road_line
+    from .routing import RoutingError, plan_line, road_line
 
     route = get_object_or_404(Route.objects.select_related('company'), id=route_id)
     if not can_manage_company(request.user, route.company):
@@ -1407,7 +1407,14 @@ def route_plan(request, route_id):
         )
 
     try:
-        geometry, distance_m = road_line(waypoints)
+        followed = []
+        if data.get('follow_stages') is True:
+            geometry, distance_m, followed, _unreached = plan_line(
+                waypoints[0], waypoints[-1], waypoints[1:-1],
+                [(s.id, s.name, float(s.latitude), float(s.longitude)) for s in stages],
+            )
+        else:
+            geometry, distance_m = road_line(waypoints)
     except RoutingError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -1435,7 +1442,7 @@ def route_plan(request, route_id):
         route.start_latitude, route.start_longitude = Decimal(f'{s_lat:.6f}'), Decimal(f'{s_lng:.6f}')
         route.end_latitude, route.end_longitude = Decimal(f'{e_lat:.6f}'), Decimal(f'{e_lng:.6f}')
         route.geometry = geometry
-        route.via_points = [{'latitude': v[0], 'longitude': v[1]} for v in vias]
+        route.via_points = [{'latitude': w[0], 'longitude': w[1]} for w in waypoints[1:-1]]
         route.save(update_fields=[
             'start_point', 'end_point', 'start_latitude', 'start_longitude',
             'end_latitude', 'end_longitude', 'geometry', 'via_points',
@@ -1446,7 +1453,8 @@ def route_plan(request, route_id):
         'geometry': geometry,
         'distance_km': round(distance_m / 1000, 1),
         'off_route_stages': off_route,
-        'via': [{'latitude': v[0], 'longitude': v[1]} for v in vias],
+        'via': [{'latitude': w[0], 'longitude': w[1]} for w in waypoints[1:-1]],
+        'followed_stages': followed,
     })
 
 
