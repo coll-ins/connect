@@ -360,7 +360,7 @@ function useLiveSocket(bookingId, onLocation) {
 
       const scheme =
         window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url = `${scheme}://${window.location.host}/ws/bookings/${bookingId}/live/`;
+      const url = `${scheme}://${import.meta.env.VITE_WS_HOST || window.location.host}/ws/bookings/${bookingId}/live/`;
 
       try {
         socket = new WebSocket(url);
