@@ -110,3 +110,61 @@ def plan_line(start, end, vias, stages, report=None, retries=1):
         followed.append(sid)
 
     return geometry, distance, followed, skipped
+
+
+def road_alternatives(points, count=3):
+    """Up to `count` different road lines between two points: [(GeoJSON, metres)]."""
+    base = getattr(settings, 'ROUTING_URL', 'https://router.project-osrm.org/route/v1/driving')
+    coords = ';'.join(f'{lng:.6f},{lat:.6f}' for lat, lng in points)
+    url = f'{base}/{coords}?overview=full&geometries=geojson&steps=false&alternatives={int(count)}'
+    req = urllib.request.Request(url, headers={'User-Agent': 'ConnectMatatuBooking/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except Exception as exc:
+        raise RoutingError('The road service is not reachable right now. Try again in a moment.') from exc
+    if data.get('code') != 'Ok' or not data.get('routes'):
+        raise RoutingError('No road was found between these points. Move a point closer to a road.')
+    found = []
+    for item in data['routes'][:count]:
+        geometry = item.get('geometry') or {}
+        if geometry.get('type') == 'LineString' and len(geometry.get('coordinates') or []) >= 2:
+            found.append((geometry, float(item.get('distance') or 0)))
+    if not found:
+        raise RoutingError('The road service returned an unusable line.')
+    return found
+
+
+def sample_via(geometry, count):
+    """`count` points spread evenly along a line, as (lat, lng) in travel order.
+
+    Routing through points taken from a line reproduces that road, which is how
+    a chosen alternative becomes road points the planner can preview and save.
+    """
+    import math
+
+    coords = geometry.get('coordinates') or []
+    if count < 1 or len(coords) < 3:
+        return []
+    cumulative = [0.0]
+    for c1, c2 in zip(coords, coords[1:]):
+        p1, p2 = math.radians(c1[1]), math.radians(c2[1])
+        h = (math.sin((p2 - p1) / 2) ** 2
+             + math.cos(p1) * math.cos(p2) * math.sin(math.radians(c2[0] - c1[0]) / 2) ** 2)
+        cumulative.append(cumulative[-1] + 12742000 * math.asin(math.sqrt(h)))
+    total = cumulative[-1]
+    if total <= 0:
+        return []
+    ends = {(round(coords[0][1], 6), round(coords[0][0], 6)),
+            (round(coords[-1][1], 6), round(coords[-1][0], 6))}
+    points = []
+    j = 0
+    for k in range(1, count + 1):
+        target = total * k / (count + 1)
+        while j < len(cumulative) - 1 and cumulative[j] < target:
+            j += 1
+        point = (round(coords[j][1], 6), round(coords[j][0], 6))
+        if point in ends or (points and points[-1] == point):
+            continue
+        points.append(point)
+    return points

@@ -173,6 +173,7 @@ test('driver live-location screen sends simulated coordinates to the location en
         body: JSON.stringify({
           ...driver,
           ...simulatedLocation,
+          location_updated_at: new Date().toISOString(),
         }),
       });
       return;
@@ -203,8 +204,15 @@ test('driver live-location screen sends simulated coordinates to the location en
   await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Locate me' })).toBeVisible();
 
+  await expect(page.locator('.driver-live-sheet')).toHaveClass(
+    /driver-live-sheet-open/,
+  );
   await page.getByRole('button', { name: 'Toggle trip details' }).click();
 
+  await expect(page.locator('.driver-live-sheet')).not.toHaveClass(
+    /driver-live-sheet-open/,
+  );
+  await page.getByRole('button', { name: 'Toggle trip details' }).click();
   await expect(page.locator('.driver-live-sheet')).toHaveClass(
     /driver-live-sheet-open/,
   );

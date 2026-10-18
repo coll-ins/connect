@@ -34,11 +34,11 @@ Connect is a seat-booking platform for Nairobi's organised bus SACCOs. Passenger
 | Layer | Technology |
 |---|---|
 | Backend | Python, Django, Django REST Framework |
-| Frontend | HTML, CSS, Vanilla JavaScript |
+| Frontend | React, Vite |
 | Database | SQLite (development), PostgreSQL (production) |
-| Maps | Leaflet.js + OpenStreetMap |
+| Maps | Leaflet, MapLibre, OpenStreetMap |
 | SMS | Africa's Talking |
-| Deployment | Render (backend), Vercel (frontend) |
+| Payments | Paystack |
 
 ---
 
@@ -55,15 +55,9 @@ connect/
 │   ├── notifications/        ← SMS via Africa's Talking
 │   └── manage.py
 │
-├── frontend/
-│   ├── user/                 ← Passenger-facing pages
-│   ├── admin/                ← Operator dashboard pages
-│   ├── driver/               ← Driver location sharing page
-│   └── static/
-│       ├── css/              ← Stylesheets
-│       └── js/               ← api.js, user.js, admin.js, driver.js
-│
-├── .env                      ← Environment variables (never commit this)
+├── frontend-react/           ← React passenger, driver and staff apps
+├── deploy/                   ← Server, nginx and operations files
+├── .github/workflows/        ← CI checks on pushes and pull requests
 ├── .gitignore
 └── README.md
 ```
@@ -72,81 +66,65 @@ connect/
 
 ## Getting started locally
 
-### 1. Clone the repo
-
 ```bash
-git clone https://github.com/yourname/connect.git
+git clone https://github.com/coll-ins/connect.git
 cd connect
+make setup
 ```
 
-### 2. Set up the backend
+`make setup` installs the backend and frontend dependencies, installs Chrome for
+Playwright, and creates `backend/.env` from the safe local template if it does not
+exist. The template uses SQLite and test-mode integrations; do not put production
+credentials in it.
+
+Apply database migrations once for a fresh local database:
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+make migrate
 ```
 
-### 3. Set up environment variables
-
-Create a `.env` file inside the `backend/` folder:
-
-```
-DJANGO_SECRET_KEY=your-long-random-secret-key
-AFRICASTALKING_API_KEY=your-africastalking-api-key
-ADMIN_SIGNUP_CODE=your-chosen-admin-code
-DEBUG=True
-```
-
-### 4. Run migrations and create a superuser
+Open two terminals in the repository. Start the backend in the first:
 
 ```bash
-python manage.py migrate
-python manage.py createsuperuser
+make backend
 ```
 
-### 5. Start the server
+Start the frontend in the second:
 
 ```bash
-python manage.py runserver
+make frontend
 ```
 
-Backend runs at `http://localhost:8000`
+Open the URL printed by Vite (normally `http://localhost:5173`).
 
-### 6. Open the frontend
-
-Open `frontend/user/index.html` in your browser using Live Server (VS Code extension) or any local server on port 5500.
+Run the automated checks with `make test`. `make lint` and `make build` are
+available for quick local checks. GitHub Actions runs the backend checks,
+frontend lint/build, and Playwright browser tests on every push and pull request.
 
 ---
 
 ## Deployment
 
-### Backend — Render
-
-1. Push repo to GitHub
-2. Go to [render.com](https://render.com) → New → Web Service
-3. Connect your GitHub repo
-4. Set build command: `pip install -r requirements.txt`
-5. Set start command: `gunicorn connect.wsgi:application`
-6. Add environment variables from your `.env`
-
-### Frontend — Vercel
-
-1. Go to [vercel.com](https://vercel.com) → Import repo
-2. Set root directory to `frontend`
-3. Deploy
-4. Update `BASE_URL` in `frontend/static/js/api.js` to your Render URL
+The deployment kit targets a single Ubuntu VPS with nginx, Daphne, PostgreSQL and
+Redis. Follow the step-by-step [deployment runbook](./deploy/RUNBOOK.md); do not
+deploy the old `frontend/` app or use the retired Render/Vercel instructions.
+Production requires a chosen VPS/domain and real Paystack and Africa's Talking
+credentials. Never copy local `.env` values to the server.
 
 ---
 
 ## Environment variables
 
+Create local settings in `backend/.env` using `backend/.env.example` as a starting
+point. Keep real credentials out of source control. Production deployment requires
+additional provider and infrastructure settings; see [deploy/RUNBOOK.md](./deploy/RUNBOOK.md).
+
 | Variable | Description |
 |---|---|
-| `DJANGO_SECRET_KEY` | Django secret key — generate a long random string |
-| `AFRICASTALKING_API_KEY` | Africa's Talking API key for SMS |
-| `ADMIN_SIGNUP_CODE` | Secret code operators use to create admin accounts |
+| `SECRET_KEY` | Django secret key — use a long, random value in production |
+| `PAYSTACK_SECRET_KEY` | Paystack test key locally; live key only in production environment |
+| `AT_USERNAME`, `AT_API_KEY` | Africa's Talking username and API key |
+| `ADMIN_SIGNUP_CODE` | Private code for admin signup; disable self-service admin signup in production |
 | `DEBUG` | Set to `False` in production |
 | `ALLOWED_HOSTS` | Comma-separated list of allowed domains in production |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed frontend origins |

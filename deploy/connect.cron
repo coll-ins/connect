@@ -2,9 +2,12 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5  * * * * connect /srv/connect/deploy/run_cmd.sh expire_pending_bookings
 */10 * * * * connect /srv/connect/deploy/run_cmd.sh process_noshows
+*/10 * * * * connect /srv/connect/deploy/run_cmd.sh close_stale_trips
 */15 * * * * connect /srv/connect/deploy/run_cmd.sh reconcile_refunds
 */5  * * * * connect /srv/connect/deploy/run_cmd.sh process_unapplied
 15 2 * * *   connect bash -c 'set -a; . /etc/connect/connect.env; set +a; /srv/connect/deploy/backup.sh >> /var/log/connect/backup.log 2>&1'
 # process_unapplied: built for a 5-minute cron (see its docstring); retries are capped, refunds use a one-winner claim.
 # NEVER add --resend to reconcile_refunds in cron: a resend needs a human to check the Paystack dashboard first.
 # settle_company is NOT scheduled on purpose.
+# close_stale_trips only completes departed trips older than TRIP_AUTO_CLOSE_AFTER_HOURS (default 12);
+# active incidents are excluded, and the job settles remaining bookings before closing.

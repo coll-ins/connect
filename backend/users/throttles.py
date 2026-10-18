@@ -14,3 +14,18 @@ class LoginPhoneThrottle(SimpleRateThrottle):
         if not digits:
             return None
         return self.cache_format % {'scope': self.scope, 'ident': digits[-9:]}
+
+
+class SignupPhoneThrottle(SimpleRateThrottle):
+    """Limit account creation attempts per phone number."""
+    scope = 'signup'
+
+    def get_cache_key(self, request, view):
+        try:
+            raw = request.data.get('phone_number')
+        except Exception:
+            return None
+        digits = ''.join(ch for ch in str(raw or '') if ch.isdigit())
+        if not digits:
+            return None
+        return self.cache_format % {'scope': self.scope, 'ident': digits[-9:]}

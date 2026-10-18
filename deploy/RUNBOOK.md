@@ -28,6 +28,12 @@
     sudo nginx -t && sudo systemctl start nginx
 12. sudo cp /srv/connect/deploy/connect.cron /etc/cron.d/connect && sudo chmod 644 /etc/cron.d/connect
     sudo cp /srv/connect/deploy/logrotate-connect /etc/logrotate.d/connect
+    Review `/var/log/connect/cron.log` after the first scheduled run. Jobs use
+    `flock` to prevent overlapping runs. `close_stale_trips` runs every 10 minutes,
+    closes only departed trips older than 12 hours, and skips trips with active
+    incidents. Preview candidates with
+    `manage.py close_stale_trips --dry-run`; set `TRIP_AUTO_CLOSE_AFTER_HOURS`
+    in the server environment to change the threshold.
 13. /srv/connect/deploy/smoke_test.sh https://DOMAIN        # every line must PASS
 14. Paystack dashboard (Settings > API Keys & Webhooks): set the webhook URL to https://DOMAIN/api/bookings/webhooks/paystack/
     Paystack takes ONE URL per mode; refund.* events are routed to the refund handler internally.

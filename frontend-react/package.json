@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
+    "lint": "eslint src tests *.config.js",
     "preview": "vite preview",
     "test:e2e": "playwright test"
   },

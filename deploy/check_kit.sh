@@ -13,6 +13,7 @@ need connect-daphne@.service '[Install]'
 need connect.env.example 'REDIS_URL='
 need connect.env.example 'AT_API_KEY='
 need connect.cron 'process_noshows'
+need connect.cron 'close_stale_trips'
 need connect.cron 'reconcile_refunds'
 need connect.cron 'backup.sh'
 grep -q '^\*/5 .*process_unapplied' connect.cron && echo "ok   connect.cron: process_unapplied scheduled" || { echo "MISSING in connect.cron: scheduled process_unapplied"; fail=1; }
@@ -21,5 +22,6 @@ need smoke_test.sh 'ALL PASS'
 need smoke_test.sh 'unsigned refund webhook refused'
 need RUNBOOK.md 'Update procedure'
 need RUNBOOK.md 'smoke_test.sh'
+need RUNBOOK.md 'close_stale_trips'
 [ "$(tr -cd '{' < nginx-connect.conf | wc -c)" = "$(tr -cd '}' < nginx-connect.conf | wc -c)" ] || { echo "UNBALANCED BRACES in nginx-connect.conf"; fail=1; }
 [ $fail -eq 0 ] && echo "KIT COMPLETE" || { echo "KIT INCOMPLETE"; exit 1; }
