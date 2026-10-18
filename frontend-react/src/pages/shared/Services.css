@@ -201,3 +201,5 @@ a.svc-item:hover { transform: translateY(-2px); border-color: rgba(98,217,175,.3
     white-space: nowrap;
   }
 }
+
+@media (max-width: 900px) { .rp-map { height: 380px; } }

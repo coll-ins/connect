@@ -123,6 +123,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '20/minute',
         'user': '300/minute',
+        'signup': '5/hour',
         'driver_location': '60/minute',
         'boarding_verify': '5/minute',
     }
@@ -287,7 +288,7 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '10/hour'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 
 from decimal import Decimal
-PLATFORM_FEE_PER_SEAT = Decimal("20.00")  # KES the platform keeps per seat
+PLATFORM_FEE_PER_SEAT = Decimal("30.00")  # KES the platform keeps per seat
 PLATFORM_CHARTER_FEE_PERCENT = Decimal("10.00")  # percent of a completed bus-hire quote kept by the platform
 PLATFORM_PARCEL_FEE_PERCENT = Decimal("10.00")  # percent of a delivered parcel price kept by the platform
 
@@ -305,6 +306,7 @@ if 'test' in sys.argv:
 
 MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
 PENDING_BOOKING_TTL_MINUTES = 20    # expire_pending_bookings cancels unpaid bookings older than this
+TRIP_AUTO_CLOSE_AFTER_HOURS = int(os.getenv('TRIP_AUTO_CLOSE_AFTER_HOURS', '12'))
 
 
 # --- Production hardening (active only when DEBUG is off) ---

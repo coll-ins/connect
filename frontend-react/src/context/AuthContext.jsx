@@ -41,8 +41,25 @@ function normalizeRole(role, isSuperuser = false) {
   );
 }
 
+class InvalidAccountRoleError extends Error {
+  constructor(role, cause) {
+    super(
+      `CONNECT received an unrecognized account role: ${String(role || '(empty)')}`,
+      { cause },
+    );
+    this.name = 'InvalidAccountRoleError';
+  }
+}
+
 function normalizeUser(data) {
   const u = data?.user || data || {};
+
+  let role;
+  try {
+    role = normalizeRole(u.role, Boolean(u.is_superuser));
+  } catch (error) {
+    throw new InvalidAccountRoleError(u.role, { cause: error });
+  }
 
   return {
     id: u.id || null,
@@ -51,7 +68,7 @@ function normalizeUser(data) {
     email: u.email || '',
     phone: u.phone || u.phone_number || '',
     location: u.location || '',
-    role: normalizeRole(u.role, Boolean(u.is_superuser)),
+    role,
     company_id: u.company_id || null,
     company_name: u.company_name || null,
     is_staff: Boolean(u.is_staff),
@@ -78,7 +95,13 @@ export function AuthProvider({ children }) {
       .then((profile) => { if (active) save(profile); })
       .catch((e) => {
         // Only an explicit auth rejection ends the session; timeouts/5xx keep it.
-        if (active && (e?.status === 401 || e?.status === 403)) {
+        if (
+          active &&
+          (e?.status === 401 || e?.status === 403 || e instanceof InvalidAccountRoleError)
+        ) {
+          if (e instanceof InvalidAccountRoleError) {
+            console.error('[AUTH] Invalid account profile; clearing the stale session.', e);
+          }
           setUser(null);
           localStorage.removeItem('user_session');
         }

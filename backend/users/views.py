@@ -12,7 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
-from .throttles import LoginPhoneThrottle
+from .throttles import LoginPhoneThrottle, SignupPhoneThrottle
 from .serializers import UserSerializer, CompanyStaffSerializer
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -53,6 +53,7 @@ def csrf_token(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([SignupPhoneThrottle, AnonRateThrottle])
 def signup(request):
     data = request.data.copy()
     data['phone_number'] = normalize_phone_number(data.get('phone_number'))
@@ -60,6 +61,12 @@ def signup(request):
     if not data.get('phone_number') or not data.get('password'):
         return Response(
             {'error': 'Phone number and password are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(str(data.get('password') or '')) < 8:
+        return Response(
+            {'error': 'Password must be at least 8 characters long.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

@@ -1264,6 +1264,8 @@ def route_plan(request, route_id):
         )
 
     data = request.data
+    ordered = data.get('ordered') is True
+    max_via = 25 if ordered else 10
 
     def end_point(key, name, lat, lng):
         raw = data.get(key)
@@ -1288,8 +1290,8 @@ def route_plan(request, route_id):
         e_lat, e_lng, e_name = read(
             end_point('end', route.end_point, route.end_latitude, route.end_longitude), 'end')
         raw_via = (data.get('via') if 'via' in data else route.via_points) or []
-        if not isinstance(raw_via, list) or len(raw_via) > 10:
-            raise ValueError('Use at most 10 road points.')
+        if not isinstance(raw_via, list) or len(raw_via) > max_via:
+            raise ValueError(f'Use at most {max_via} road points.')
         vias = []
         for i, raw in enumerate(raw_via, start=1):
             v_lat, v_lng, _ = read(raw, f'road point {i}')
@@ -1391,6 +1393,27 @@ def route_plan(request, route_id):
                 item['index'],
             )
         )
+
+    if ordered:
+        # A drawn path keeps the order it was drawn in; it is never re-sorted.
+        controls.sort(key=lambda item: item['index'])
+        if len(vias) >= 2:
+            import math
+
+            def metres(a, b):
+                la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+                h = (math.sin((la2 - la1) / 2) ** 2
+                     + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2)
+                return 12742000 * math.asin(math.sqrt(h))
+
+            first, last = vias[0], vias[-1]
+            if (metres(first, (s_lat, s_lng)) > metres(last, (s_lat, s_lng))
+                    and metres(first, (e_lat, e_lng)) < metres(last, (e_lat, e_lng))):
+                return Response(
+                    {'error': 'The path you drew runs from the end towards the start. '
+                              'Draw it in the direction the bus travels, or press Reverse.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
     waypoints = [(s_lat, s_lng)]
 
@@ -1670,3 +1693,65 @@ def set_operator_routes(request, user_id):
 
 
 from users.route_scope import can_handle_route, operator_route_ids  # noqa: E402
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def route_alternatives(request, route_id):
+    """Other roads between the route's start and end, for the manager to pick from.
+
+    Nothing is saved. Picking one turns it into road points that go through
+    the normal preview and save in route_plan.
+    """
+    from .geo import MAX_STAGE_OFFSET_M, line_health, locate_on_line
+    from .routing import RoutingError, road_alternatives, sample_via
+
+    route = get_object_or_404(Route.objects.select_related('company'), id=route_id)
+    if not can_manage_company(request.user, route.company):
+        return Response(
+            {'error': 'Only a Company Manager can plan routes.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    data = request.data
+
+    def point(key, lat, lng, label):
+        raw = data.get(key)
+        if isinstance(raw, dict):
+            lat, lng = raw.get('latitude'), raw.get('longitude')
+        try:
+            lat, lng = float(lat), float(lng)
+        except (TypeError, ValueError):
+            raise ValueError(f'Choose the {label} point on the map first.')
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValueError(f'The {label} point is not a valid place.')
+        return lat, lng
+
+    try:
+        s_point = point('start', route.start_latitude, route.start_longitude, 'start')
+        e_point = point('end', route.end_latitude, route.end_longitude, 'end')
+    except ValueError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        found = road_alternatives([s_point, e_point], count=3)
+    except RoutingError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+    stages = list(route.pickup_stages.filter(is_active=True))
+    options = []
+    for geometry, distance_m in found:
+        off = []
+        for stage in stages:
+            loc = locate_on_line(geometry, float(stage.latitude), float(stage.longitude))
+            if loc is not None and loc[0] > MAX_STAGE_OFFSET_M:
+                off.append({'id': stage.id, 'name': stage.name, 'offset_m': round(loc[0])})
+        via_count = max(2, min(20, round(distance_m / 2000)))
+        options.append({
+            'geometry': geometry,
+            'distance_km': round(distance_m / 1000, 1),
+            'spurs': line_health(geometry, [])['spurs'],
+            'off_route_stages': off,
+            'via': [{'latitude': la, 'longitude': lo} for la, lo in sample_via(geometry, via_count)],
+        })
+    return Response({'options': options})

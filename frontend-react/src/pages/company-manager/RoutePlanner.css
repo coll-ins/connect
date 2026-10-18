@@ -1,0 +1,42 @@
+.rp-map { position: relative; }
+.rp2-pin { background: none; border: 0; }
+.rp2-dot {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #facc15;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  cursor: grab;
+}
+.rp2-dot.inactive { background: #64748b; }
+.rp2-dot.moved { background: #fb923c; }
+.rp2-live {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 1000;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #071522;
+  color: #fff;
+  border: 1px solid #38bdf8;
+  font-size: 13px;
+  pointer-events: none;
+}
+.rp2-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.rp2-alt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #294057;
+  border-radius: 12px;
+}
+.rp2-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 8px; vertical-align: middle; }
+.rp2-off { color: #8fa5ba; }
+.rp2-off.far { color: #fbbf24; font-weight: 700; }
+.rp2-block { margin: 10px 0 0; color: #fbbf24; font-size: 13px; }

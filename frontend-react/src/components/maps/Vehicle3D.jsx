@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import {
   Component,
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -90,7 +91,7 @@ function VehicleModel({ heading, stale, onReady }) {
       </mesh>
       {[-1, 1].map((side) =>
         (
-          <>
+          <Fragment key={`side-${side}`}>
             {[-1.15, 0, 1.15].map((windowY) => (
               <mesh
                 key={`window-${side}-${windowY}`}
@@ -111,7 +112,7 @@ function VehicleModel({ heading, stale, onReady }) {
                 <meshStandardMaterial color="#18212b" roughness={0.8} />
               </mesh>
             ))}
-          </>
+          </Fragment>
         ),
       )}
     </group>
