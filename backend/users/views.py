@@ -12,7 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
-from .throttles import LoginPhoneThrottle, SignupPhoneThrottle
+from .throttles import LoginIPThrottle, LoginPhoneThrottle, SignupPhoneThrottle
 from .serializers import UserSerializer, CompanyStaffSerializer
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -123,7 +123,7 @@ def admin_signup(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([LoginPhoneThrottle, AnonRateThrottle])
+@throttle_classes([LoginPhoneThrottle, LoginIPThrottle])
 def user_login(request):
     raw_phone = request.data.get('phone_number')
     password = request.data.get('password')

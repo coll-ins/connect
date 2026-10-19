@@ -1,4 +1,4 @@
-from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
 
 
 class LoginPhoneThrottle(SimpleRateThrottle):
@@ -29,3 +29,8 @@ class SignupPhoneThrottle(SimpleRateThrottle):
         if not digits:
             return None
         return self.cache_format % {'scope': self.scope, 'ident': digits[-9:]}
+
+
+class LoginIPThrottle(AnonRateThrottle):
+    # Per-IP limit for login only, separate from the general anon bucket.
+    scope = 'login_ip'
