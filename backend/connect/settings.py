@@ -121,7 +121,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '20/minute',
+        'anon': '120/minute',
         'user': '300/minute',
         'signup': '5/hour',
         'driver_location': '60/minute',
@@ -285,6 +285,7 @@ if not DEBUG:
         )
 
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '10/hour'
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login_ip'] = '60/minute'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 
 from decimal import Decimal
