@@ -183,7 +183,6 @@ function LiveTripModal({ booking, onClose }) {
   );
 }
 
-// Delivery and bus charter have no backend yet; only seat booking is live.
 const JOURNEY_MODES = ['seat'];
 
 const toSearch = (j, initialStep) => {
