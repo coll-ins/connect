@@ -18,6 +18,7 @@ JOBS = {
     'expire-pending': ('expire_pending_bookings', []),
     'process-unapplied': ('process_unapplied', []),
     'reconcile-refunds': ('reconcile_refunds', []),
+    'generate-trips': ('generate_scheduled_trips', []),
 }
 LOCK_TTL = 600  # seconds; a crashed run frees itself after this
 

@@ -139,6 +139,13 @@ class Trip(models.Model):
     )
     departure_at = models.DateTimeField()
     capacity = models.PositiveIntegerField()
+    schedule = models.ForeignKey(
+        "TripSchedule",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trips",
+    )
 
     STATUS_CHOICES = [
         ("scheduled", "Scheduled"),
@@ -154,5 +161,33 @@ class Trip(models.Model):
         default="scheduled",
     )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["schedule", "departure_at"],
+                name="uniq_trip_per_schedule_slot",
+            )
+        ]
+
     def __str__(self):
         return f"{self.route.name} - {self.departure_at}"
+
+
+class TripSchedule(models.Model):
+    """A recurring departure. generate_scheduled_trips turns it into Trips."""
+    route = models.ForeignKey(Route, on_delete=models.CASCADE, related_name="schedules")
+    driver = models.ForeignKey("drivers.Driver", on_delete=models.CASCADE, related_name="trip_schedules")
+    capacity = models.PositiveIntegerField(default=30)
+    # Comma-separated weekdays, Monday=0 ... Sunday=6, e.g. "0,1,2,3,4"
+    days_of_week = models.CharField(max_length=13)
+    departure_time = models.TimeField()  # local time (Africa/Nairobi)
+    is_active = models.BooleanField(default=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def weekdays(self):
+        return {int(x) for x in self.days_of_week.split(",") if x.strip() != ""}
+
+    def __str__(self):
+        return f"{self.route.name} {self.departure_time} [{self.days_of_week}]"
