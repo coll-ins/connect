@@ -1,3 +1,4 @@
+from connect import cron as cron_views
 
 from django.contrib import admin
 from django.urls import path, include
@@ -47,6 +48,7 @@ urlpatterns = [
     path('api/buses/', include('buses.urls')),
     path('api/wallet/', include('wallets.urls')),
     path('api/deliveries/', include('deliveries.urls')),
+    path('api/internal/cron/<slug:job>/', cron_views.run_job, name='cron-job'),
     path('api/charters/', include('charters.urls')),
 ]
 

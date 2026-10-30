@@ -352,3 +352,5 @@ if not DEBUG and (not AT_API_KEY or AT_USERNAME == 'sandbox'):
 # --- round 31: redirect without a trusted proxy header loops forever behind nginx ---
 if not DEBUG and SECURE_SSL_REDIRECT and not globals().get('SECURE_PROXY_SSL_HEADER'):
     raise ValueError("CRITICAL: SECURE_SSL_REDIRECT is on but no TLS proxy header is trusted; set BEHIND_TLS_PROXY=True behind nginx (otherwise every request redirects in a loop).")
+
+CRON_SECRET = __import__('os').environ.get('CRON_SECRET', '')
