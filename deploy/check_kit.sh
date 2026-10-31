@@ -15,6 +15,7 @@ need connect.env.example 'AT_API_KEY='
 need connect.cron 'process_noshows'
 need connect.cron 'close_stale_trips'
 need connect.cron 'reconcile_refunds'
+grep -q '^20 \* \* \* \*.*generate_scheduled_trips' connect.cron && echo "ok   connect.cron: generate_scheduled_trips scheduled" || { echo "MISSING in connect.cron: scheduled generate_scheduled_trips"; fail=1; }
 need connect.cron 'backup.sh'
 grep -q '^\*/5 .*process_unapplied' connect.cron && echo "ok   connect.cron: process_unapplied scheduled" || { echo "MISSING in connect.cron: scheduled process_unapplied"; fail=1; }
 need run_cmd.sh 'flock'
