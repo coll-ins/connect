@@ -1,3 +1,5 @@
+import logging
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -106,6 +108,19 @@ def _clean(d, company, partial):
     return f, None
 
 
+logger = logging.getLogger(__name__)
+
+
+def _generate_on_create(sched):
+    """Generate the first trips for a new schedule. Never raises: the nightly command is the backstop."""
+    try:
+        g = regenerate_for_schedule(sched)
+        return g['created'] + g['revived']
+    except Exception:
+        logger.exception('trip generation failed for schedule %s', sched.pk)
+        return 0
+
+
 def _cancel_future_trips(sched):
     """Cancel future generated trips with no bookings or parcels. Returns (cancelled, kept)."""
     now = timezone.now()
@@ -146,7 +161,10 @@ def create_schedule(request):
             departure_time=f['departure_time']).exists():
         return _bad('An identical schedule already exists.', 409)
     s = TripSchedule.objects.create(**f)
-    return Response(_data(s), status=status.HTTP_201_CREATED)
+    data = _data(s)
+    if s.is_active:
+        data['generated_trips'] = _generate_on_create(s)
+    return Response(data, status=status.HTTP_201_CREATED)
 
 
 @api_view(['PATCH', 'DELETE'])
