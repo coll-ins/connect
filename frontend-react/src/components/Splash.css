@@ -1,19 +1,53 @@
-.splash { position: fixed; inset: 0; z-index: 9999; background: #04140a;
-  overflow: hidden; transition: opacity .5s ease; }
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: #04140a;
+  transition: opacity .5s ease;
+}
 .splash.leaving { opacity: 0; pointer-events: none; }
-.splash img { width: 100%; height: 100%; object-fit: cover;
-  animation: splash-in .8s ease-out, splash-zoom 2.8s ease-out forwards; }
-.splash-bar { position: absolute; left: 0; bottom: 0; height: 3px;
-  background: #4ade80; width: 0; animation: splash-bar 2.6s linear forwards; }
-.splash-skip { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px));
-  right: 12px; background: rgba(0,0,0,.35); color: #d1fae5;
-  border: 1px solid rgba(255,255,255,.2); border-radius: 999px;
-  padding: 6px 14px; font-size: 13px; cursor: pointer; }
+.splash-picture { display: block; width: 100%; height: 100%; }
+.splash img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  animation: splash-in .8s ease-out, splash-zoom 2.8s ease-out forwards;
+}
+.splash-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: #4ade80;
+  width: 0;
+  animation: splash-bar 2.6s linear forwards;
+}
+.splash-skip {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  background: rgba(0,0,0,.35);
+  color: #d1fae5;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
 @keyframes splash-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes splash-zoom { from { transform: scale(1.08); } to { transform: scale(1); } }
+@keyframes splash-zoom { from { transform: scale(1.04); } to { transform: scale(1); } }
 @keyframes splash-bar { to { width: 100%; } }
-@media (orientation: portrait) {
-  .splash img { object-fit: contain; }
+@media (max-width: 640px) and (orientation: portrait) {
+  .splash img { object-fit: cover; object-position: center; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .splash img { object-position: center 48%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .splash img, .splash-bar { animation: none; }
