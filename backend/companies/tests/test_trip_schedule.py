@@ -83,3 +83,17 @@ class GenerateTripsTests(TestCase):
         self.driver.save()
         run(TUE_6AM)
         self.assertEqual(Trip.objects.count(), 0)
+
+    def test_helper_revive_flag(self):
+        from companies.trip_generation import regenerate_for_schedule
+        with mock.patch(NOW, return_value=TUE_6AM):
+            regenerate_for_schedule(self.sch)
+            t = Trip.objects.filter(schedule=self.sch).first()
+            t.status = 'cancelled'
+            t.save()
+            regenerate_for_schedule(self.sch, revive=False)
+            t.refresh_from_db()
+            self.assertEqual(t.status, 'cancelled')
+            regenerate_for_schedule(self.sch, revive=True)
+            t.refresh_from_db()
+            self.assertEqual(t.status, 'scheduled')

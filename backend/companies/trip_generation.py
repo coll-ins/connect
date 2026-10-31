@@ -11,8 +11,10 @@ ACTIVE = ['scheduled', 'boarding', 'departed']
 HORIZON_DAYS = 7
 
 
-def _slot(sch, dep):
-    """Create the trip for one slot, or revive an empty cancelled one."""
+def _slot(sch, dep, revive=True):
+    """Create the trip for one slot; with revive=True also revive an empty cancelled one."""
+    if not revive and Trip.objects.filter(schedule=sch, departure_at=dep).exists():
+        return 'existing'
     try:
         with transaction.atomic():
             driver = Driver.objects.select_for_update().get(pk=sch.driver_id)
@@ -35,7 +37,7 @@ def _slot(sch, dep):
         return 'existing'
 
 
-def regenerate_for_schedule(sch, days=HORIZON_DAYS):
+def regenerate_for_schedule(sch, days=HORIZON_DAYS, revive=True):
     """Create or revive future trips for ONE schedule. Safe to re-run. Returns counts."""
     counts = {k: 0 for k in (
         'created', 'revived', 'existing', 'past', 'driver_unavailable', 'driver_conflict', 'invalid')}
@@ -65,5 +67,5 @@ def regenerate_for_schedule(sch, days=HORIZON_DAYS):
         if dep <= now:
             counts['past'] += 1
             continue
-        counts[_slot(sch, dep)] += 1
+        counts[_slot(sch, dep, revive)] += 1
     return counts
