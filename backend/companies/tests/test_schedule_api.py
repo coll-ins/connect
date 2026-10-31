@@ -78,15 +78,6 @@ class ScheduleApiTests(APITestCase):
         r = self.c.patch(f'/api/companies/schedules/{sid}/', {'driver_id': self.odrv.id}, format='json')
         self.assertEqual(r.status_code, 404)
 
-    @mock.patch(CAN, return_value=True)
-    def test_delete_keeps_generated_trips(self, _):
-        sid = self.post().json()['id']
-        s = TripSchedule.objects.get(pk=sid)
-        Trip.objects.create(route=self.route, driver=self.drv, capacity=30, schedule=s,
-                            departure_at='2030-01-01T06:30:00+03:00')
-        self.assertEqual(self.c.delete(f'/api/companies/schedules/{sid}/').status_code, 204)
-        self.assertEqual(Trip.objects.count(), 1)
-        self.assertIsNone(Trip.objects.first().schedule)
 
     @mock.patch(CAN, return_value=False)
     def test_manage_unauthorized_is_403(self, _):
@@ -95,3 +86,112 @@ class ScheduleApiTests(APITestCase):
         self.assertEqual(self.c.patch(f'/api/companies/schedules/{s.id}/', {'is_active': False}, format='json').status_code, 403)
         self.assertEqual(self.c.delete(f'/api/companies/schedules/{s.id}/').status_code, 403)
         self.assertTrue(TripSchedule.objects.filter(pk=s.id).exists())
+
+
+
+
+
+    @mock.patch(CAN, return_value=True)
+    def test_time_edit_cancels_old_slots(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        t = self._trip(s, '2030-01-01T06:30:00+03:00')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'departure_time': '07:00'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['cancelled_trips'], 1)
+        t.refresh_from_db()
+        self.assertEqual(t.status, 'cancelled')
+
+    @mock.patch(CAN, return_value=True)
+    def test_days_edit_cancels_old_slots(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        t = self._trip(s, '2030-01-01T06:30:00+03:00')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'days_of_week': [3, 4]}, format='json')
+        self.assertEqual(r.json()['cancelled_trips'], 1)
+        t.refresh_from_db()
+        self.assertEqual(t.status, 'cancelled')
+
+
+
+    def _trip(self, s, when, status='scheduled'):
+        return Trip.objects.create(route=self.route, driver=self.drv, capacity=30, schedule=s,
+                                   departure_at=when, status=status)
+
+    @mock.patch(CAN, return_value=True)
+    def test_delete_cancels_untouched_future_trips(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        t = self._trip(s, '2030-01-01T06:30:00+03:00')
+        r = self.c.delete(f'/api/companies/schedules/{sid}/')
+        self.assertEqual(r.json(), {'cancelled_trips': 1, 'kept_trips': 0})
+        t.refresh_from_db()
+        self.assertEqual(t.status, 'cancelled')
+        self.assertIsNone(t.schedule)
+
+    @mock.patch(CAN, return_value=True)
+    def test_delete_leaves_past_and_boarding_trips(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        past = self._trip(s, '2020-01-01T06:30:00+03:00')
+        boarding = self._trip(s, '2030-01-01T06:30:00+03:00', status='boarding')
+        r = self.c.delete(f'/api/companies/schedules/{sid}/')
+        self.assertEqual(r.json(), {'cancelled_trips': 0, 'kept_trips': 0})
+        past.refresh_from_db()
+        boarding.refresh_from_db()
+        self.assertEqual(past.status, 'scheduled')
+        self.assertEqual(boarding.status, 'boarding')
+
+    @mock.patch(CAN, return_value=True)
+    def test_pause_cancels_future_trips(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        t = self._trip(s, '2030-01-01T06:30:00+03:00')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'is_active': False}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['cancelled_trips'], 1)
+        t.refresh_from_db()
+        self.assertEqual(t.status, 'cancelled')
+
+    @mock.patch(CAN, return_value=True)
+    def test_time_and_days_edit_cancel_old_slots(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        t1 = self._trip(s, '2030-01-01T06:30:00+03:00')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'departure_time': '07:00'}, format='json')
+        self.assertEqual(r.json()['cancelled_trips'], 1)
+        t1.refresh_from_db()
+        self.assertEqual(t1.status, 'cancelled')
+        t2 = self._trip(s, '2030-01-02T07:00:00+03:00')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'days_of_week': [3, 4]}, format='json')
+        self.assertEqual(r.json()['cancelled_trips'], 1)
+        t2.refresh_from_db()
+        self.assertEqual(t2.status, 'cancelled')
+
+    @mock.patch(CAN, return_value=True)
+    def test_cosmetic_edit_cancels_nothing(self, _):
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        t = self._trip(s, '2030-01-01T06:30:00+03:00')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/',
+                         {'end_date': '2031-01-01', 'capacity': 20}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertNotIn('cancelled_trips', r.json())
+        t.refresh_from_db()
+        self.assertEqual(t.status, 'scheduled')
+
+    @mock.patch(CAN, return_value=True)
+    def test_booked_trip_is_kept_and_counted(self, _):
+        from bookings.models import Booking
+        sid = self.post().json()['id']
+        s = TripSchedule.objects.get(pk=sid)
+        free = self._trip(s, '2030-01-01T06:30:00+03:00')
+        booked = self._trip(s, '2030-01-02T06:30:00+03:00')
+        pax = get_user_model().objects.create(username='pax')
+        Booking.objects.create(user=pax, route=self.route, trip=booked, pickup_location='Stage')
+        r = self.c.delete(f'/api/companies/schedules/{sid}/')
+        self.assertEqual(r.json(), {'cancelled_trips': 1, 'kept_trips': 1})
+        free.refresh_from_db()
+        booked.refresh_from_db()
+        self.assertEqual(free.status, 'cancelled')
+        self.assertEqual(booked.status, 'scheduled')
