@@ -160,13 +160,19 @@ class ScheduleApiTests(APITestCase):
         t1 = self._trip(s, '2030-01-01T06:30:00+03:00')
         r = self.c.patch(f'/api/companies/schedules/{sid}/', {'departure_time': '07:00'}, format='json')
         self.assertEqual(r.json()['cancelled_trips'], 1)
+        g1 = r.json()['generated_trips']
         t1.refresh_from_db()
         self.assertEqual(t1.status, 'cancelled')
         t2 = self._trip(s, '2030-01-02T07:00:00+03:00')
         r = self.c.patch(f'/api/companies/schedules/{sid}/', {'days_of_week': [3, 4]}, format='json')
-        self.assertEqual(r.json()['cancelled_trips'], 1)
+        self.assertEqual(r.json()['cancelled_trips'], 1 + g1)
         t2.refresh_from_db()
         self.assertEqual(t2.status, 'cancelled')
+        from django.utils import timezone
+        tz = timezone.get_current_timezone()
+        live = Trip.objects.filter(schedule_id=sid, status='scheduled')
+        self.assertTrue(live.exists())
+        self.assertTrue(all(t.departure_at.astimezone(tz).weekday() in (3, 4) for t in live))
 
     @mock.patch(CAN, return_value=True)
     def test_cosmetic_edit_cancels_nothing(self, _):
@@ -195,3 +201,74 @@ class ScheduleApiTests(APITestCase):
         booked.refresh_from_db()
         self.assertEqual(free.status, 'cancelled')
         self.assertEqual(booked.status, 'scheduled')
+
+    def _seed(self, sid):
+        from io import StringIO
+        from django.core.management import call_command
+        call_command('generate_scheduled_trips', stdout=StringIO(), stderr=StringIO())
+        n = Trip.objects.filter(schedule_id=sid, status='scheduled').count()
+        self.assertGreater(n, 0)
+        return n
+
+    def _live_times(self, sid):
+        from django.utils import timezone
+        tz = timezone.get_current_timezone()
+        return {t.departure_at.astimezone(tz).time()
+                for t in Trip.objects.filter(schedule_id=sid, status='scheduled')}
+
+    def _patch(self, sid, **body):
+        return self.c.patch(f'/api/companies/schedules/{sid}/', body, format='json')
+
+    @mock.patch(CAN, return_value=True)
+    def test_time_edit_generates_new_slots(self, _):
+        sid = self.post(days_of_week=[0, 1, 2, 3, 4, 5, 6]).json()['id']
+        self._seed(sid)
+        self.assertEqual(self._live_times(sid), {time(6, 30)})
+        r = self._patch(sid, departure_time='07:00')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._live_times(sid), {time(7, 0)})
+        self.assertEqual(r.json()['generated_trips'],
+                         Trip.objects.filter(schedule_id=sid, status='scheduled').count())
+
+    @mock.patch(CAN, return_value=True)
+    def test_reverting_time_revives_old_slots(self, _):
+        sid = self.post(days_of_week=[0, 1, 2, 3, 4, 5, 6]).json()['id']
+        n0 = self._seed(sid)
+        self._patch(sid, departure_time='07:00')
+        self._patch(sid, departure_time='06:30')
+        self.assertEqual(self._live_times(sid), {time(6, 30)})
+        self.assertEqual(Trip.objects.filter(schedule_id=sid, status='scheduled').count(), n0)
+
+    @mock.patch(CAN, return_value=True)
+    def test_resume_restores_cancelled_trips(self, _):
+        sid = self.post(days_of_week=[0, 1, 2, 3, 4, 5, 6]).json()['id']
+        n0 = self._seed(sid)
+        self._patch(sid, is_active=False)
+        self.assertEqual(Trip.objects.filter(schedule_id=sid, status='scheduled').count(), 0)
+        r = self._patch(sid, is_active=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Trip.objects.filter(schedule_id=sid, status='scheduled').count(), n0)
+
+    @mock.patch(CAN, return_value=True)
+    def test_booked_old_slot_kept_and_new_slots_generated(self, _):
+        from bookings.models import Booking
+        sid = self.post(days_of_week=[0, 1, 2, 3, 4, 5, 6]).json()['id']
+        self._seed(sid)
+        booked = Trip.objects.filter(schedule_id=sid, status='scheduled').order_by('departure_at').first()
+        pax = get_user_model().objects.create(username='pax2')
+        Booking.objects.create(user=pax, route=self.route, trip=booked, pickup_location='Stage')
+        r = self._patch(sid, departure_time='07:00')
+        self.assertEqual(r.json()['kept_trips'], 1)
+        booked.refresh_from_db()
+        self.assertEqual(booked.status, 'scheduled')
+        self.assertEqual(self._live_times(sid), {time(6, 30), time(7, 0)})
+        self.assertGreater(r.json()['generated_trips'], 0)
+
+    @mock.patch(CAN, return_value=True)
+    def test_cosmetic_edit_generates_nothing(self, _):
+        sid = self.post(days_of_week=[0, 1, 2, 3, 4, 5, 6]).json()['id']
+        n0 = self._seed(sid)
+        r = self._patch(sid, capacity=20)
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('generated_trips', r.json())
+        self.assertEqual(Trip.objects.filter(schedule_id=sid).count(), n0)
