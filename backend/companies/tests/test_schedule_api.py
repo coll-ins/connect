@@ -19,6 +19,9 @@ class ScheduleApiTests(APITestCase):
         self.drv = Driver.objects.create(name='D', phone_number='0700000001', bus_number='K1', company=self.co)
         self.odrv = Driver.objects.create(name='E', phone_number='0700000002', bus_number='K2', company=self.other)
         self.c = APIClient()
+        self._gen = mock.patch('companies.schedule_views._generate_on_create', return_value=0)
+        self._gen.start()
+        self.addCleanup(self._gen.stop)
         self.c.force_authenticate(user=get_user_model()(username='mgr'))
         self.body = {'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': self.drv.id,
                      'capacity': 30, 'days_of_week': [0, 1, 2], 'departure_time': '06:30'}
@@ -272,3 +275,40 @@ class ScheduleApiTests(APITestCase):
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('generated_trips', r.json())
         self.assertEqual(Trip.objects.filter(schedule_id=sid).count(), n0)
+
+    @mock.patch(CAN, return_value=True)
+    def test_create_generates_trips(self, _):
+        self._gen.stop()
+        r = self.post()
+        self.assertEqual(r.status_code, 201, r.content)
+        sid = r.json()['id']
+        live = Trip.objects.filter(schedule_id=sid, status='scheduled')
+        self.assertGreater(r.json()['generated_trips'], 0)
+        self.assertEqual(r.json()['generated_trips'], live.count())
+        from django.utils import timezone
+        tz = timezone.get_current_timezone()
+        for t in live:
+            local = t.departure_at.astimezone(tz)
+            self.assertIn(local.weekday(), (0, 1, 2))
+            self.assertEqual(local.time(), time(6, 30))
+
+    @mock.patch(CAN, return_value=True)
+    def test_create_then_nightly_command_adds_nothing(self, _):
+        from io import StringIO
+        from django.core.management import call_command
+        self._gen.stop()
+        r = self.post()
+        sid = r.json()['id']
+        self.assertGreater(r.json()['generated_trips'], 0)
+        n = Trip.objects.filter(schedule_id=sid).count()
+        call_command('generate_scheduled_trips', stdout=StringIO(), stderr=StringIO())
+        self.assertEqual(Trip.objects.filter(schedule_id=sid).count(), n)
+
+    @mock.patch(CAN, return_value=True)
+    def test_create_survives_generation_failure(self, _):
+        self._gen.stop()
+        with mock.patch('companies.schedule_views.regenerate_for_schedule', side_effect=RuntimeError('boom')):
+            r = self.post()
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()['generated_trips'], 0)
+        self.assertEqual(TripSchedule.objects.count(), 1)
