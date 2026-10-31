@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from drivers.models import Driver
 
 from .models import Company, Route, Trip, TripSchedule
+from .trip_generation import regenerate_for_schedule
 from .views import can_manage_company
 
 
@@ -173,4 +174,8 @@ def manage_schedule(request, schedule_id):
         c, k = _cancel_future_trips(s)
         data['cancelled_trips'] = c
         data['kept_trips'] = k
+    resumed = not old[2] and s.is_active
+    if s.is_active and (resumed or old[0] != s.departure_time or old[1] != s.days_of_week):
+        g = regenerate_for_schedule(s)
+        data['generated_trips'] = g['created'] + g['revived']
     return Response(data)
