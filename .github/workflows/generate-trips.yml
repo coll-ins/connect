@@ -1,0 +1,16 @@
+name: generate-trips
+on:
+  schedule:
+    - cron: '20 * * * *'
+  workflow_dispatch:
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call generate-trips endpoint
+        run: |
+          curl -fsS -X POST \
+            --max-time 120 --retry 3 --retry-delay 20 --retry-all-errors \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            https://connect-lhqy.onrender.com/api/internal/cron/generate-trips/
