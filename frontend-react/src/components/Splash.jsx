@@ -27,7 +27,10 @@ export default function Splash() {
 
   return (
     <div className={`splash${leaving ? " leaving" : ""}`} aria-hidden="true">
-      <img src="/splash.jpg" alt="" />
+      <picture className="splash-picture">
+        <source media="(max-width: 640px) and (orientation: portrait)" srcSet="/splash-mobile.jpg" />
+        <img src="/splash.jpg" alt="" />
+      </picture>
       <div className="splash-bar" />
       <button type="button" className="splash-skip" onClick={() => setLeaving(true)}>
         Skip
