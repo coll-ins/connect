@@ -35,7 +35,8 @@
     <meta name="twitter:image" content="https://connect-zj9i-gamma.vercel.app/connect-social-preview.jpg" />
 
     <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin />
-    <link rel="preload" as="image" href="/splash.jpg" />
+    <link rel="preload" as="image" href="/splash.jpg" fetchpriority="high" />
+    <link rel="preload" as="image" href="/splash-mobile.jpg" media="(max-width: 640px) and (orientation: portrait)" />
   </head>
   <body>
     <div id="root"></div>
