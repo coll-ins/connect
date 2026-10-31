@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import schedule_views
 
 urlpatterns = [
     path('', views.get_companies, name='get_companies'),
@@ -22,6 +23,9 @@ urlpatterns = [
     path('trips/', views.get_trips, name='get_trips'),
     path('trips/create/', views.create_trip, name='create_trip'),
     path('<int:company_id>/trips/', views.get_trips, name='get_company_trips'),
+    path('<int:company_id>/schedules/', schedule_views.list_schedules, name='list_schedules'),
+    path('schedules/create/', schedule_views.create_schedule, name='create_schedule'),
+    path('schedules/<int:schedule_id>/', schedule_views.manage_schedule, name='manage_schedule'),
 
     path('trips/<int:trip_id>/', views.get_trip_details, name='get_trip_details'),
     path(
