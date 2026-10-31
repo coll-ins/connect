@@ -1,4 +1,6 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -7,7 +9,7 @@ from rest_framework.response import Response
 
 from drivers.models import Driver
 
-from .models import Company, Route, TripSchedule
+from .models import Company, Route, Trip, TripSchedule
 from .views import can_manage_company
 
 
@@ -103,6 +105,19 @@ def _clean(d, company, partial):
     return f, None
 
 
+def _cancel_future_trips(sched):
+    """Cancel future generated trips with no bookings or parcels. Returns (cancelled, kept)."""
+    now = timezone.now()
+    with transaction.atomic():
+        ids = list(
+            Trip.objects.filter(schedule=sched, status='scheduled', departure_at__gt=now,
+                                bookings__isnull=True, parcels__isnull=True)
+            .select_for_update(of=('self',)).values_list('id', flat=True))
+        cancelled = Trip.objects.filter(id__in=ids, status='scheduled').update(status='cancelled')
+        kept = Trip.objects.filter(schedule=sched, status='scheduled', departure_at__gt=now).count()
+    return cancelled, kept
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_schedules(request, company_id):
@@ -141,14 +156,21 @@ def manage_schedule(request, schedule_id):
     if not can_manage_company(request.user, company):
         return _bad('You are not authorized to manage this schedule.', 403)
     if request.method == 'DELETE':
-        s.delete()  # generated trips are kept (SET_NULL)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        cancelled, kept = _cancel_future_trips(s)
+        s.delete()
+        return Response({'cancelled_trips': cancelled, 'kept_trips': kept})
     f, err = _clean(request.data, company, partial=True)
     if err:
         return _bad(err, 404 if 'not found' in err else 400)
+    old = (s.departure_time, s.days_of_week, s.is_active)
     for k, v in f.items():
         setattr(s, k, v)
     if s.start_date and s.end_date and s.end_date < s.start_date:
         return _bad('end_date cannot be before start_date.')
     s.save()
-    return Response(_data(s))
+    data = _data(s)
+    if (old[2] and not s.is_active) or old[0] != s.departure_time or old[1] != s.days_of_week:
+        c, k = _cancel_future_trips(s)
+        data['cancelled_trips'] = c
+        data['kept_trips'] = k
+    return Response(data)
