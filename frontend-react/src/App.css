@@ -5195,3 +5195,216 @@
   width: 80px; height: 34px; padding: 0 10px; color: inherit;
   border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: rgba(255,255,255,.06);
 }
+
+/* =========================================================
+   CONNECT RESPONSIVE QUALITY LAYER
+   Shared safeguards for cards, copy, controls, tables and motion.
+   Keep this last so it wins over legacy page-level rules.
+   ========================================================= */
+:root {
+  --connect-page-gutter: clamp(12px, 2.4vw, 32px);
+  --connect-card-gap: clamp(10px, 1.5vw, 18px);
+  --connect-focus: rgba(22, 199, 132, .42);
+}
+
+html {
+  width: 100%;
+  min-width: 320px;
+  overflow-x: clip;
+  scroll-padding-top: 88px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body, #root, .app-shell, .connect-app, .connect-main, .connect-content,
+.driver-app, .driver-main, .driver-content, .company-management-main,
+.company-inner-page, .passenger-experience, .passenger-home {
+  min-width: 0;
+  max-width: 100%;
+}
+
+body { overflow-x: clip; }
+img, picture, video, canvas, iframe { max-width: 100%; }
+img { height: auto; }
+button, input, select, textarea { max-width: 100%; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+
+/* Flex and grid children must be allowed to shrink instead of pushing the page wide. */
+:where(.connect-content, .driver-content, .company-inner-page, .passenger-experience,
+  .grid, [class*="grid"], [class*="row"], [class*="header"], [class*="toolbar"],
+  [class*="actions"], [class*="meta"], [class*="card"], [class*="panel"]) > * {
+  min-width: 0;
+}
+
+:where(h1, h2, h3, h4, h5, h6, p, label, small, strong, span, a, button, td, th) {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Avoid breaking normal words or turning every label into a ragged column. */
+:where(h1, h2, h3, h4, h5, h6) { text-wrap: balance; }
+:where(p, .muted, .description, .helper-text) { text-wrap: pretty; }
+
+:where(.card, .glass-card, .glass-panel, .panel, .trip-card, .company-glass-card,
+  .journey-choice, .stat-card, .dashboard-card, .service-card, .booking-card,
+  .driver-card, .op-routes-card) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(.card, .glass-card, .glass-panel, .panel, .trip-card, .company-glass-card,
+  .journey-choice, .stat-card, .dashboard-card, .service-card, .booking-card,
+  .driver-card, .op-routes-card) :where(img, svg) {
+  max-width: 100%;
+}
+
+:where(.btn, .button, button, [role="button"], .sidebar-link, .driver-nav-item) {
+  touch-action: manipulation;
+}
+
+:where(input, select, textarea, .input, .select) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(input, select, textarea, button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--connect-green, #16c784);
+  outline-offset: 2px;
+}
+
+.table-wrap, [class*="table-wrap"], .data-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where(table, .table) { max-width: 100%; }
+
+/* Keep overlays inside the usable viewport, including mobile browser chrome. */
+:where(.modal-backdrop, .dialog-backdrop, .overlay-backdrop) {
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+:where(.modal, .dialog, .drawer, .sheet) {
+  min-width: 0;
+  max-width: 100%;
+  max-height: min(92vh, 92dvh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Motion should feel deliberate, never make controls/cards jump on touch devices. */
+@media (hover: hover) and (pointer: fine) {
+  :where(.card, .glass-card, .glass-panel, .panel, .trip-card, .company-glass-card,
+    .journey-choice, .stat-card, .dashboard-card, .service-card, .booking-card,
+    .driver-card, .op-routes-card) {
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  :where(.btn, .button, button, .card, .glass-card, .glass-panel, .panel,
+    .trip-card, .company-glass-card, .journey-choice, .service-card, .booking-card) {
+    transform: none !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .connect-content { padding-left: 20px; padding-right: 20px; }
+  .driver-content { padding-left: 24px; padding-right: 24px; }
+}
+
+@media (max-width: 760px) {
+  .connect-content, .driver-content { padding: 16px 14px 28px; }
+  .connect-topbar { gap: 10px; }
+  .connect-topbar :where(button, a) { flex: 0 0 auto; }
+  .connect-content :where(.section-title, .page-heading, .dashboard-heading,
+    .passenger-welcome, .driver-welcome) {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .connect-content :where(.section-title > *, .page-heading > *, .dashboard-heading > *) {
+    min-width: 0;
+  }
+  .connect-content :where(.grid-2, .grid-3, .grid-4, .kpi-row, .toolbar) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .connect-content :where(.trip-grid, .company-card-grid, .journey-choice-grid) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  }
+  .connect-content :where(.card, .glass-card, .glass-panel, .panel, .trip-card,
+    .company-glass-card, .stat-card, .dashboard-card, .service-card, .booking-card) {
+    border-radius: 16px;
+  }
+  .connect-content :where(.btn, .button) { min-height: 42px; }
+  .connect-content :where(.form-row, .field-row, .filter-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .connect-content :where(.nav-pills, .tabs, .filter-tabs) {
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 5px;
+    scrollbar-width: thin;
+    overscroll-behavior-x: contain;
+  }
+  .connect-content :where(.nav-pill, .tab, .filter-tab) { flex: 0 0 auto; }
+  .driver-content { width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .page { padding: 10px; }
+  .shell { width: 100%; }
+  .card, .glass-card { padding: 14px; border-radius: 15px; }
+  .hero { padding: 18px 15px; }
+  .hero h1 { font-size: clamp(25px, 8vw, 34px); line-height: 1.08; }
+  .section-title { align-items: flex-start; flex-direction: column; }
+  .trip-top { align-items: flex-start; flex-wrap: wrap; }
+  .trip-route { font-size: clamp(15px, 4.5vw, 18px); }
+  .price, .stat-value { font-size: clamp(20px, 6vw, 26px); }
+  .toolbar { grid-template-columns: minmax(0, 1fr); }
+  .modal-backdrop { place-items: end center; padding: 8px; }
+  .modal { width: 100%; max-height: min(90dvh, 760px); border-radius: 20px 20px 14px 14px; padding: 16px; }
+  .pay-option { gap: 11px; padding: 13px; }
+  .pay-icon { width: 40px; height: 40px; flex: 0 0 40px; }
+  .connect-topbar { padding-left: 12px; padding-right: 12px; }
+  .connect-content { padding: 14px 12px 24px; }
+  .driver-content { padding: 14px 12px 26px; }
+  .connect-content :where(.page-title, h1) { line-height: 1.12; }
+  .connect-content :where(.stat-value, .kpi-value) { overflow-wrap: anywhere; }
+  .connect-content :where(.card-actions, .form-actions, .button-row) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .connect-content :where(.card-actions > *, .form-actions > *, .button-row > *) {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .connect-content :where(.btn-full, .button-full) { width: 100%; }
+}
+
+@media (max-width: 380px) {
+  .connect-content { padding-left: 9px; padding-right: 9px; }
+  .driver-content { padding-left: 9px; padding-right: 9px; }
+  .card, .glass-card { padding: 12px; }
+  .connect-topbar { padding-left: 9px; padding-right: 9px; }
+  .connect-content :where(.grid, [class*="grid"]) { gap: 10px; }
+  .connect-content :where(.btn, .button) { padding-left: 10px; padding-right: 10px; font-size: 12px; }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .connect-content :where(.grid-4, .kpi-row) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .connect-content :where(.grid-3) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -6,8 +6,9 @@
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  isolation: isolate;
   background: #04140a;
-  transition: opacity .5s ease;
+  transition: opacity .45s ease;
 }
 .splash.leaving { opacity: 0; pointer-events: none; }
 .splash-picture { display: block; width: 100%; height: 100%; }
@@ -15,41 +16,51 @@
   display: block;
   width: 100%;
   height: 100%;
+  max-width: none;
   object-fit: cover;
-  object-position: center;
-  animation: splash-in .8s ease-out, splash-zoom 2.8s ease-out forwards;
+  object-position: center center;
+  animation: splash-in .65s ease-out both, splash-zoom 2.8s ease-out both;
+  will-change: transform, opacity;
 }
 .splash-bar {
   position: absolute;
   left: 0;
   bottom: 0;
+  width: 0;
   height: 3px;
   background: #4ade80;
-  width: 0;
   animation: splash-bar 2.6s linear forwards;
 }
 .splash-skip {
   position: absolute;
-  top: calc(12px + env(safe-area-inset-top, 0px));
-  right: max(12px, env(safe-area-inset-right, 0px));
-  background: rgba(0,0,0,.35);
-  color: #d1fae5;
-  border: 1px solid rgba(255,255,255,.2);
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  min-height: 40px;
+  padding: 8px 15px;
+  border: 1px solid rgba(255,255,255,.24);
   border-radius: 999px;
-  padding: 6px 14px;
+  color: #eafff2;
+  background: rgba(0,0,0,.48);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font: inherit;
   font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
 }
 @keyframes splash-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes splash-zoom { from { transform: scale(1.04); } to { transform: scale(1); } }
+@keyframes splash-zoom { from { transform: scale(1.025); } to { transform: scale(1); } }
 @keyframes splash-bar { to { width: 100%; } }
+
+/* Portrait artwork is a separate crop composed for phone proportions. */
 @media (max-width: 640px) and (orientation: portrait) {
-  .splash img { object-fit: cover; object-position: center; }
+  .splash img { object-position: center center; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  .splash img { object-position: center 48%; }
+  .splash img { object-position: center 52%; }
+  .splash-skip { top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .splash img, .splash-bar { animation: none; }
+  .splash, .splash img, .splash-bar { animation: none; transition: none; }
   .splash-bar { width: 100%; }
 }
