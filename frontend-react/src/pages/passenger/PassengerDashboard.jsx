@@ -21,7 +21,13 @@ function Shell({ children }) {
   return <AppShell>{children}</AppShell>;
 }
 
-function PaymentModal({ booking, onClose, onPaid, onPaymentConfirmed }) {
+function PaymentModal({
+  booking,
+  onClose,
+  onPaid,
+  onPaymentConfirmed,
+  onCashReserved,
+}) {
   const [step, setStep] = useState('method');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,9 +35,20 @@ function PaymentModal({ booking, onClose, onPaid, onPaymentConfirmed }) {
   const [mpesaPhone, setMpesaPhone] = useState('');
 
   const cash = async () => {
-    setBusy(true); setError('');
-    try { await apiRequest(`/bookings/payments/${booking.booking_id}/cash/`, { method:'POST' }); setStep('cash-success'); onPaid(); }
-    catch(e){setError(e.message)} finally{setBusy(false)}
+    setBusy(true);
+    setError('');
+    try {
+      await apiRequest(`/bookings/payments/${booking.booking_id}/cash/`, {
+        method: 'POST',
+      });
+      setStep('cash-success');
+      onPaid();
+      onCashReserved(booking.booking_id);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const mpesa = async (phoneNumber) => {
@@ -222,6 +239,12 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const urlJourney = fromSearch(location.search, initialJourneyStep);
   const { user } = useAuth();
   const [companies,setCompanies]=useState([]),[routes,setRoutes]=useState([]),[trips,setTrips]=useState([]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+  });
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
@@ -254,9 +277,41 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     }
   }, [navigate, paymentBooking]);
 
+  const handleCashReserved = useCallback((bookingId) => {
+    setPaymentBooking(null);
+    navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
+      state: { booking: paymentBooking },
+    });
+  }, [navigate, paymentBooking]);
+
   useEffect(()=>{apiRequest('/companies/').then(d=>setCompanies(Array.isArray(d)?d:[])).catch(e=>setError(e.message));refresh()},[refresh]);
   useEffect(()=>{if(!company){setRoutes([]);setTrips([]);return} apiRequest(`/companies/${company}/routes/`).then(d=>setRoutes(d||[])).catch(e=>setError(e.message))},[company]);
-  useEffect(()=>{if(!company){setTrips([]);return} const q=route?`?route_id=${route}`:''; apiRequest(`/companies/${company}/trips/${q}`).then(d=>setTrips(Array.isArray(d)?d:[])).catch(e=>setError(e.message))},[company,route]);
+  useEffect(() => {
+    if (!company) {
+      setTrips([]);
+      return;
+    }
+
+    let active = true;
+    setTrips([]);
+    setError('');
+
+    const params = new URLSearchParams();
+    if (route) params.set('route_id', route);
+    if (selectedDate) params.set('date', selectedDate);
+    const query = params.toString();
+    apiRequest(`/companies/${company}/trips/${query ? `?${query}` : ''}`)
+      .then((data) => {
+        if (active) setTrips(Array.isArray(data) ? data : []);
+      })
+      .catch((error) => {
+        if (active) setError(error.message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [company, route, selectedDate]);
 
   // Cash bookings stay pending until the driver confirms the cash. Poll so the
   // boarding PIN appears on the passenger's screen without a manual reload.
@@ -548,8 +603,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               <div className="glass-empty">
                 <span>You do not have any bookings yet.</span>
               </div>
-            ) : (
-              <div className="modern-trip-list">
+                ) : (
+                  <div className="modern-trip-list">
                 {bookings
                   .filter((b) => !['cancelled', 'completed', 'no_show'].includes(String(b.status || '').toLowerCase()))
                   .slice(0, 5)
@@ -987,6 +1042,17 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </div>
           </div>
 
+          <label className="field">
+            Departure date
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => {
+                if (event.target.value) setSelectedDate(event.target.value);
+              }}
+            />
+          </label>
+
           <div className="modern-trip-list">
             {!trips.length ? (
               <div className="glass-empty">
@@ -1063,7 +1129,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
           BOOKING MODAL
           ===================================================== */}
 
-      {bookingTrip && (
+      {bookingTrip && createPortal(
         <div className="modal-backdrop">
           <div className="modal modern-booking-modal">
 
@@ -1153,7 +1219,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </div>
           </div>
         </div>
-      )}
+        , document.body)}
 
       {/* =====================================================
           EXISTING PAYMENT FLOW
@@ -1168,6 +1234,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
           }}
           onPaid={refresh}
           onPaymentConfirmed={handlePaymentConfirmed}
+          onCashReserved={handleCashReserved}
         />
       )}
 
@@ -1181,3 +1248,4 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     </div>
   </Shell>;
 }
+import { createPortal } from 'react-dom';

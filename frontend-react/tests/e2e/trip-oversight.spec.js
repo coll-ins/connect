@@ -28,7 +28,9 @@ async function openDashboard(page, role, path, tripRecord = trip) {
     const url = new URL(route.request().url());
     let body = [];
 
-    if (url.pathname === '/api/users/profile/') {
+    if (url.pathname === '/api/users/csrf/') {
+      body = { csrfToken: 'e2e-csrf-token' };
+    } else if (url.pathname === '/api/users/profile/') {
       body = { user: userForRole(role) };
     } else if (url.pathname === '/api/companies/17/trips/') {
       body = [tripRecord];

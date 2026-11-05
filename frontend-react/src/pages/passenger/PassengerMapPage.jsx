@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import PassengerLiveMap from './PassengerLiveMap';
@@ -27,10 +27,15 @@ export default function PassengerMapPage() {
   );
   const [loading, setLoading] = useState(!hasInitialBooking);
   const [error, setError] = useState('');
+  const bookingLoadInProgress = useRef(false);
+  const hasLoadedBooking = useRef(Boolean(hasInitialBooking));
 
   const loadBooking = useCallback(async () => {
+    if (bookingLoadInProgress.current) return;
+    bookingLoadInProgress.current = true;
+
     try {
-      if (!hasInitialBooking) setLoading(true);
+      if (!hasLoadedBooking.current) setLoading(true);
 
       const data = await apiRequest('/bookings/my/');
       const bookings = Array.isArray(data) ? data : [];
@@ -63,8 +68,12 @@ export default function PassengerMapPage() {
         if (!isTrackable(exact)) {
           const bookingStatus = String(exact.status || '').toLowerCase();
           const tripStatus = String(exact.trip_status || '').toLowerCase();
+          const isPendingCashReservation =
+            exact.payment_method === 'cash' &&
+            exact.payment_status === 'pending' &&
+            bookingStatus === 'pending';
           if (
-            bookingStatus !== 'confirmed' ||
+            (!isPendingCashReservation && bookingStatus !== 'confirmed') ||
             ['cancelled', 'completed', 'no_show'].includes(bookingStatus) ||
             ['completed', 'cancelled'].includes(tripStatus)
           ) {
@@ -121,19 +130,38 @@ export default function PassengerMapPage() {
       setTrackingAvailable(true);
       setError('');
     } catch (err) {
-      if (!hasInitialBooking) {
+      if (!hasLoadedBooking.current) {
         setBooking(null);
         setTrackingAvailable(false);
       }
       setError(err.message || 'Unable to load your trips.');
     } finally {
+      hasLoadedBooking.current = true;
+      bookingLoadInProgress.current = false;
       setLoading(false);
     }
-  }, [hasInitialBooking, requestedBookingId]);
+  }, [requestedBookingId]);
 
   useEffect(() => {
     loadBooking();
   }, [loadBooking]);
+
+  useEffect(() => {
+    if (
+      !requestedBookingId ||
+      !booking ||
+      String(booking.booking_id || booking.id) !== String(requestedBookingId) ||
+      trackingAvailable
+    ) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      if (!document.hidden) loadBooking();
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [booking, loadBooking, requestedBookingId, trackingAvailable]);
 
   if (loading) {
     return (
@@ -214,40 +242,54 @@ export default function PassengerMapPage() {
   }
 
   return (
-    <PassengerLiveMap
-      bookingId={booking.booking_id || booking.id}
-      bookingDetails={booking}
-      trackingAvailable={trackingAvailable}
-      routeGeometry={
-        booking.route_geometry ||
-        booking.trip?.route_geometry ||
-        booking.trip_details?.route_geometry ||
-        booking.route?.geometry ||
-        booking.trip?.route?.geometry ||
-        null
-      }
-      pickup={{
-        latitude:
-          booking.pickup_latitude ??
-          booking.pickup_stage_latitude ??
-          booking.pickup_stage?.latitude ??
-          null,
-        longitude:
-          booking.pickup_longitude ??
-          booking.pickup_stage_longitude ??
-          booking.pickup_stage?.longitude ??
-          null,
-        name:
-          booking.pickup_stage_name ||
-          booking.pickup_stage?.name ||
-          booking.pickup_location ||
-          'Pickup stage',
-        id:
-          booking.pickup_stage_id ??
-          booking.pickup_stage?.id ??
-          null,
-      }}
-      onBack={() => navigate('/passenger')}
-    />
+    <>
+      {booking.payment_method === 'cash' &&
+        booking.payment_status === 'pending' && (
+          <div className="cn-notice cn-notice-info" role="status">
+            <div className="cn-notice-body">
+              <strong>Cash payment selected</strong>
+              <span>
+                Pay the driver to confirm. Live tracking will be available when
+                the trip is boarding and a driver is assigned.
+              </span>
+            </div>
+          </div>
+        )}
+      <PassengerLiveMap
+        bookingId={booking.booking_id || booking.id}
+        bookingDetails={booking}
+        trackingAvailable={trackingAvailable}
+        routeGeometry={
+          booking.route_geometry ||
+          booking.trip?.route_geometry ||
+          booking.trip_details?.route_geometry ||
+          booking.route?.geometry ||
+          booking.trip?.route?.geometry ||
+          null
+        }
+        pickup={{
+          latitude:
+            booking.pickup_latitude ??
+            booking.pickup_stage_latitude ??
+            booking.pickup_stage?.latitude ??
+            null,
+          longitude:
+            booking.pickup_longitude ??
+            booking.pickup_stage_longitude ??
+            booking.pickup_stage?.longitude ??
+            null,
+          name:
+            booking.pickup_stage_name ||
+            booking.pickup_stage?.name ||
+            booking.pickup_location ||
+            'Pickup stage',
+          id:
+            booking.pickup_stage_id ??
+            booking.pickup_stage?.id ??
+            null,
+        }}
+        onBack={() => navigate('/passenger')}
+      />
+    </>
   );
 }

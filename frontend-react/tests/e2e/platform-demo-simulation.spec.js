@@ -16,7 +16,9 @@ async function openDemoTrips(page, { advancesToComplete = false } = {}) {
     const url = new URL(route.request().url());
     const method = route.request().method();
     let body = [];
-    if (url.pathname === '/api/users/profile/') {
+    if (url.pathname === '/api/users/csrf/') {
+      body = { csrfToken: 'e2e-csrf-token' };
+    } else if (url.pathname === '/api/users/profile/') {
       body = { user: admin };
     } else if (url.pathname === '/api/companies/') {
       body = [{ id: 7, name: 'Demo Company' }];
