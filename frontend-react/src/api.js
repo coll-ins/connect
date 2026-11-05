@@ -7,9 +7,12 @@ function getCookie(name) {
     ?.split('=')[1] || null;
 }
 
-async function ensureCsrf() {
+async function ensureCsrf(signal) {
   if (!getCookie('csrftoken')) {
-    await fetch(`${API_BASE_URL}/users/csrf/`, { credentials: 'include' });
+    await fetch(`${API_BASE_URL}/users/csrf/`, {
+      credentials: 'include',
+      signal,
+    });
   }
   return getCookie('csrftoken');
 }
@@ -24,30 +27,35 @@ export async function apiRequest(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
-    const csrfToken = await ensureCsrf();
-    if (csrfToken) headers['X-CSRFToken'] = decodeURIComponent(csrfToken);
-  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20000);
+  const abortFromCaller = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener('abort', abortFromCaller, { once: true });
 
   const config = { ...options, method, headers, credentials: 'include' };
   if (config.body && typeof config.body === 'object' && !bodyIsFormData) {
     config.body = JSON.stringify(config.body);
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20000);
   let response;
   try {
-    response = await fetch(url, { ...config, signal: options.signal ?? controller.signal });
+    if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+      const csrfToken = await ensureCsrf(controller.signal);
+      if (csrfToken) headers['X-CSRFToken'] = decodeURIComponent(csrfToken);
+    }
+
+    response = await fetch(url, { ...config, signal: controller.signal });
   } catch (e) {
     throw new Error(
       e?.name === 'AbortError'
-        ? 'The server took too long to respond. Please try again.'
-        : 'Unable to connect to CONNECT. Make sure Django is running.',
+        ? 'CONNECT is taking longer than expected. Check your connection and try again.'
+        : "We couldn't reach CONNECT. Check your internet connection and try again.",
       { cause: e },
     );
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abortFromCaller);
   }
 
   const contentType = response.headers.get('content-type') || '';

@@ -113,8 +113,10 @@ class Command(BaseCommand):
                             help='Skip the server and call the view directly (no live-map push).')
 
     def handle(self, *args, **opts):
-        if not settings.DEBUG:
-            raise CommandError('simulate_bus only runs with DEBUG=True.')
+        if not settings.DEBUG or settings.APP_ENVIRONMENT == 'production':
+            raise CommandError(
+                'simulate_bus is limited to non-production DEBUG environments.'
+            )
         from bookings.models import Booking
 
         trips = Trip.objects.select_related('route', 'driver')
@@ -126,6 +128,10 @@ class Command(BaseCommand):
         if trip is None:
             raise CommandError('No trip found. Run seed_demo first, or pass --trip ID.')
         driver, route = trip.driver, trip.route
+        if not driver.bus_number.startswith('DEMO-'):
+            raise CommandError(
+                'simulate_bus only moves trips assigned to a DEMO-prefixed bus.'
+            )
         stage = route.pickup_stages.filter(is_active=True).order_by('order', 'id').first()
         if stage is None:
             raise CommandError(f'Route "{route.name}" has no active first stage.')

@@ -4,6 +4,8 @@ import CompanyManagerOverview from './CompanyManagerOverview';
 import CompanyManagerSection from './CompanyManagerSection';
 import { ManagerParcels, ManagerCharters } from './ManagerServices';
 import RoutePlanner from './RoutePlanner';
+import ServiceTemplateManager from './ServiceTemplateManager';
+import WeeklyReports from './WeeklyReports';
 
 export default function CompanyManagerRoutes() {
   return (
@@ -25,6 +27,9 @@ export default function CompanyManagerRoutes() {
           path="trips"
           element={<CompanyManagerSection section="trips" />}
         />
+
+        <Route path="services" element={<ServiceTemplateManager />} />
+        <Route path="reports" element={<WeeklyReports />} />
 
         <Route
           path="drivers"

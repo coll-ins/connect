@@ -9,7 +9,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from bookings.models import Booking
+from bookings.models import Booking, Incident
 from companies.models import Company, PickupStage, Route, Trip
 from drivers.models import Driver
 
@@ -471,6 +471,32 @@ class OperatorRouteScopeTests(Base):
         self.assertEqual(self._assign(False, []).status_code, 200)
         self._as_operator()
         self.assertEqual(self.client.get(_company_url('get_trips')).data, [])
+
+    def test_restricted_operator_only_sees_and_opens_assigned_route_incidents(self):
+        assigned_incident = Incident.objects.create(
+            trip=self.trip,
+            reported_by=self.operator,
+            incident_type='road_blocked',
+            description='Assigned-route blockage.',
+        )
+        other_incident = Incident.objects.create(
+            trip=self.trip2,
+            reported_by=self.operator,
+            incident_type='breakdown',
+            description='Unassigned-route breakdown.',
+        )
+        self.assertEqual(self._assign(False, [self.route.id]).status_code, 200)
+        self._as_operator()
+
+        response = self.client.get('/api/bookings/incidents/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [incident['id'] for incident in response.data],
+            [assigned_incident.id],
+        )
+        detail_url = reverse('bookings:incident-detail', kwargs={'incident_id': other_incident.id})
+        self.assertEqual(self.client.get(detail_url).status_code, 403)
 
     def test_status_and_capacity_blocked_on_other_routes(self):
         self._assign(False, [self.route.id])

@@ -26,8 +26,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **opts):
-        if not settings.DEBUG:
-            raise CommandError('seed_demo only runs with DEBUG=True.')
+        if not settings.DEBUG or settings.APP_ENVIRONMENT == 'production':
+            raise CommandError(
+                'seed_demo is limited to non-production DEBUG environments.'
+            )
         User = get_user_model()
 
         route = (

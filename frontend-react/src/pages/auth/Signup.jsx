@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import PasswordInput from '../../components/PasswordInput';
+import { dashboardPath } from '../../utils/roleRoutes';
 
 export default function Signup() {
   const { signup } = useAuth();
@@ -11,7 +12,14 @@ export default function Signup() {
   const update = (key) => (e) => setForm(v => ({ ...v, [key]: e.target.value }));
   const submit = async (e) => {
     e.preventDefault(); setError(''); setLoading(true);
-    try { await signup(form); navigate('/passenger'); } catch (err) { setError(err.message); } finally { setLoading(false); }
+    try {
+      const user = await signup(form);
+      navigate(dashboardPath(user), { replace: true });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
   return <div className="auth-page"><div className="auth-card">
     <div className="brand-mark">C</div><p className="eyebrow">JOIN CONNECT</p><h1>Create your account</h1><p className="muted">Book rides quickly and keep every trip in one place.</p>

@@ -13,6 +13,7 @@ export default function PasswordInput({
       <input
         {...props}
         type={show ? "text" : "password"}
+        aria-label="Password"
         autoComplete={autoComplete}
         className={className}
         style={{ ...style, paddingRight: 44, width: "100%" }}

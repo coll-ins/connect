@@ -36,6 +36,10 @@ class UsersTestSuite(APITestCase):
         }
         response = self.client.post(url, payload, format="json")
         self.assertIn(response.status_code, [status.HTTP_201_CREATED, status.HTTP_200_OK])
+        self.assertEqual(response.data['user']['role'], 'passenger')
+        profile = self.client.get(self._get_url('user_profile'))
+        self.assertEqual(profile.status_code, status.HTTP_200_OK)
+        self.assertEqual(profile.data['phone_number'], '+254700000000')
 
     def test_get_user_profile(self):
         self.client.force_authenticate(user=self.user)

@@ -24,6 +24,16 @@ urlpatterns = [
     path('trips/create/', views.create_trip, name='create_trip'),
     path('<int:company_id>/trips/', views.get_trips, name='get_company_trips'),
     path('<int:company_id>/schedules/', schedule_views.list_schedules, name='list_schedules'),
+    path(
+        '<int:company_id>/schedule-exceptions/',
+        schedule_views.list_generation_exceptions,
+        name='list_schedule_generation_exceptions',
+    ),
+    path(
+        '<int:company_id>/weekly-reports/',
+        schedule_views.list_weekly_reports,
+        name='list_weekly_operations_reports',
+    ),
     path('schedules/create/', schedule_views.create_schedule, name='create_schedule'),
     path('schedules/<int:schedule_id>/', schedule_views.manage_schedule, name='manage_schedule'),
 

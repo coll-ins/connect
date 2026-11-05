@@ -16,6 +16,21 @@ const scenarios = [
     path: '/driver',
     heading: 'Overview',
   },
+  {
+    role: 'company_operator',
+    path: '/company-operator',
+    heading: /Good to see you/i,
+  },
+  {
+    role: 'company_auditor',
+    path: '/company-auditor',
+    heading: 'Audit control center',
+  },
+  {
+    role: 'platform_admin',
+    path: '/platform-admin',
+    heading: 'Global overview',
+  },
 ];
 
 const viewports = [

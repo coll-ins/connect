@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -14,15 +14,20 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
+  Play,
   RefreshCw,
   Route as RouteIcon,
   Settings,
   ShieldCheck,
+  Square,
   Trash2,
   UserRound,
   Users,
   X,
 } from 'lucide-react';
+import L from 'leaflet';
+import { MapContainer, Marker, Polyline, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   NavLink,
   useLocation,
@@ -30,6 +35,7 @@ import {
 } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import BaseTileLayer from '../../components/maps/BaseTileLayer';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -90,6 +96,50 @@ const emptyOperator = {
   company: '',
   password: '',
 };
+
+const demoBusIcon = L.divIcon({
+  className: 'pa-demo-bus-icon',
+  html: '<span>DEMO</span>',
+  iconSize: [48, 28],
+  iconAnchor: [24, 14],
+});
+
+function DemoMapBounds({ path }) {
+  const map = useMap();
+  const fitted = useRef(false);
+
+  useEffect(() => {
+    if (!fitted.current && path.length > 1) {
+      map.fitBounds(path, { padding: [24, 24] });
+      fitted.current = true;
+    }
+  }, [map, path]);
+
+  return null;
+}
+
+function DemoTripMap({ simulation }) {
+  const path = simulation.path;
+  const progressPath = path.slice(0, simulation.position_index + 1);
+
+  return (
+    <MapContainer
+      key={simulation.id}
+      center={simulation.position}
+      zoom={12}
+      scrollWheelZoom={false}
+      style={{ height: 320, width: '100%', borderRadius: 12 }}
+    >
+      <BaseTileLayer />
+      <DemoMapBounds path={path} />
+      <Polyline positions={path} pathOptions={{ color: '#10b981', weight: 5, opacity: 0.6 }} />
+      {progressPath.length > 1 && (
+        <Polyline positions={progressPath} pathOptions={{ color: '#2563eb', weight: 6 }} />
+      )}
+      <Marker position={simulation.position} icon={demoBusIcon} />
+    </MapContainer>
+  );
+}
 
 function SideLink({ to, icon: Icon, children, end = false }) {
   return (
@@ -570,6 +620,34 @@ function PlatformShell({ logout, children }) {
           color: #9be8c9;
           border-radius: 10px;
           margin-bottom: 16px;
+          font-size: 12px;
+        }
+
+        .pa-demo-map {
+          overflow: hidden;
+          margin-top: 16px;
+          border: 1px solid rgba(255,255,255,.08);
+          border-radius: 12px;
+        }
+
+        .pa-demo-bus-icon {
+          display: grid;
+          place-items: center;
+          border: 2px solid white;
+          border-radius: 999px;
+          background: #2563eb;
+          box-shadow: 0 2px 9px rgba(0,0,0,.4);
+          color: white;
+          font-size: 9px;
+          font-weight: 900;
+        }
+
+        .pa-demo-meta {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px 18px;
+          color: #b7c3d0;
           font-size: 12px;
         }
 
@@ -1222,6 +1300,13 @@ export default function PlatformAdminDashboard() {
 
   const [systemChecks, setSystemChecks] = useState(null);
   const [systemTestLoading, setSystemTestLoading] = useState(false);
+  const [demoSimulation, setDemoSimulation] = useState(null);
+  const [demoRoutes, setDemoRoutes] = useState([]);
+  const [demoRouteId, setDemoRouteId] = useState('');
+  const [demoEnabled, setDemoEnabled] = useState(null);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState('');
+  const [demoMessage, setDemoMessage] = useState('');
 
   const [companyModal, setCompanyModal] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
@@ -1329,6 +1414,102 @@ export default function PlatformAdminDashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (section !== 'trips') return undefined;
+    let mounted = true;
+    apiRequest('/system/demo-simulation/')
+      .then((result) => {
+        if (!mounted) return;
+        setDemoEnabled(true);
+        setDemoSimulation(result?.simulation || null);
+        setDemoRoutes(
+          Array.isArray(result?.available_routes)
+            ? result.available_routes
+            : [],
+        );
+        setDemoError('');
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setDemoEnabled(false);
+        setDemoError(err.message || 'Demo simulation is unavailable.');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [section]);
+
+  useEffect(() => {
+    if (!demoSimulation || demoSimulation.status !== 'running') return undefined;
+    let mounted = true;
+    let timer;
+    const advance = async () => {
+      try {
+        const result = await apiRequest(
+          `/system/demo-simulation/${demoSimulation.id}/advance/`,
+          { method: 'POST', body: {} },
+        );
+        if (!mounted) return;
+        setDemoSimulation(result.simulation);
+        setDemoError('');
+        if (result.simulation.status === 'completed') {
+          setDemoMessage('Demo trip completed. No operational trip data was changed.');
+          return;
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setDemoError(err.message || 'Unable to advance the demo trip.');
+        return;
+      }
+      if (mounted) {
+        timer = window.setTimeout(advance, 1500);
+      }
+    };
+    timer = window.setTimeout(advance, 1500);
+    return () => {
+      mounted = false;
+      window.clearTimeout(timer);
+    };
+  }, [demoSimulation]);
+
+  const startDemoSimulation = async () => {
+    if (!demoRouteId || demoBusy) return;
+    setDemoBusy(true);
+    setDemoError('');
+    setDemoMessage('');
+    try {
+      const result = await apiRequest('/system/demo-simulation/', {
+        method: 'POST',
+        body: { route_id: Number(demoRouteId) },
+      });
+      setDemoSimulation(result.simulation);
+      setDemoEnabled(true);
+      setDemoMessage('Demo simulation started. This is isolated from live operations.');
+    } catch (err) {
+      setDemoError(err.message || 'Unable to start the demo trip.');
+    } finally {
+      setDemoBusy(false);
+    }
+  };
+
+  const stopDemoSimulation = async () => {
+    if (!demoSimulation || demoBusy) return;
+    setDemoBusy(true);
+    setDemoError('');
+    try {
+      const result = await apiRequest(
+        `/system/demo-simulation/${demoSimulation.id}/stop/`,
+        { method: 'POST', body: {} },
+      );
+      setDemoSimulation(result.simulation);
+      setDemoMessage('Demo simulation stopped. No operational trip data was changed.');
+    } catch (err) {
+      setDemoError(err.message || 'Unable to stop the demo trip.');
+    } finally {
+      setDemoBusy(false);
+    }
+  };
 
   const runSystemTests = useCallback(async () => {
     setSystemTestLoading(true);
@@ -2782,6 +2963,139 @@ export default function PlatformAdminDashboard() {
                 <Plus size={16} />
                 Create Trip
               </button>
+            </div>
+
+            <div className="pa-panel" data-testid="demo-simulation-panel">
+              <div className="pa-panel-header">
+                <div>
+                  <h3>Client demo simulator</h3>
+                  <p>
+                    Preview a bus moving along a route without creating or changing
+                    real trips, drivers, bookings, GPS records, or sending notifications.
+                  </p>
+                </div>
+                <span className={`pa-badge ${
+                  demoEnabled === false ? 'warning' : demoSimulation?.status === 'running' ? '' : 'muted'
+                }`}>
+                  {demoEnabled === null
+                    ? 'Checking availability'
+                    : demoEnabled === false
+                      ? 'Unavailable'
+                      : demoSimulation?.status === 'running'
+                        ? 'Running'
+                        : demoSimulation?.status || 'Ready'}
+                </span>
+              </div>
+
+              {demoEnabled ? (
+                <>
+                  {!demoSimulation && (
+                    <div className="pa-page-actions">
+                      <label className="pa-field" style={{ flex: 1, maxWidth: 420 }}>
+                        <span>Demo route</span>
+                        <select
+                          aria-label="Demo route"
+                          value={demoRouteId}
+                          onChange={(event) => setDemoRouteId(event.target.value)}
+                        >
+                          <option value="">
+                            {demoRoutes.length
+                              ? 'Choose a route with map data'
+                              : 'No routes with valid map data'}
+                          </option>
+                          {demoRoutes.map((route) => (
+                            <option key={route.id} value={route.id}>
+                              {route.name} · {route.company_name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="pa-primary-button"
+                        onClick={startDemoSimulation}
+                        disabled={!demoRouteId || demoBusy || !demoRoutes.length}
+                      >
+                        <Play size={15} />
+                        {demoBusy ? 'Starting…' : 'Start demo simulation'}
+                      </button>
+                    </div>
+                  )}
+
+                  {demoSimulation && (
+                    <>
+                      <div className="pa-demo-meta">
+                        <strong>{demoSimulation.route_name}</strong>
+                        <span>{demoSimulation.start_point} to {demoSimulation.end_point}</span>
+                        <span>{demoSimulation.bus_number}</span>
+                        <span>{demoSimulation.progress}% complete</span>
+                        {demoSimulation.status === 'running' && (
+                          <button
+                            type="button"
+                            className="pa-danger-button"
+                            onClick={stopDemoSimulation}
+                            disabled={demoBusy}
+                          >
+                            <Square size={14} />
+                            Stop simulation
+                          </button>
+                        )}
+                        {demoSimulation.status !== 'running' && (
+                          <button
+                            type="button"
+                            className="pa-secondary-button"
+                            onClick={() => {
+                              setDemoSimulation(null);
+                              setDemoMessage('');
+                            }}
+                          >
+                            <Play size={14} />
+                            Start another demo
+                          </button>
+                        )}
+                      </div>
+                      <div
+                        className="pa-demo-map"
+                        aria-label="Isolated demo bus map"
+                      >
+                        <DemoTripMap simulation={demoSimulation} />
+                      </div>
+                      <div
+                        role="progressbar"
+                        aria-label="Demo trip progress"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow={demoSimulation.progress}
+                        style={{
+                          height: 5,
+                          marginTop: 12,
+                          overflow: 'hidden',
+                          borderRadius: 999,
+                          background: 'rgba(255,255,255,.1)',
+                        }}
+                      >
+                        <div style={{
+                          width: `${demoSimulation.progress}%`,
+                          height: '100%',
+                          background: '#10b981',
+                          transition: 'width .6s ease',
+                        }} />
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <p role="status" className="pa-command-message">
+                  {demoError || 'Demo simulation is not enabled on this server.'}
+                </p>
+              )}
+
+              {demoError && demoEnabled && (
+                <p role="alert" className="pa-error">{demoError}</p>
+              )}
+              {demoMessage && (
+                <p role="status" className="pa-command-message">{demoMessage}</p>
+              )}
             </div>
 
             <div className="pa-panel">

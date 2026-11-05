@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from users.models import CustomUser
 
 
@@ -174,13 +176,22 @@ class Trip(models.Model):
 
 
 class TripSchedule(models.Model):
-    """A recurring departure. generate_scheduled_trips turns it into Trips."""
+    """A weekly service template expanded into Trips by generate_scheduled_trips."""
     route = models.ForeignKey(Route, on_delete=models.CASCADE, related_name="schedules")
     driver = models.ForeignKey("drivers.Driver", on_delete=models.CASCADE, related_name="trip_schedules")
     capacity = models.PositiveIntegerField(default=30)
     # Comma-separated weekdays, Monday=0 ... Sunday=6, e.g. "0,1,2,3,4"
     days_of_week = models.CharField(max_length=13)
     departure_time = models.TimeField()  # local time (Africa/Nairobi)
+    service_end_time = models.TimeField(null=True, blank=True)
+    normal_interval_minutes = models.PositiveSmallIntegerField(default=60)
+    rush_interval_minutes = models.PositiveSmallIntegerField(default=30)
+    rush_start_time = models.TimeField(null=True, blank=True)
+    rush_end_time = models.TimeField(null=True, blank=True)
+    auto_renew = models.BooleanField(default=False)
+    generation_checked_at = models.DateTimeField(null=True, blank=True)
+    driver_unavailable_count = models.PositiveIntegerField(default=0)
+    driver_conflict_count = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
@@ -191,3 +202,91 @@ class TripSchedule(models.Model):
 
     def __str__(self):
         return f"{self.route.name} {self.departure_time} [{self.days_of_week}]"
+
+
+class WeeklyOperationsReport(models.Model):
+    REPORT_TYPE_CHOICES = [
+        ('weekly', 'Weekly operations'),
+        ('manual_renewal', 'Manual renewal reminder'),
+    ]
+    EMAIL_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('skipped', 'Skipped'),
+        ('failed', 'Failed'),
+    ]
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='weekly_operations_reports',
+    )
+    report_type = models.CharField(max_length=20, choices=REPORT_TYPE_CHOICES)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    renewal_date = models.DateField(null=True, blank=True)
+    summary = models.JSONField(default=dict)
+    email_status = models.CharField(
+        max_length=10,
+        choices=EMAIL_STATUS_CHOICES,
+        default='pending',
+    )
+    email_error = models.CharField(max_length=160, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'report_type', 'period_start'],
+                name='uniq_company_operations_report_period',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['company', '-created_at']),
+        ]
+
+
+class DemoTripSimulation(models.Model):
+    STATUS_CHOICES = [
+        ('running', 'Running'),
+        ('completed', 'Completed'),
+        ('stopped', 'Stopped'),
+        ('expired', 'Expired'),
+    ]
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='demo_trip_simulations',
+    )
+    route_id = models.PositiveBigIntegerField()
+    route_name = models.CharField(max_length=200)
+    company_name = models.CharField(max_length=100)
+    start_point = models.CharField(max_length=100)
+    end_point = models.CharField(max_length=100)
+    bus_number = models.CharField(max_length=30, default='DEMO BUS')
+    path = models.JSONField()
+    position_index = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='running',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['status'],
+                condition=Q(status='running'),
+                name='uniq_running_demo_trip_simulation',
+            ),
+        ]

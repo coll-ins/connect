@@ -1,3 +1,4 @@
+from datetime import timedelta
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from decimal import Decimal
@@ -20,6 +21,9 @@ from wallets.models import Wallet
 from .models import Company, Route, Trip, PickupStage
 from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
 from users.identity import is_driver_account_for
+
+
+TRIP_OPERATIONAL_HISTORY_DAYS = 30
 
 
 @api_view(['GET'])
@@ -457,8 +461,24 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
             route_id=param_route_id
         )
 
+    # Company operators and managers use this feed for current operations;
+    # keep a 30-day working history without deleting the underlying records.
+    # Auditors retain access to the full company trip history.
+    if (
+        user.is_authenticated
+        and not user.is_superuser
+        and user.role in {'company_manager', 'company_operator'}
+    ):
+        from django.utils import timezone
+
+        queryset = queryset.filter(
+            departure_at__gte=(
+                timezone.now()
+                - timedelta(days=TRIP_OPERATIONAL_HISTORY_DAYS)
+            )
+        )
+
     # Passengers should only see trips that are still bookable.
-    # Company staff and superusers retain access to historical trips.
     if not is_company_staff and not user.is_superuser:
         from django.utils import timezone
         from django.db.models import Q
@@ -526,6 +546,17 @@ def get_trip_details(request, trip_id, *args, **kwargs):
             return Response(
                 {'error': 'You cannot access trips from another company.'},
                 status=status.HTTP_403_FORBIDDEN
+            )
+
+        if (
+            user.role in {'company_manager', 'company_operator'}
+            and trip.departure_at
+            < timezone.now()
+            - timedelta(days=TRIP_OPERATIONAL_HISTORY_DAYS)
+        ):
+            return Response(
+                {'error': 'Trip not found'},
+                status=status.HTTP_404_NOT_FOUND
             )
 
     data = dict(TripSerializer(trip).data)

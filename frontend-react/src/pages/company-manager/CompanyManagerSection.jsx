@@ -326,6 +326,7 @@ export default function CompanyManagerSection({ section }) {
   });
 
   const [tripView, setTripView] = useState('active');
+  const [tripSearch, setTripSearch] = useState('');
   const [tripForm, setTripForm] = useState({
     route_id: '',
     driver_id: '',
@@ -520,7 +521,19 @@ export default function CompanyManagerSection({ section }) {
   const logTrips = allTrips
     .filter((t) => tripIsLog(t))
     .sort((x, y) => new Date(y.departure_at) - new Date(x.departure_at));
-  const shownTrips = tripView === 'logs' ? logTrips : activeTrips;
+  const tripViewItems = tripView === 'logs' ? logTrips : activeTrips;
+  const normalizedTripSearch = tripSearch.trim().toLowerCase();
+  const shownTrips = tripViewItems.filter((trip) =>
+    [
+      trip.id,
+      trip.route_details?.name,
+      trip.driver_name,
+      trip.driver_bus_number,
+      trip.status,
+    ].some((value) =>
+      String(value || '').toLowerCase().includes(normalizedTripSearch)
+    )
+  );
 
   const createTrip = async (event) => {
     event.preventDefault();
@@ -922,6 +935,32 @@ export default function CompanyManagerSection({ section }) {
 
               {section === 'trips' && (
                 <div className="company-card-grid">
+                  <label
+                    style={{
+                      gridColumn: '1 / -1',
+                      display: 'grid',
+                      gap: 6,
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                  >
+                    Search trips
+                    <input
+                      type="search"
+                      value={tripSearch}
+                      onChange={(event) => setTripSearch(event.target.value)}
+                      placeholder="Trip ID, route, driver, bus or status"
+                      aria-label="Search trips"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'rgba(255,255,255,0.06)',
+                        color: 'inherit',
+                      }}
+                    />
+                  </label>
                   <div
                     style={{
                       gridColumn: '1 / -1',
@@ -957,9 +996,11 @@ export default function CompanyManagerSection({ section }) {
                   </div>
                   {shownTrips.length === 0 && (
                     <div style={{ gridColumn: '1 / -1', opacity: 0.7 }}>
-                      {tripView === 'logs'
-                        ? 'No finished trips yet.'
-                        : 'No active trips.'}
+                      {normalizedTripSearch
+                        ? 'No trips match your search.'
+                        : tripView === 'logs'
+                          ? 'No finished trips yet.'
+                          : 'No active trips.'}
                     </div>
                   )}
                   {shownTrips.map((trip) => (

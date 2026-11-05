@@ -24,6 +24,7 @@ Connect is a seat-booking platform for Nairobi's organised bus SACCOs. Passenger
 
 **Driver app**
 - Select your driver profile
+- View an automatically refreshed timetable of assigned trips
 - Share your live GPS location with assigned passengers
 - See all your assigned passengers on a map with distance to nearest pickup
 
@@ -111,6 +112,20 @@ deploy the old `frontend/` app or use the retired Render/Vercel instructions.
 Production requires a chosen VPS/domain and real Paystack and Africa's Talking
 credentials. Never copy local `.env` values to the server.
 
+## Automation and operations
+
+- GitHub Actions runs backend checks, production configuration checks, frontend
+  lint/build, and browser tests on pushes and pull requests.
+- The production VPS schedules trip generation, booking expiry, no-show handling,
+  refund reconciliation, and backups. Commands are locked against overlap and
+  logged under `/var/log/connect`; see the deployment runbook.
+- The `generate-trips` GitHub workflow is a manual recovery action, not a second
+  scheduler. Configure the `CONNECT_API_URL` repository variable and
+  `CRON_SECRET` repository secret before using it.
+- After deployment, run the smoke test and periodically test database restores;
+  automation cannot replace monitoring payment settlement, SMS delivery, and
+  passenger/driver support.
+
 ---
 
 ## Environment variables
@@ -137,18 +152,18 @@ additional provider and infrastructure settings; see [deploy/RUNBOOK.md](./deplo
 |---|---|---|
 | POST | `/api/users/signup/` | Passenger signup |
 | POST | `/api/users/login/` | Login |
-| POST | `/api/users/admin-signup/` | Operator account creation |
+| POST | `/api/users/admin-signup/` | Platform admin account creation (when enabled) |
 | GET | `/api/companies/` | List bus companies |
 | GET | `/api/companies/:id/routes/` | List routes for a company |
 | POST | `/api/bookings/create/` | Create a booking |
-| GET | `/api/bookings/mine/` | Get passenger's bookings |
-| GET | `/api/bookings/all/` | Get all bookings (admin only) |
+| GET | `/api/bookings/my/` | Get passenger's bookings |
+| GET | `/api/bookings/all/` | List bookings visible to authorized staff |
 | POST | `/api/bookings/:id/assign-driver/` | Assign driver to booking |
-| POST | `/api/bookings/:id/complete/` | Complete a trip |
+| POST | `/api/bookings/driver/:driver_id/end-trip/` | Complete a driver's trip |
 | POST | `/api/bookings/:id/stage-departure/` | Set bus departure time |
-| POST | `/api/bookings/:id/passenger-location/` | Update passenger GPS |
+| POST | `/api/bookings/:id/location/` | Update passenger GPS |
+| POST | `/api/companies/trips/create/` | Create a trip |
 | GET | `/api/drivers/` | List available drivers |
-| POST | `/api/drivers/create/` | Add a driver (admin only) |
 | POST | `/api/drivers/:id/location/` | Update driver GPS location |
 
 ---

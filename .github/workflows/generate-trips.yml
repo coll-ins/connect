@@ -1,16 +1,38 @@
 name: generate-trips
 on:
-  schedule:
-    - cron: '20 * * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  call:
+  generate:
+    name: Generate scheduled trips
     runs-on: ubuntu-latest
     steps:
-      - name: Call generate-trips endpoint
+      - name: Validate production settings
+        env:
+          CONNECT_API_URL: ${{ vars.CONNECT_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [[ -z "$CONNECT_API_URL" ]]; then
+            echo "::error::Set the CONNECT_API_URL repository variable."
+            exit 1
+          fi
+          if [[ "$CONNECT_API_URL" != https://* ]]; then
+            echo "::error::CONNECT_API_URL must use HTTPS."
+            exit 1
+          fi
+          if [[ -z "$CRON_SECRET" ]]; then
+            echo "::error::Set the CRON_SECRET repository secret."
+            exit 1
+          fi
+      - name: Call production trip-generation endpoint
+        env:
+          CONNECT_API_URL: ${{ vars.CONNECT_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl -fsS -X POST \
             --max-time 120 --retry 3 --retry-delay 20 --retry-all-errors \
-            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
-            https://connect-lhqy.onrender.com/api/internal/cron/generate-trips/
+            -H "X-Cron-Secret: $CRON_SECRET" \
+            "${CONNECT_API_URL%/}/api/internal/cron/generate-trips/"

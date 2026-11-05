@@ -33,7 +33,13 @@
     closes only departed trips older than 12 hours, and skips trips with active
     incidents. Preview candidates with
     `manage.py close_stale_trips --dry-run`; set `TRIP_AUTO_CLOSE_AFTER_HOURS`
-    in the server environment to change the threshold.
+    in the server environment to change the threshold. Scheduled trip generation
+    runs here; the GitHub `generate-trips` workflow is manual-only and can be
+    configured as a recovery action with `CONNECT_API_URL` and `CRON_SECRET`.
+    Weekly reports run at 03:00 UTC (06:00 Africa/Nairobi); optionally configure
+    the `EMAIL_*` and `DEFAULT_FROM_EMAIL` settings in `/etc/connect/connect.env`.
+    Reports remain in the manager app when email is unconfigured or delivery
+    fails.
 13. /srv/connect/deploy/smoke_test.sh https://DOMAIN        # every line must PASS
 14. Paystack dashboard (Settings > API Keys & Webhooks): set the webhook URL to https://DOMAIN/api/bookings/webhooks/paystack/
     Paystack takes ONE URL per mode; refund.* events are routed to the refund handler internally.

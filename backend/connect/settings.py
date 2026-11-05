@@ -9,6 +9,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Enforce secure secret key in production
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+APP_ENVIRONMENT = os.getenv(
+    'APP_ENVIRONMENT',
+    'development' if DEBUG else 'production',
+).strip().lower()
+DEMO_SIMULATION_ENABLED = (
+    APP_ENVIRONMENT in {'development', 'test', 'staging'}
+    and os.getenv(
+        'DEMO_SIMULATION_ENABLED',
+        'True' if APP_ENVIRONMENT == 'development' else 'False',
+    ).lower() == 'true'
+)
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
@@ -158,6 +169,15 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r'^https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}):5173$',
 ]
+
+# Email is optional; reports remain available in-app when SMTP is not configured.
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() == 'true'
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', '')
 
 # Static files
 STATIC_URL = '/static/'

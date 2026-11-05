@@ -1,6 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://connect-lhqy.onrender.com/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
-}

@@ -24,7 +24,8 @@ class ScheduleApiTests(APITestCase):
         self.addCleanup(self._gen.stop)
         self.c.force_authenticate(user=get_user_model()(username='mgr'))
         self.body = {'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': self.drv.id,
-                     'capacity': 30, 'days_of_week': [0, 1, 2], 'departure_time': '06:30'}
+                     'capacity': 30, 'days_of_week': [0, 1, 2], 'departure_time': '06:30',
+                     'auto_renew': True}
 
     def post(self, **over):
         return self.c.post('/api/companies/schedules/create/', {**self.body, **over}, format='json')
@@ -32,6 +33,68 @@ class ScheduleApiTests(APITestCase):
     def test_unauthenticated_is_rejected(self):
         r = APIClient().post('/api/companies/schedules/create/', self.body, format='json')
         self.assertIn(r.status_code, (401, 403))
+
+    def test_company_operator_cannot_manage_templates(self):
+        operator = get_user_model().objects.create(
+            username='operator', role='company_operator', company=self.co)
+        self.c.force_authenticate(user=operator)
+        self.assertEqual(self.post().status_code, 403)
+        self.assertEqual(
+            self.c.get(f'/api/companies/{self.co.id}/schedules/').status_code,
+            403,
+        )
+
+    def test_schedule_exceptions_are_visible_to_route_scoped_operator_only(self):
+        from companies.models import TripSchedule
+
+        other_route = Route.objects.create(
+            company=self.co, name='Other route', start_point='C',
+            end_point='D', price=100,
+        )
+        visible = TripSchedule.objects.create(
+            route=self.route, driver=self.drv, days_of_week='0',
+            departure_time=time(6, 30), auto_renew=True,
+            driver_conflict_count=2,
+        )
+        TripSchedule.objects.create(
+            route=other_route, driver=self.drv, days_of_week='0',
+            departure_time=time(7, 30), auto_renew=True,
+            driver_unavailable_count=1,
+        )
+        operator = get_user_model().objects.create(
+            username='scoped_operator', role='company_operator',
+            company=self.co, all_routes=False,
+        )
+        operator.assigned_routes.add(self.route)
+        self.c.force_authenticate(user=operator)
+        response = self.c.get(f'/api/companies/{self.co.id}/schedule-exceptions/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item['schedule_id'] for item in response.data], [visible.id])
+        self.assertEqual(response.data[0]['route_name'], self.route.name)
+        self.assertEqual(response.data[0]['driver_conflict_count'], 2)
+
+    @mock.patch(CAN, return_value=True)
+    def test_manager_can_view_company_schedule_exceptions(self, _):
+        from companies.models import TripSchedule
+
+        self.c.force_authenticate(user=get_user_model().objects.create(
+            username='exception_manager', role='company_manager', company=self.co,
+        ))
+        schedule = TripSchedule.objects.create(
+            route=self.route, driver=self.drv, days_of_week='0',
+            departure_time=time(6, 30), auto_renew=True,
+            driver_unavailable_count=1,
+        )
+        response = self.c.get(f'/api/companies/{self.co.id}/schedule-exceptions/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]['schedule_id'], schedule.id)
+
+    def test_other_company_cannot_view_schedule_exceptions(self):
+        operator = get_user_model().objects.create(
+            username='foreign_operator', role='company_operator', company=self.other)
+        self.c.force_authenticate(user=operator)
+        response = self.c.get(f'/api/companies/{self.co.id}/schedule-exceptions/')
+        self.assertEqual(response.status_code, 403)
 
     @mock.patch(CAN, return_value=False)
     def test_unauthorized_company_is_403(self, _):
@@ -44,8 +107,19 @@ class ScheduleApiTests(APITestCase):
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()['days_of_week'], [0, 1, 2])
         self.assertEqual(r.json()['departure_time'], '06:30')
+        self.assertEqual(r.json()['normal_interval_minutes'], 60)
+        self.assertEqual(r.json()['rush_interval_minutes'], 30)
+        self.assertTrue(r.json()['auto_renew'])
         lst = self.c.get(f'/api/companies/{self.co.id}/schedules/')
         self.assertEqual(len(lst.json()), 1)
+
+    @mock.patch(CAN, return_value=True)
+    @mock.patch('companies.schedule_views._generate_on_create', side_effect=RuntimeError('generator failed'))
+    def test_create_rolls_back_and_returns_error_when_generation_fails(self, _generation, _):
+        response = self.post()
+        self.assertEqual(response.status_code, 500)
+        self.assertIn('could not be generated', response.json()['error'])
+        self.assertEqual(TripSchedule.objects.count(), 0)
 
     @mock.patch(CAN, return_value=True)
     def test_other_company_route_or_driver_rejected(self, _):
@@ -57,8 +131,37 @@ class ScheduleApiTests(APITestCase):
     def test_bad_input_is_400(self, _):
         for over in ({'capacity': 0}, {'capacity': 101}, {'days_of_week': []}, {'days_of_week': [7]},
                      {'days_of_week': 'mon'}, {'departure_time': '25:99'}, {'departure_time': ''},
-                     {'start_date': '2030-02-01', 'end_date': '2030-01-01'}):
+                     {'start_date': '2030-02-01', 'end_date': '2030-01-01'},
+                     {'normal_interval_minutes': 10},
+                     {'rush_interval_minutes': 300},
+                     {'normal_interval_minutes': 30, 'rush_interval_minutes': 60},
+                     {'rush_start_time': '07:00'},
+                     {'service_end_time': '06:30'},
+                     {'service_end_time': '18:00', 'rush_start_time': '17:00', 'rush_end_time': '19:00'}):
             self.assertEqual(self.post(**over).status_code, 400, over)
+
+    @mock.patch(CAN, return_value=True)
+    def test_manual_schedule_requires_a_maximum_one_week_date_range(self, _):
+        manual = {'auto_renew': False, 'start_date': '2030-01-01', 'end_date': '2030-01-07'}
+        self.assertEqual(self.post(**manual).status_code, 201)
+        self.assertEqual(
+            self.post(auto_renew=False, start_date='2030-01-01', end_date='2030-01-08').status_code,
+            400,
+        )
+        self.assertEqual(self.post(auto_renew=False).status_code, 400)
+
+    @mock.patch(CAN, return_value=True)
+    def test_rush_window_generates_configurable_frequency(self, _):
+        r = self.post(
+            service_end_time='09:00',
+            rush_start_time='07:00',
+            rush_end_time='08:00',
+            normal_interval_minutes=60,
+            rush_interval_minutes=30,
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()['rush_start_time'], '07:00')
+        self.assertEqual(r.json()['rush_end_time'], '08:00')
 
     @mock.patch(CAN, return_value=True)
     def test_duplicate_is_409(self, _):
@@ -188,6 +291,7 @@ class ScheduleApiTests(APITestCase):
         self.assertNotIn('cancelled_trips', r.json())
         t.refresh_from_db()
         self.assertEqual(t.status, 'scheduled')
+        self.assertEqual(t.capacity, 20)
 
     @mock.patch(CAN, return_value=True)
     def test_booked_trip_is_kept_and_counted(self, _):
@@ -305,10 +409,11 @@ class ScheduleApiTests(APITestCase):
         self.assertEqual(Trip.objects.filter(schedule_id=sid).count(), n)
 
     @mock.patch(CAN, return_value=True)
-    def test_create_survives_generation_failure(self, _):
+    def test_create_reports_generation_failure_without_persisting_schedule(self, _):
         self._gen.stop()
         with mock.patch('companies.schedule_views.regenerate_for_schedule', side_effect=RuntimeError('boom')):
             r = self.post()
-        self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(r.json()['generated_trips'], 0)
-        self.assertEqual(TripSchedule.objects.count(), 1)
+        self.assertEqual(r.status_code, 500, r.content)
+        self.assertIn('could not be generated', r.json()['error'])
+        self.assertEqual(TripSchedule.objects.count(), 0)
+        self.assertEqual(Trip.objects.count(), 0)

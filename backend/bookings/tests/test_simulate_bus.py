@@ -1,10 +1,14 @@
 import json
 
-from django.test import SimpleTestCase
+from django.core.management import call_command, CommandError
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 
+from companies.models import Company, Route, Trip
 from companies.management.commands.simulate_bus import (
     haversine_m, orient_path, parse_geometry, path_length_m, point_along,
 )
+from drivers.models import Driver
 
 LINE = {'type': 'LineString', 'coordinates': [[36.82, -1.28], [36.83, -1.29]]}
 
@@ -38,3 +42,51 @@ class SimulatorMathTests(SimpleTestCase):
         self.assertFalse(done)
         self.assertAlmostEqual(lng, 36.825, places=4)
         self.assertTrue(point_along([a, b], total + 10)[1])
+
+
+@override_settings(DEBUG=True, APP_ENVIRONMENT='development')
+class SimulatorCommandSafetyTests(TestCase):
+    def test_explicit_trip_option_rejects_non_demo_bus(self):
+        company = Company.objects.create(
+            name='Simulator Safety Co',
+            areas_served='Nairobi',
+        )
+        route = Route.objects.create(
+            company=company,
+            name='Route A',
+            start_point='A',
+            end_point='B',
+            price='100.00',
+        )
+        driver = Driver.objects.create(
+            name='Real Driver',
+            phone_number='+254700000091',
+            bus_number='KAA 001A',
+            company=company,
+        )
+        trip = Trip.objects.create(
+            route=route,
+            driver=driver,
+            departure_at=timezone.now(),
+            capacity=30,
+        )
+
+        with self.assertRaisesMessage(
+            CommandError,
+            'simulate_bus only moves trips assigned to a DEMO-prefixed bus.',
+        ):
+            call_command('simulate_bus', trip=trip.id)
+
+        trip.refresh_from_db()
+        driver.refresh_from_db()
+        self.assertEqual(trip.status, 'scheduled')
+        self.assertIsNone(driver.latitude)
+        self.assertIsNone(driver.longitude)
+
+    @override_settings(DEBUG=True, APP_ENVIRONMENT='production')
+    def test_command_is_disabled_in_production_even_if_debug_is_enabled(self):
+        with self.assertRaisesMessage(
+            CommandError,
+            'simulate_bus is limited to non-production DEBUG environments.',
+        ):
+            call_command('simulate_bus', trip=1)

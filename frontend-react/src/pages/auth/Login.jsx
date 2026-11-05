@@ -61,6 +61,7 @@ export default function Login() {
           </label>
 
           <label>
+            Password
             <PasswordInput
               className="input"
               value={password}

@@ -90,19 +90,46 @@ test.describe('CONNECT role screen interactions', () => {
     ).toBeVisible();
   });
 
+  test('company operator navigation follows the URL and browser history', async ({ page }) => {
+    await openRolePage(page, 'company_operator', '/company-operator/trips');
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Departures' }),
+    ).toBeVisible();
+
+    await page.getByRole('button', { name: 'Bookings', exact: true }).click();
+    await expect(page).toHaveURL(/\/company-operator\/bookings$/);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Bookings' }),
+    ).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/company-operator\/trips$/);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Departures' }),
+    ).toBeVisible();
+  });
+
+  test('unknown company operator routes return to the overview', async ({ page }) => {
+    await openRolePage(page, 'company_operator', '/company-operator/not-a-real-page');
+
+    await expect(page).toHaveURL(/\/company-operator$/);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Good to see you');
+  });
+
   test('driver portal exposes operational navigation and opens trips', async ({ page }) => {
     await openRolePage(page, 'driver', '/driver');
 
-    await expect(page.getByRole('link', { name: "Today's Trips" })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'My timetable' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Passengers' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Live Location' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Pickup Manifest' })).toBeVisible();
 
-    await page.getByRole('link', { name: "Today's Trips" }).click();
+    await page.getByRole('link', { name: 'My timetable' }).click();
 
     await expect(page).toHaveURL(/\/driver\/trips$/);
     await expect(
-      page.getByRole('heading', { level: 1, name: "Today's Trips" }),
+      page.getByRole('heading', { level: 1, name: 'My timetable' }),
     ).toBeVisible();
   });
 });

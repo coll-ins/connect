@@ -632,6 +632,10 @@ class BookingsAppTests(APITestCase):
         )
 
     def test_update_passenger_location(self):
+        self.trip.status = "boarding"
+        self.trip.save(update_fields=["status"])
+        self.booking.driver = self.driver
+        self.booking.save(update_fields=["driver"])
         self.client.force_authenticate(user=self.passenger)
         url = reverse("bookings:update-passenger-location", kwargs={"booking_id": self.booking.id})
         response = self.client.post(url, {"latitude": -1.2921, "longitude": 36.8219}, format="json")
@@ -2972,4 +2976,3 @@ class CancellationTripStateRaceTests(TransactionTestCase):
             self.booking.status,
             "confirmed",
         )
-

@@ -1,18 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import Notice, { NoticeStack } from '../../components/ui/Notice';
 import PassengerLiveMap from './PassengerLiveMap';
 import { apiRequest } from '../../api';
 
 export default function PassengerMapPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const requestedBookingId = searchParams.get('booking');
-  const [booking, setBooking] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const initialBooking = location.state?.booking;
+  const hasInitialBooking =
+    initialBooking &&
+    String(initialBooking.booking_id || initialBooking.id) ===
+      String(requestedBookingId);
+  const [booking, setBooking] = useState(hasInitialBooking ? initialBooking : null);
+  const [trackingAvailable, setTrackingAvailable] = useState(
+    Boolean(
+      hasInitialBooking &&
+        String(initialBooking.status || '').toLowerCase() === 'confirmed' &&
+        ['boarding', 'departed'].includes(
+          String(initialBooking.trip_status || '').toLowerCase(),
+        ) &&
+        initialBooking.driver_id,
+    ),
+  );
+  const [loading, setLoading] = useState(!hasInitialBooking);
   const [error, setError] = useState('');
 
   const loadBooking = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasInitialBooking) setLoading(true);
 
       const data = await apiRequest('/bookings/my/');
       const bookings = Array.isArray(data) ? data : [];
@@ -37,6 +55,7 @@ export default function PassengerMapPage() {
 
         if (!exact) {
           setBooking(null);
+          setTrackingAvailable(false);
           setError('That booking could not be found in your bookings.');
           return;
         }
@@ -44,29 +63,32 @@ export default function PassengerMapPage() {
         if (!isTrackable(exact)) {
           const bookingStatus = String(exact.status || '').toLowerCase();
           const tripStatus = String(exact.trip_status || '').toLowerCase();
+          if (
+            bookingStatus !== 'confirmed' ||
+            ['cancelled', 'completed', 'no_show'].includes(bookingStatus) ||
+            ['completed', 'cancelled'].includes(tripStatus)
+          ) {
+            let message = 'This trip is not available for live tracking yet.';
 
-          let message = 'This trip is not available for live tracking yet.';
+            if (['cancelled', 'completed', 'no_show'].includes(bookingStatus)) {
+              message = 'This booking is no longer active.';
+            } else if (['completed', 'cancelled'].includes(tripStatus)) {
+              message = tripStatus === 'completed'
+                ? 'This trip has already been completed.'
+                : 'This trip has been cancelled.';
+            } else if (bookingStatus !== 'confirmed') {
+              message = 'This booking is not confirmed.';
+            }
 
-          if (['cancelled', 'completed', 'no_show'].includes(bookingStatus)) {
-            message = 'This booking is no longer active.';
-          } else if (['completed', 'cancelled'].includes(tripStatus)) {
-            message = tripStatus === 'completed'
-              ? 'This trip has already been completed.'
-              : 'This trip has been cancelled.';
-          } else if (bookingStatus !== 'confirmed') {
-            message = 'This booking is not confirmed.';
-          } else if (!['boarding', 'departed'].includes(tripStatus)) {
-            message = 'Live tracking becomes available when the trip starts boarding or departs.';
-          } else if (!exact.driver_id) {
-            message = 'A driver has not yet been assigned to this trip.';
+            setBooking(null);
+            setTrackingAvailable(false);
+            setError(message);
+            return;
           }
-
-          setBooking(null);
-          setError(message);
-          return;
         }
 
         setBooking(exact);
+        setTrackingAvailable(isTrackable(exact));
         setError('');
         return;
       }
@@ -88,6 +110,7 @@ export default function PassengerMapPage() {
 
       if (!usable.length) {
         setBooking(null);
+        setTrackingAvailable(false);
         setError(
           'You do not have an active trip to track yet. Live tracking is available once a confirmed trip is boarding or departed and has an assigned driver.',
         );
@@ -95,14 +118,18 @@ export default function PassengerMapPage() {
       }
 
       setBooking(usable[0]);
+      setTrackingAvailable(true);
       setError('');
     } catch (err) {
-      setBooking(null);
+      if (!hasInitialBooking) {
+        setBooking(null);
+        setTrackingAvailable(false);
+      }
       setError(err.message || 'Unable to load your trips.');
     } finally {
       setLoading(false);
     }
-  }, [requestedBookingId]);
+  }, [hasInitialBooking, requestedBookingId]);
 
   useEffect(() => {
     loadBooking();
@@ -136,6 +163,16 @@ export default function PassengerMapPage() {
           background: '#f1f5f9',
         }}
       >
+        <NoticeStack>
+          {error && (
+            <Notice title="We couldn't load your trip">
+              {error}{' '}
+              <button type="button" onClick={loadBooking}>
+                Try again
+              </button>
+            </Notice>
+          )}
+        </NoticeStack>
         <div
           style={{
             width: 'min(420px, 100%)',
@@ -158,7 +195,7 @@ export default function PassengerMapPage() {
 
           <button
             type="button"
-            onClick={() => window.history.back()}
+            onClick={() => navigate('/passenger')}
             style={{
               border: 0,
               borderRadius: 12,
@@ -179,6 +216,8 @@ export default function PassengerMapPage() {
   return (
     <PassengerLiveMap
       bookingId={booking.booking_id || booking.id}
+      bookingDetails={booking}
+      trackingAvailable={trackingAvailable}
       routeGeometry={
         booking.route_geometry ||
         booking.trip?.route_geometry ||
@@ -208,7 +247,7 @@ export default function PassengerMapPage() {
           booking.pickup_stage?.id ??
           null,
       }}
-      onBack={() => window.history.back()}
+      onBack={() => navigate('/passenger')}
     />
   );
 }
