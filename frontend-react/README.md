@@ -36,9 +36,11 @@ npm run build
 
 ## Vercel frontend
 
-The repository-root `vercel.json` builds and serves this Vite frontend. Django
-must remain deployed separately; Vercel hosts the static frontend, not the
-Channels/Django backend.
+The repository-root `vercel.json` builds and serves this Vite frontend when the
+Vercel project root is the repository. If the Vercel project root is set to
+`frontend-react`, its `vercel.json` provides the SPA fallback so direct routes
+such as `/login` resolve to the app. Django must remain deployed separately;
+Vercel hosts the static frontend, not the Channels/Django backend.
 
 Set these Vercel project environment variables for the production deployment:
 
