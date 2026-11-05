@@ -1,6 +1,59 @@
 const API_ORIGIN = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '';
 export const API_HOST = API_ORIGIN ? new URL(API_ORIGIN).host : '';
 const API_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
+let latestRequestError = '';
+
+export function notifyRequestError(message) {
+  latestRequestError = message;
+  window.dispatchEvent(
+    new CustomEvent('connect:request-error', { detail: { message } }),
+  );
+}
+
+export function getLatestRequestError() {
+  return latestRequestError;
+}
+
+export function clearRequestError() {
+  latestRequestError = '';
+}
+
+function getErrorMessage(status, data) {
+  if (status === 401) {
+    if (typeof data?.error === 'string') return data.error;
+    return 'Your session may have expired. Please sign in and try again.';
+  }
+  if (status === 403) {
+    return 'You don’t have permission to do that. Please check your account and try again.';
+  }
+  if (status === 404) {
+    return 'We couldn’t find what you’re looking for. Please refresh and try again.';
+  }
+  if (status === 405) {
+    return 'That action isn’t available right now. Please try again later.';
+  }
+  if (status === 408) {
+    return 'That took too long. Please try again.';
+  }
+  if (status === 429) {
+    return 'You’ve tried too many times. Please wait a little and try again.';
+  }
+  if (status >= 500) {
+    return 'Something went wrong on our end. Please try again shortly.';
+  }
+
+  if (data && typeof data === 'object') {
+    if (typeof data.error === 'string') return data.error;
+    if (typeof data.detail === 'string') return data.detail;
+    const first = Object.values(data).find((value) =>
+      Array.isArray(value) ? value.length : typeof value === 'string'
+    );
+    if (Array.isArray(first) && typeof first[0] === 'string') return first[0];
+    if (typeof first === 'string') return first;
+  }
+
+  return 'We couldn’t complete that. Please try again.';
+}
 
 function getCookie(name) {
   return document.cookie
@@ -54,12 +107,11 @@ export async function apiRequest(endpoint, options = {}) {
 
     response = await fetch(url, { ...config, signal: controller.signal });
   } catch (e) {
-    throw new Error(
-      e?.name === 'AbortError'
-        ? 'CONNECT is taking longer than expected. Check your connection and try again.'
-        : "We couldn't reach CONNECT. Check your internet connection and try again.",
-      { cause: e },
-    );
+    const message = e?.name === 'AbortError'
+      ? 'CONNECT is taking longer than expected. Check your connection and try again.'
+      : "We couldn't reach CONNECT. Check your internet connection and try again.";
+    notifyRequestError(message);
+    throw new Error(message, { cause: e });
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', abortFromCaller);
@@ -73,16 +125,15 @@ export async function apiRequest(endpoint, options = {}) {
     try { data = await response.text(); } catch { data = null; }
   }
 
+  if (response.ok && contentType.includes('text/html')) {
+    const message = 'We couldn’t load your account. Please refresh and try again.';
+    notifyRequestError(message);
+    throw new Error(message);
+  }
+
   if (!response.ok) {
-    let message = `Request failed (${response.status})`;
-    if (data && typeof data === 'object') {
-      if (typeof data.error === 'string') message = data.error;
-      else if (typeof data.detail === 'string') message = data.detail;
-      else {
-        const first = Object.values(data).find((v) => Array.isArray(v) ? v.length : typeof v === 'string');
-        message = Array.isArray(first) ? first[0] : (first || message);
-      }
-    }
+    const message = getErrorMessage(response.status, data);
+    notifyRequestError(message);
     const error = new Error(message);
     error.status = response.status;
     error.data = data;

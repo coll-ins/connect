@@ -39,18 +39,19 @@ npm run build
 The repository-root `vercel.json` builds and serves this Vite frontend when the
 Vercel project root is the repository. If the Vercel project root is set to
 `frontend-react`, its `vercel.json` provides the SPA fallback so direct routes
-such as `/login` resolve to the app. Django must remain deployed separately;
-Vercel hosts the static frontend, not the Channels/Django backend.
+such as `/login` resolve to the app. Both configs forward `/api/*` requests to
+the Render backend before applying the SPA fallback; this prevents API requests
+from receiving the frontend HTML instead of reaching Django. Django must remain
+deployed separately; Vercel hosts the static frontend, not the Channels/Django
+backend.
 
-Set these Vercel project environment variables for the production deployment:
-
-- `VITE_API_URL`: HTTPS origin of the Django backend, for example
-  `https://api.example.com` (no trailing slash or `/api`).
-- `VITE_WS_HOST`: backend hostname for live-location WebSockets, for example
-  `api.example.com` (no scheme or path).
+Set `VITE_WS_HOST` to the backend hostname (`connect-lhqy.onrender.com`) in
+Vercel to enable live-location WebSockets. The API proxy does not proxy
+WebSockets.
 
 On the backend, include the API hostname in `ALLOWED_HOSTS`, and set
-`CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` to the exact Vercel frontend origin.
+`CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` to the exact Vercel frontend origin
+(for example, `https://connect-zj9i-gamma.vercel.app`).
 If frontend and backend are on different site domains, also set
 `CROSS_SITE_COOKIE_AUTH=True`; this requires HTTPS and enables cross-site
 session/CSRF cookies. For reliable session authentication, use a custom

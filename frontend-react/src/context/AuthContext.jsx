@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { apiRequest } from '../api';
+import { apiRequest, notifyRequestError } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -101,6 +101,7 @@ export function AuthProvider({ children }) {
         ) {
           if (e instanceof InvalidAccountRoleError) {
             console.error('[AUTH] Invalid account profile; clearing the stale session.', e);
+            notifyRequestError('We couldn’t verify your account. Please sign in again.');
           }
           setUser(null);
           localStorage.removeItem('user_session');
