@@ -39,11 +39,10 @@ npm run build
 The repository-root `vercel.json` builds and serves this Vite frontend when the
 Vercel project root is the repository. If the Vercel project root is set to
 `frontend-react`, its `vercel.json` provides the SPA fallback so direct routes
-such as `/login` resolve to the app. Both configs forward `/api/*` requests to
-the Render backend before applying the SPA fallback; this prevents API requests
-from receiving the frontend HTML instead of reaching Django. Django must remain
-deployed separately; Vercel hosts the static frontend, not the Channels/Django
-backend.
+such as `/login` resolve to the app. Both configs explicitly proxy `/api/*` to
+the Render backend before checking static files and then applying the SPA
+fallback. Django must remain deployed separately; Vercel hosts the static
+frontend, not the Channels/Django backend.
 
 Set `VITE_WS_HOST` to the backend hostname (`connect-lhqy.onrender.com`) in
 Vercel to enable live-location WebSockets. The API proxy does not proxy
