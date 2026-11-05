@@ -3,14 +3,17 @@
   "installCommand": "npm ci --prefix frontend-react",
   "buildCommand": "npm run build --prefix frontend-react",
   "outputDirectory": "frontend-react/dist",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "https://connect-lhqy.onrender.com/api/:path*"
+      "src": "/api/(.*)",
+      "dest": "https://connect-lhqy.onrender.com/api/$1"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
