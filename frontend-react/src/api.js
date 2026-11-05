@@ -88,7 +88,7 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20000);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 65000);
   const abortFromCaller = () => controller.abort();
   if (options.signal?.aborted) controller.abort();
   else options.signal?.addEventListener('abort', abortFromCaller, { once: true });

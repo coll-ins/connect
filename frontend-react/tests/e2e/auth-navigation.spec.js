@@ -12,6 +12,7 @@ test.describe('CONNECT public entry and access guards', () => {
   test('login page exposes labelled credentials and signup link', async ({ page }) => {
     await page.goto('/login');
 
+    await expect(page.locator('.splash')).toHaveCount(0);
     await expect(
       page.getByRole('heading', { name: 'Welcome back' }),
     ).toBeVisible();
@@ -206,5 +207,34 @@ test.describe('CONNECT public entry and access guards', () => {
     expect((await errorBanner.boundingBox()).y).toBeLessThan(100);
     await expect(page.getByText(/405|Method 'POST'/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+  });
+
+  test('slow sign-in explains that the free server may be waking up', async ({ page, context }) => {
+    await page.goto('/login');
+
+    await context.addCookies([{
+      name: 'csrftoken',
+      value: 'playwright-test-csrf',
+      url: 'http://127.0.0.1:4173',
+    }]);
+
+    await page.route('**/api/users/login/', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Invalid phone number or password.' }),
+      });
+    });
+
+    await page.getByLabel('Phone number').fill('0712345678');
+    await page.getByRole('textbox', { name: 'Password' }).fill('test-password-only');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    await expect(page.getByRole('status')).toHaveText(
+      'The free server can take up to 50 seconds to wake up. Keep this page open.',
+    );
+    await expect(page.getByRole('alert')).toBeInViewport();
+    await expect(page.getByRole('status')).toHaveCount(0);
   });
 });

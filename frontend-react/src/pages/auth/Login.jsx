@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
@@ -12,6 +12,16 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [slowConnection, setSlowConnection] = useState(false);
+
+  useEffect(() => {
+    if (!loading) {
+      setSlowConnection(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setSlowConnection(true), 1200);
+    return () => window.clearTimeout(timer);
+  }, [loading]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -75,8 +85,13 @@ export default function Login() {
             className="btn btn-primary btn-full"
             disabled={loading}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? (slowConnection ? 'Still connecting…' : 'Signing in…') : 'Sign in'}
           </button>
+          {slowConnection && (
+            <p role="status" className="muted">
+              The free server can take up to 50 seconds to wake up. Keep this page open.
+            </p>
+          )}
         </form>
 
         <p className="auth-footer">
