@@ -140,3 +140,24 @@ for (const scenario of scenarios) {
     });
   }
 }
+
+test('company manager sidebar scrolls on short desktop screens', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 420 });
+  await prepareScreen(page, 'company_manager');
+  await page.goto('/company-manager');
+
+  const sidebar = page.locator('.company-sidebar');
+  const settings = sidebar.locator('a[href="/company-manager/settings"]');
+  const logout = sidebar.locator('.company-manager-logout-link');
+
+  expect(await sidebar.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+
+  for (const target of [settings, logout]) {
+    await target.scrollIntoViewIfNeeded();
+    expect(await target.evaluate((el) => {
+      const sidebarRect = el.closest('.company-sidebar').getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      return rect.top >= sidebarRect.top && rect.bottom <= sidebarRect.bottom;
+    })).toBe(true);
+  }
+});

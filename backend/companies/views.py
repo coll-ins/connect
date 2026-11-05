@@ -489,6 +489,18 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
             | Q(status='boarding', departure_at__gt=_now - _win)
         )
 
+        selected_date = request.query_params.get('date')
+        if selected_date:
+            from django.utils.dateparse import parse_date
+
+            parsed_date = parse_date(selected_date)
+            if parsed_date is None:
+                return Response(
+                    {'error': 'A valid date is required.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(departure_at__date=parsed_date)
+
     data = [dict(item) for item in TripSerializer(queryset, many=True).data]
     if not user.is_authenticated:
         for item in data:

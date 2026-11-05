@@ -51,7 +51,7 @@ async function stubPaymentReturnApi(page, { failVerification = false } = {}) {
         status: 200,
         headers: { 'Set-Cookie': 'csrftoken=e2e-token; Path=/' },
         contentType: 'application/json',
-        body: '{}',
+        body: JSON.stringify({ csrfToken: 'e2e-token' }),
       });
       return;
     }
@@ -184,7 +184,7 @@ test('live map labels stale GPS, route progress, and the lack of live city traff
         status: 200,
         headers: { 'Set-Cookie': 'csrftoken=e2e-token; Path=/' },
         contentType: 'application/json',
-        body: '{}',
+        body: JSON.stringify({ csrfToken: 'e2e-token' }),
       });
       return;
     }
@@ -259,7 +259,7 @@ test('payment connection errors are explained in a top notice', async ({ page })
 
   await page.goto('/passenger/payment/42?reference=e2e-reference');
 
-  const notice = page.locator('.cn-stack');
+  const notice = page.getByRole('alert').first();
   await expect(notice).toContainText(
     "We couldn't reach CONNECT. Check your internet connection and try again.",
   );

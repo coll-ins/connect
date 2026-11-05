@@ -15,6 +15,15 @@ async function openRolePage(page, role, path) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
 
+    if (url.pathname === '/api/users/csrf/') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ csrfToken: 'e2e-csrf-token' }),
+      });
+      return;
+    }
+
     if (url.pathname === '/api/users/profile/') {
       await route.fulfill({
         status: 200,
@@ -161,6 +170,15 @@ test('driver live-location screen sends simulated coordinates to the location en
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ user: driver }),
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/users/csrf/') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ csrfToken: 'e2e-csrf-token' }),
       });
       return;
     }

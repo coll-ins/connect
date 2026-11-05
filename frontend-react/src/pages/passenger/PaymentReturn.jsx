@@ -14,13 +14,12 @@ export default function PaymentReturn() {
 
   useEffect(() => {
     let active = true;
-    const mapPageReady = import('./PassengerMapPage').then(
-      () => true,
-      () => false,
-    );
-
     (async () => {
       try {
+        const mapPageReady = import('./PassengerMapPage').then(
+          () => true,
+          () => false,
+        );
         const [data, bookings] = await Promise.all([
           apiRequest(
             `/bookings/payments/${bookingId}/verify/`,

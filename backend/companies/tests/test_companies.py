@@ -115,6 +115,50 @@ class CompanyFunctionViewsTests(APITestCase):
     )
     self.assertEqual(response_route.status_code, status.HTTP_200_OK)
 
+  def test_get_trips_date_filter_preserves_unfiltered_results(self):
+      self.client.force_authenticate(user=self.user)
+
+      first_departure = (timezone.now() + timezone.timedelta(days=3)).replace(
+          hour=10, minute=0, second=0, microsecond=0
+      )
+      second_departure = first_departure + timezone.timedelta(days=2)
+
+      first_trip = Trip.objects.create(
+          route=self.route,
+          driver=self.driver,
+          departure_at=first_departure,
+          capacity=50,
+          status='scheduled',
+      )
+      second_trip = Trip.objects.create(
+          route=self.route,
+          driver=self.driver,
+          departure_at=second_departure,
+          capacity=50,
+          status='scheduled',
+      )
+
+      no_date = self.client.get(
+          self.trips_url, {'route_id': self.route.pk}
+      )
+      self.assertEqual(no_date.status_code, status.HTTP_200_OK)
+      no_date_ids = {item['id'] for item in no_date.data}
+      self.assertTrue({first_trip.pk, second_trip.pk} <= no_date_ids)
+
+      selected_date = timezone.localtime(first_departure).date().isoformat()
+      dated = self.client.get(
+          self.trips_url,
+          {'route_id': self.route.pk, 'date': selected_date},
+      )
+      self.assertEqual(dated.status_code, status.HTTP_200_OK)
+      self.assertEqual({item['id'] for item in dated.data}, {first_trip.pk})
+
+      invalid_date = self.client.get(
+          self.trips_url,
+          {'route_id': self.route.pk, 'date': 'not-a-date'},
+      )
+      self.assertEqual(invalid_date.status_code, status.HTTP_400_BAD_REQUEST)
+
   def test_get_company_trips_url(self):
     self.client.force_authenticate(user=self.user)
     url = reverse("get_company_trips", kwargs={"company_id": self.company.pk})
@@ -1393,5 +1437,3 @@ class RouteHistoryDeletionTests(APITestCase):
         self.assertTrue(
             Route.objects.filter(pk=self.route.pk).exists()
         )
-
-

@@ -23,6 +23,7 @@
 }
 .cn-notice-error { background: #3b0d12; border-color: #f87171; color: #fff1f1; }
 .cn-notice-success { background: #06281d; border-color: #34d399; color: #eafff6; }
+.cn-notice-info { background: #0c2538; border-color: #38bdf8; color: #e0f2fe; }
 .cn-notice-icon {
   flex: none;
   width: 24px;
