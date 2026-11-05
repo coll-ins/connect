@@ -19,9 +19,11 @@ import { apiRequest } from "../../api";
 import DriverJobs from "./DriverJobs";
 import "./DriverPortal.css";
 
+const SERVICE_TIME_ZONE = "Africa/Nairobi";
+
 const nav = [
   ["/driver", "Overview", LayoutDashboard],
-  ["/driver/trips", "Today's Trips", CalendarDays],
+  ["/driver/trips", "My timetable", CalendarDays],
   ["/driver/passengers", "Passengers", Users],
   ["/driver/location", "Live Location", MapPin],
   ["/driver/boarding", "Pickup Manifest", CheckCircle2],
@@ -30,13 +32,68 @@ const nav = [
 ];
 
 function pageTitle(path) {
-  if (path.startsWith("/driver/trips")) return "Today's Trips";
+  if (path.startsWith("/driver/trips")) return "My timetable";
   if (path.startsWith("/driver/passengers")) return "Passengers";
   if (path.startsWith("/driver/location")) return "Live Location";
   if (path.startsWith("/driver/boarding")) return "Pickup Manifest";
   if (path.startsWith("/driver/jobs")) return "Parcels & Hires";
   if (path.startsWith("/driver/profile")) return "Profile";
   return "Overview";
+}
+
+function getServiceDateKey(value) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: SERVICE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatServiceTime(value) {
+  return new Intl.DateTimeFormat("en-KE", {
+    timeZone: SERVICE_TIME_ZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatServiceDate(dateKey) {
+  return new Intl.DateTimeFormat("en-KE", {
+    timeZone: SERVICE_TIME_ZONE,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date(`${dateKey}T12:00:00+03:00`));
+}
+
+function getTripStatusLabel(status) {
+  return {
+    scheduled: "Scheduled",
+    boarding: "Boarding",
+    departed: "Departed",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  }[status] || "Status unavailable";
+}
+
+function TimetableTrip({ trip }) {
+  return (
+    <article className="driver-timetable-trip">
+      <strong className="driver-timetable-time">
+        {formatServiceTime(trip.departure_at)}
+      </strong>
+      <div className="driver-timetable-details">
+        <strong>{trip.route_name}</strong>
+        <span>
+          Bus {trip.bus_number} · {trip.start_point} to {trip.end_point} · {trip.capacity} seats
+        </span>
+      </div>
+      <span className={`driver-timetable-status driver-timetable-status-${trip.status}`}>
+        {getTripStatusLabel(trip.status)}
+      </span>
+    </article>
+  );
 }
 
 function getDriverName(driver) {
@@ -161,6 +218,9 @@ export default function DriverPortal() {
 
   const [driver, setDriver] = useState(null);
   const [bookings, setBookings] = useState([]);
+  const [timetable, setTimetable] = useState([]);
+  const [timetableLoading, setTimetableLoading] = useState(true);
+  const [timetableError, setTimetableError] = useState("");
   const [error, setError] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -219,6 +279,37 @@ export default function DriverPortal() {
   }, [reloadKey]);
 
   useEffect(() => {
+    if (!driver?.id) return undefined;
+
+    let mounted = true;
+    const loadTimetable = async () => {
+      try {
+        const result = await apiRequest("/drivers/me/timetable/");
+        if (!Array.isArray(result?.trips)) {
+          throw new Error("The timetable response was invalid.");
+        }
+        if (mounted) {
+          setTimetable(result.trips);
+          setTimetableError("");
+        }
+      } catch (err) {
+        if (mounted) {
+          setTimetableError(err?.message || "Unable to load your timetable.");
+        }
+      } finally {
+        if (mounted) setTimetableLoading(false);
+      }
+    };
+
+    loadTimetable();
+    const interval = window.setInterval(loadTimetable, 60_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [driver?.id]);
+
+  useEffect(() => {
     const t = window.setInterval(() => {
       if (document.visibilityState === "visible") setReloadKey((k) => k + 1);
     }, 8000);
@@ -231,6 +322,13 @@ export default function DriverPortal() {
         ? location.pathname === "/driver"
         : location.pathname.startsWith(path)
     )?.[0] || "/driver";
+  const todayKey = getServiceDateKey(new Date());
+  const todaysTrips = timetable.filter(
+    (trip) => getServiceDateKey(trip.departure_at) === todayKey,
+  );
+  const timetableDays = [...new Set(
+    timetable.map((trip) => getServiceDateKey(trip.departure_at)),
+  )].sort();
 
   const title = pageTitle(location.pathname);
   const driverName = getDriverName(driver);
@@ -422,6 +520,34 @@ export default function DriverPortal() {
             </div>
           )}
 
+          {active === "/driver" && (
+            <section className="driver-panel">
+              <div className="driver-panel-heading">
+                <div>
+                  <span className="driver-eyebrow">YOUR SCHEDULE</span>
+                  <h2>Today's timetable</h2>
+                </div>
+                <Link className="driver-timetable-link" to="/driver/trips">
+                  View full timetable
+                </Link>
+              </div>
+              {timetableLoading ? (
+                <div className="driver-empty">Loading your timetable…</div>
+              ) : timetableError ? (
+                <div className="driver-error">{timetableError}</div>
+              ) : todaysTrips.length ? (
+                <div className="driver-timetable-list">
+                  {todaysTrips.map((trip) => (
+                    <TimetableTrip key={trip.id} trip={trip} />
+                  ))}
+                </div>
+              ) : (
+                <div className="driver-empty">
+                  No trips are scheduled for you today.
+                </div>
+              )}
+            </section>
+          )}
 
           {active === "/driver" && (() => {
             const st = (b) => String(b.status || "").toLowerCase();
@@ -568,46 +694,47 @@ export default function DriverPortal() {
 
               <div className="driver-panel-heading">
                 <div>
-                  <span className="driver-eyebrow">
-                    DAILY OPERATIONS
-                  </span>
-
-                  <h2>Today's Trips</h2>
+                  <span className="driver-eyebrow">ASSIGNED DEPARTURES</span>
+                  <h2>My timetable</h2>
+                  <p className="driver-timetable-caption">
+                    Your assigned trips for the next seven days, in Nairobi time.
+                  </p>
                 </div>
               </div>
 
-              {bookings.length === 0 ? (
+              {timetableLoading ? (
                 <div className="driver-empty">
-                  No assigned trips found.
+                  Loading your timetable…
+                </div>
+              ) : timetableError ? (
+                <div className="driver-error">
+                  {timetableError}
+                </div>
+              ) : timetableDays.length === 0 ? (
+                <div className="driver-empty">
+                  No trips are scheduled for you in the next seven days.
                 </div>
               ) : (
-                <div className="driver-list">
-
-                  {bookings.map((b) => (
-                    <article
-                      className="driver-list-item"
-                      key={b.booking_id}
-                    >
-                      <div className="driver-list-icon">
-                        <Bus size={18} />
-                      </div>
-
-                      <div className="driver-list-content">
-                        <strong>
-                          {b.route ||
-                            `Booking #${b.booking_id}`}
-                        </strong>
-
-                        <span>
-                          Pickup:{" "}
-                          {b.pickup_location ||
-                            b.pickup_stage_name ||
-                            "Not specified"}
-                        </span>
-                      </div>
-                    </article>
-                  ))}
-
+                <div className="driver-timetable-days">
+                  {timetableDays.map((dateKey) => {
+                    const dayTrips = timetable.filter(
+                      (trip) => getServiceDateKey(trip.departure_at) === dateKey,
+                    );
+                    return (
+                      <section className="driver-timetable-day" key={dateKey}>
+                        <h3>
+                          {dateKey === todayKey
+                            ? "Today"
+                            : formatServiceDate(dateKey)}
+                        </h3>
+                        <div className="driver-timetable-list">
+                          {dayTrips.map((trip) => (
+                            <TimetableTrip key={trip.id} trip={trip} />
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
                 </div>
               )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
@@ -334,6 +334,21 @@ function Overview({ analytics, trips, bookings }) {
 }
 
 function Trips({ trips }) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredTrips = trips.filter((trip) =>
+    [
+      trip.id,
+      trip.route_details?.name || trip.route_name,
+      trip.driver_name,
+      trip.driver_bus_number,
+      trip.departure_at,
+      trip.status,
+    ].some((value) =>
+      String(value || '').toLowerCase().includes(normalizedQuery)
+    )
+  );
+
   return (
     <>
       <SectionHeader
@@ -347,34 +362,61 @@ function Trips({ trips }) {
         <div className="audit-panel-head">
           <div>
             <h2>Trip register</h2>
-            <p>{trips.length} trip records available for review.</p>
+            <p>{filteredTrips.length} of {trips.length} trip records available for review.</p>
           </div>
           <CalendarDays size={19} />
         </div>
 
+        <form className="audit-search-form" onSubmit={(event) => event.preventDefault()}>
+          <Search size={18} />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search trip ID, route, driver, bus or status"
+            aria-label="Search auditor trip register"
+          />
+        </form>
+
         <DataTable>
           <thead>
             <tr>
-              <th>Route</th>
-              <th>Departure</th>
-              <th>Driver</th>
-              <th>Status</th>
               <th>Trip ID</th>
+              <th>Route</th>
+              <th>Driver</th>
+              <th>Bus</th>
+              <th>Departure</th>
+              <th>Status</th>
             </tr>
           </thead>
 
           <tbody>
-            {trips.map((trip) => (
+            {filteredTrips.map((trip) => (
               <tr key={trip.id}>
-                <td>
-                  <strong>{trip.route_details?.name || trip.route_name || '—'}</strong>
-                </td>
-                <td>{date(trip.departure_at)}</td>
-                <td>{trip.driver_name || 'Unassigned'}</td>
-                <td><Status value={trip.status} /></td>
                 <td>#{trip.id}</td>
+                <td>
+                  <strong>
+                    {trip.route_details?.name || trip.route_name || '—'}
+                  </strong>
+                  {trip.route_details?.start_point &&
+                    trip.route_details?.end_point && (
+                      <small>
+                        {trip.route_details.start_point} →{' '}
+                        {trip.route_details.end_point}
+                      </small>
+                    )}
+                </td>
+                <td>{trip.driver_name || 'Unassigned'}</td>
+                <td>{trip.driver_bus_number || '—'}</td>
+                <td>{date(trip.departure_at)}</td>
+                <td><Status value={trip.status} /></td>
               </tr>
             ))}
+            {filteredTrips.length === 0 && (
+              <tr>
+                <td colSpan="6">No trips match your search.</td>
+              </tr>
+            )}
           </tbody>
         </DataTable>
       </section>
@@ -886,6 +928,7 @@ function Profile({ user }) {
 export default function CompanyAuditorDashboard() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [analytics, setAnalytics] = useState(null);
   const [trips, setTrips] = useState([]);
@@ -957,10 +1000,7 @@ export default function CompanyAuditorDashboard() {
       case 'receipts':
         return (
           <Receipts
-            onSearch={() => {
-              window.history.pushState({}, '', '/company-auditor/search');
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }}
+            onSearch={() => navigate('/company-auditor/search')}
           />
         );
 

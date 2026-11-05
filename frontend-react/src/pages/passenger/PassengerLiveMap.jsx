@@ -5,6 +5,7 @@ import BaseTileLayer from '../../components/maps/BaseTileLayer';
 import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { apiRequest } from '../../api';
+import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerLiveMap.css';
 import TiltedMapFrame, {
   MAP_TILT_ENABLED,
@@ -21,6 +22,10 @@ import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPositi
 import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
 import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '../../components/maps/route';
 import { stopIcon } from '../../components/maps/StopMarker';
+import {
+  estimateBusSpeedKmh,
+  recordDriverPosition,
+} from './liveMapUtils';
 
 function normalizePosition(value) {
   if (!value) return null;
@@ -338,11 +343,14 @@ const passengerIcon = createPassengerIcon();
  * polling stays as the safety net for the full envelope (stages,
  * incidents, trip status), so a dropped socket never breaks the map.
  */
-function useLiveSocket(bookingId, onLocation) {
+function useLiveSocket(bookingId, onLocation, enabled) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    if (!bookingId) return undefined;
+    if (!bookingId || !enabled) {
+      setConnected(false);
+      return undefined;
+    }
 
     let socket = null;
     let closed = false;
@@ -415,7 +423,7 @@ function useLiveSocket(bookingId, onLocation) {
         }
       }
     };
-  }, [bookingId, onLocation]);
+  }, [bookingId, enabled, onLocation]);
 
   return connected;
 }
@@ -446,20 +454,37 @@ function createPickupIcon(label) {
 
 export default function PassengerLiveMap({
   bookingId,
+  bookingDetails = null,
+  trackingAvailable = true,
   routeGeometry: bookingRouteGeometry = null,
   pickup: bookingPickup = null,
   onBack,
 }) {
   const [live, setLive] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(trackingAvailable);
   const [error, setError] = useState('');
+  const [locationError, setLocationError] = useState('');
   const [following, setFollowing] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(true);
   const [driverHistory, setDriverHistory] = useState([]);
+  const [clockNow, setClockNow] = useState(0);
   const pickupAlertSentRef = useRef(false);
+
+  useEffect(() => {
+    const updateClock = () => setClockNow(Date.now());
+    updateClock();
+    const timer = window.setInterval(updateClock, 10000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
 
   const loadLive = useCallback(async () => {
+    if (!trackingAvailable) {
+      setLoading(false);
+      return;
+    }
+
     if (!bookingId) {
       setLoading(false);
       setError('No active trip selected.');
@@ -471,20 +496,11 @@ export default function PassengerLiveMap({
         `/bookings/${bookingId}/live-location/`
       );
 
-      const nextDriver = normalizePosition(data?.driver);
       const now = Date.now();
 
-      if (nextDriver) {
-        setDriverHistory((previous) => [
-          ...previous.filter(
-            (item) => now - item.time < 15 * 60 * 1000
-          ),
-          {
-            position: nextDriver,
-            time: now,
-          },
-        ].slice(-8));
-      }
+      setDriverHistory((previous) =>
+        recordDriverPosition(previous, data?.driver, now),
+      );
 
       setLive({ ...data, _fetchedAt: now });
       setError('');
@@ -493,7 +509,7 @@ export default function PassengerLiveMap({
     } finally {
       setLoading(false);
     }
-  }, [bookingId]);
+  }, [bookingId, trackingAvailable]);
 
   /*
    * Merge one pushed location frame into the polled envelope.
@@ -530,34 +546,20 @@ export default function PassengerLiveMap({
       };
     });
 
-    const pushedDriver = normalizePosition(msg.driver);
-    if (pushedDriver) {
-      setDriverHistory((previous) => {
-        const now = Date.now();
-        const last = previous[previous.length - 1];
-
-        // Skip duplicates so the speed estimate stays honest.
-        if (
-          last &&
-          last.position[0] === pushedDriver[0] &&
-          last.position[1] === pushedDriver[1]
-        ) {
-          return previous;
-        }
-
-        return [
-          ...previous.filter(
-            (item) => now - item.time < 15 * 60 * 1000
-          ),
-          { position: pushedDriver, time: now },
-        ].slice(-8);
-      });
-    }
+    setDriverHistory((previous) =>
+      recordDriverPosition(previous, msg.driver),
+    );
   }, []);
 
-  const socketConnected = useLiveSocket(bookingId, applyLivePush);
+  const socketConnected = useLiveSocket(
+    bookingId,
+    applyLivePush,
+    trackingAvailable,
+  );
 
   useEffect(() => {
+    if (!trackingAvailable) return undefined;
+
     loadLive();
 
     // Socket live: polls slow to a 10s safety net for the full
@@ -566,10 +568,17 @@ export default function PassengerLiveMap({
     const timer = window.setInterval(loadLive, interval);
 
     return () => window.clearInterval(timer);
-  }, [loadLive, socketConnected]);
+  }, [loadLive, socketConnected, trackingAvailable]);
 
   useEffect(() => {
-    if (!bookingId || !navigator.geolocation) {
+    if (!bookingId || !trackingAvailable) {
+      return undefined;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationError(
+        'Location sharing is not available in this browser. You can still view your trip.',
+      );
       return undefined;
     }
 
@@ -578,6 +587,7 @@ export default function PassengerLiveMap({
 
     const sendLocation = (position) => {
       if (!active) return;
+      setLocationError('');
 
       const now = Date.now();
 
@@ -597,12 +607,27 @@ export default function PassengerLiveMap({
             position.coords.longitude.toFixed(6)
           ),
         },
-      }).catch(() => {});
+      }).catch((err) => {
+        if (active) {
+          setLocationError(
+            err.message || "We couldn't share your location. Check your internet connection and try again.",
+          );
+        }
+      });
+    };
+
+    const handleLocationError = (locationFailure) => {
+      if (!active) return;
+      setLocationError(
+        locationFailure.code === 1
+          ? 'Location access is blocked. Allow location access in your browser settings to show your position.'
+          : "We couldn't get your location. Check your device's location settings and try again.",
+      );
     };
 
     navigator.geolocation.getCurrentPosition(
       sendLocation,
-      () => {},
+      handleLocationError,
       {
         enableHighAccuracy: true,
         timeout: 10000,
@@ -612,7 +637,7 @@ export default function PassengerLiveMap({
 
     const watchId = navigator.geolocation.watchPosition(
       sendLocation,
-      () => {},
+      handleLocationError,
       {
         enableHighAccuracy: true,
         timeout: 15000,
@@ -624,7 +649,7 @@ export default function PassengerLiveMap({
       active = false;
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [bookingId]);
+  }, [bookingId, trackingAvailable]);
 
   const passengerPosition = useMemo(
     () => normalizePosition(live?.passenger),
@@ -859,21 +884,33 @@ export default function PassengerLiveMap({
   const busOffRoute = busGapKm != null && busGapKm > 1.5;
 
   const locationAgeMin = useMemo(() => {
+    const ageSeconds =
+      live?.location_age_seconds ??
+      live?.driver?.location_age_seconds;
+
+    if (Number.isFinite(ageSeconds) && live?._fetchedAt) {
+      return Math.max(
+        0,
+        (ageSeconds + (clockNow - live._fetchedAt) / 1000) / 60,
+      );
+    }
+
     const updated = live?.driver?.location_updated_at;
 
-    if (!updated || !live?._fetchedAt) return null;
+    if (!updated) return null;
 
     const time = Date.parse(updated);
 
     if (!Number.isFinite(time)) return null;
 
-    return Math.max(0, (live._fetchedAt - time) / 60000);
-  }, [live]);
+    return Math.max(0, (clockNow - time) / 60000);
+  }, [live, clockNow]);
 
   const busStale =
-    typeof live?.is_stale === 'boolean'
-      ? live.is_stale
-      : locationAgeMin == null || locationAgeMin * 60 > 120;
+    !driverTarget ||
+    live?.is_stale === true ||
+    locationAgeMin == null ||
+    locationAgeMin * 60 > 120;
   const busUnreliable = busOffRoute || busStale;
 
   const ageText =
@@ -907,14 +944,16 @@ export default function PassengerLiveMap({
 
   if (tripStatus === 'completed') {
     busStatus = 'Trip completed';
-  } else if (!tripLifecycleLive) {
-    busStatus = live ? 'Trip is not active' : 'Checking trip status';
+  } else if (!trackingAvailable) {
+    busStatus = 'Live tracking starts once boarding begins and a driver is assigned';
   } else if (!matchedDriverPosition) {
-    busStatus = 'Waiting for driver location';
+    busStatus = 'Waiting for a driver GPS update';
   } else if (busStale) {
     busStatus = locationAgeMin == null
-      ? 'Driver location is offline'
+      ? 'Driver GPS is stale; waiting for a fresh update'
       : `Last seen ${ageText} ago`;
+  } else if (!tripLifecycleLive) {
+    busStatus = live ? 'Trip is not active' : 'Checking trip status';
   } else if (busOffRoute) {
     busStatus = `Bus is ${formatDistance(busGapKm)} from the route`;
   } else if (busPastPickup) {
@@ -926,7 +965,8 @@ export default function PassengerLiveMap({
   const remainingRoute = useMemo(() => {
     if (
       geometry.length < 2 ||
-      driverRouteIndex < 0
+      driverRouteIndex < 0 ||
+      !matchedDriverPosition
     ) {
       return [];
     }
@@ -936,15 +976,16 @@ export default function PassengerLiveMap({
         ? pickupRouteIndex
         : destinationRouteIndex;
 
-    return geometry.slice(
-      Math.max(driverRouteIndex, 0),
-      targetIndex + 1,
-    );
+    return [
+      matchedDriverPosition,
+      ...geometry.slice(driverRouteIndex + 1, targetIndex + 1),
+    ];
   }, [
     geometry,
     driverRouteIndex,
     pickupRouteIndex,
     destinationRouteIndex,
+    matchedDriverPosition,
   ]);
 
   const distanceToPickupKm = useMemo(() => {
@@ -975,43 +1016,17 @@ export default function PassengerLiveMap({
   const remainingDistanceKm =
     busUnreliable || busPastPickup ? null : distanceToPickupKm;
 
-  const driverSpeedKmh = useMemo(() => {
-    const history = driverHistory;
-
-    if (history.length < 2) {
-      return 25;
-    }
-
-    const first = history[0];
-    const last = history[history.length - 1];
-
-    const elapsedHours =
-      (last.time - first.time) / 3600000;
-
-    if (elapsedHours <= 0) {
-      return 25;
-    }
-
-    const distance = haversineKm(
-      first.position,
-      last.position
-    );
-
-    if (!distance || distance < 0.02) {
-      return 25;
-    }
-
-    const speed = distance / elapsedHours;
-
-    return Math.min(Math.max(speed, 8), 80);
-  }, [driverHistory, driverPosition]);
+  const driverSpeedKmh = useMemo(
+    () => estimateBusSpeedKmh(driverHistory),
+    [driverHistory],
+  );
 
   const routeAlongM = routeMatch?.onRoute
     ? routeMatch.alongM
     : null;
   const nextStage = useMemo(
     () =>
-      routeAlongM != null
+      routeAlongM != null && driverSpeedKmh != null
         ? nextStageAhead(
             stagesOnRoute,
             routeAlongM,
@@ -1024,7 +1039,9 @@ export default function PassengerLiveMap({
   const etaMinutes = useMemo(() => {
     if (
       remainingDistanceKm == null ||
-      !Number.isFinite(remainingDistanceKm)
+      !Number.isFinite(remainingDistanceKm) ||
+      driverSpeedKmh == null ||
+      !tripLifecycleLive
     ) {
       return null;
     }
@@ -1032,8 +1049,36 @@ export default function PassengerLiveMap({
     return (remainingDistanceKm / driverSpeedKmh) * 60;
   }, [remainingDistanceKm, driverSpeedKmh]);
 
+  const totalRouteKm = useMemo(
+    () =>
+      geometry.length > 1
+        ? routeDistanceKm(geometry, 0, geometry.length - 1)
+        : 0,
+    [geometry],
+  );
+  const routeProgressPercent =
+    tripLifecycleLive &&
+    !busUnreliable &&
+    routeMatch?.onRoute &&
+    totalRouteKm > 0 &&
+    driverRouteIndex >= 0
+      ? Math.min(
+          100,
+          (routeDistanceKm(geometry, 0, driverRouteIndex) / totalRouteKm) *
+            100,
+        )
+      : null;
+  const pickupProgressPercent =
+    pickupRouteIndex >= 0 && totalRouteKm > 0
+      ? Math.min(
+          100,
+          (routeDistanceKm(geometry, 0, pickupRouteIndex) / totalRouteKm) *
+            100,
+        )
+      : null;
+
   const center =
-    matchedDriverPosition ||
+    (tripIsLive && matchedDriverPosition) ||
     passengerPosition ||
     geometry[0] ||
     [-1.286389, 36.817223];
@@ -1042,6 +1087,7 @@ export default function PassengerLiveMap({
     live?.route_name ||
     live?.trip?.route_name ||
     live?.route?.name ||
+    bookingDetails?.route_name ||
     'Your trip';
 
   const busNumber =
@@ -1049,9 +1095,10 @@ export default function PassengerLiveMap({
     live?.driver?.vehicle_registration ||
     live?.driver?.bus_registration ||
     live?.trip?.vehicle_registration ||
+    bookingDetails?.driver_bus_number ||
     'Vehicle';
 
-  const driverName = live?.driver?.name || null;
+  const driverName = live?.driver?.name || bookingDetails?.driver_name || null;
   const driverPhone = live?.driver?.phone || null;
   const showPickupLeg =
     Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable && !busPastPickup;
@@ -1205,7 +1252,12 @@ export default function PassengerLiveMap({
               />
             </>
           )}
-          <RouteProgress split={routeMatch?.split} weight={6} />
+          <RouteProgress
+            split={routeProgressPercent == null ? null : routeMatch?.split}
+            weight={7}
+            color="#16a34a"
+            opacity={0.95}
+          />
 
           {busOffRoute &&
             matchedDriverPosition &&
@@ -1317,6 +1369,24 @@ export default function PassengerLiveMap({
         </>
       )}
 
+      {(error && !loading) || locationError ? (
+        <NoticeStack>
+          {error && !loading && (
+            <Notice title="Live map unavailable" onClose={() => setError('')}>
+              {error}{' '}
+              <button type="button" onClick={loadLive}>
+                Try again
+              </button>
+            </Notice>
+          )}
+          {locationError && (
+            <Notice title="Location not shared" onClose={() => setLocationError('')}>
+              {locationError}
+            </Notice>
+          )}
+        </NoticeStack>
+      ) : null}
+
       <header className="passenger-live-map__topbar">
         <button
           type="button"
@@ -1331,7 +1401,7 @@ export default function PassengerLiveMap({
           <strong>{routeName}</strong>
           <span>
             <Radio size={13} />
-            Live trip
+            {trackingAvailable ? 'Live trip' : 'Trip confirmed'}
           </span>
         </div>
 
@@ -1359,16 +1429,6 @@ export default function PassengerLiveMap({
       {loading && (
         <div className="passenger-live-map__loading">
           Loading live trip…
-        </div>
-      )}
-
-      {error && !loading && (
-        <div className="passenger-live-map__error">
-          <strong>Live map unavailable</strong>
-          <span>{error}</span>
-          <button type="button" onClick={loadLive}>
-            Retry
-          </button>
         </div>
       )}
 
@@ -1543,6 +1603,73 @@ export default function PassengerLiveMap({
           </div>
         </div>
 
+        {geometry.length > 1 && (
+          <div className="passenger-live-map__route-progress">
+            <div className="passenger-live-map__route-progress-heading">
+              <strong>TRIP ROUTE PROGRESS</strong>
+              <span>
+                {routeProgressPercent == null
+                  ? busStatus
+                  : 'Green shows the route already traveled'}
+              </span>
+            </div>
+            <div
+              className="passenger-live-map__route-progress-track"
+              role="progressbar"
+              aria-label="Bus progress along the trip route"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={routeProgressPercent ?? 0}
+              aria-valuetext={
+                routeProgressPercent == null
+                  ? 'Waiting for a fresh GPS update'
+                  : `${Math.round(routeProgressPercent)} percent of the route traveled`
+              }
+            >
+              {routeProgressPercent != null && (
+                <>
+                  <span
+                    className="passenger-live-map__route-progress-fill"
+                    style={{ width: `${routeProgressPercent}%` }}
+                    aria-hidden="true"
+                  />
+                  <span
+                    className="passenger-live-map__route-progress-bus"
+                    style={{ left: `${routeProgressPercent}%` }}
+                    aria-hidden="true"
+                  />
+                </>
+              )}
+              {pickupProgressPercent != null && (
+                <span
+                  className="passenger-live-map__route-progress-pickup"
+                  style={{ left: `${pickupProgressPercent}%` }}
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+            <div className="passenger-live-map__route-progress-labels">
+              <span>Trip start</span>
+              <span>{pickup || 'Pickup'}</span>
+              <span>Destination</span>
+            </div>
+            <div className="passenger-live-map__route-progress-legend">
+              <span><i className="is-traveled" />Traveled</span>
+              <span><i className="is-to-pickup" />Bus to pickup</span>
+              <span><i className="is-route" />Full route</span>
+            </div>
+          </div>
+        )}
+
+        <div className="passenger-live-map__traffic-note" role="status">
+          <strong>Traffic information</strong>
+          <span>
+            {driverSpeedKmh != null && !busUnreliable && tripLifecycleLive
+              ? `Recent bus GPS speed: about ${driverSpeedKmh} km/h. This is a bus-speed estimate, not live city traffic.`
+              : 'No live city-traffic feed is available. A bus-speed estimate will appear only when recent, reliable GPS updates support one.'}
+          </span>
+        </div>
+
         <div className="passenger-live-map__pickup">
           <div className="passenger-live-map__pickup-dot" />
           <div>
@@ -1550,7 +1677,7 @@ export default function PassengerLiveMap({
             <strong>{pickup}</strong>
             <span>
               {pickupPosition
-                ? (busPastPickup ? 'The bus has already passed this stop' : busUnreliable ? 'ETA appears once the bus is on the route' : `${formatEta(etaMinutes)} · ${formatDistance(distanceToPickupKm)}`)
+                ? (busPastPickup ? 'The bus has already passed this stop' : busStale ? 'ETA paused until a fresh GPS update' : busOffRoute ? 'ETA unavailable while the bus is off route' : `${etaMinutes == null ? 'ETA unavailable' : formatEta(etaMinutes)} · ${formatDistance(distanceToPickupKm)}`)
                 : 'This pickup point is not placed on the map'}
             </span>
           </div>

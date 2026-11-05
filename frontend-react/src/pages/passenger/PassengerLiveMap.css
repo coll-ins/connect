@@ -13,6 +13,10 @@
   inset: 0;
 }
 
+.passenger-live-map > .cn-stack {
+  top: max(88px, calc(env(safe-area-inset-top) + 72px));
+}
+
 .passenger-live-map__leaflet {
   width: 100%;
   height: 100%;
@@ -140,6 +144,9 @@
 
   padding: 12px 18px 18px;
   border-radius: 25px;
+  max-height: min(72dvh, 620px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 
   background: rgba(255,255,255,.97);
   border: 1px solid rgba(15,23,42,.08);
@@ -276,6 +283,133 @@
   margin-top: 2px;
   color: #334155;
   font-size: 12px;
+}
+
+.passenger-live-map__route-progress {
+  margin-top: 14px;
+  padding: 11px 12px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.passenger-live-map__route-progress-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #334155;
+  font-size: 9px;
+}
+
+.passenger-live-map__route-progress-heading strong {
+  font-size: 9px;
+  letter-spacing: .06em;
+}
+
+.passenger-live-map__route-progress-heading span {
+  color: #64748b;
+  text-align: right;
+}
+
+.passenger-live-map__route-progress-track {
+  position: relative;
+  height: 7px;
+  margin: 11px 5px 8px;
+  border-radius: 999px;
+  background: #dbe3ec;
+}
+
+.passenger-live-map__route-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: #16a34a;
+}
+
+.passenger-live-map__route-progress-bus,
+.passenger-live-map__route-progress-pickup {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.passenger-live-map__route-progress-bus {
+  width: 13px;
+  height: 13px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1677ff;
+  box-shadow: 0 0 0 1px #1677ff;
+}
+
+.passenger-live-map__route-progress-pickup {
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: #111827;
+}
+
+.passenger-live-map__route-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.passenger-live-map__route-progress-labels span:nth-child(2) {
+  max-width: 40%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.passenger-live-map__route-progress-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  color: #64748b;
+  font-size: 8px;
+}
+
+.passenger-live-map__route-progress-legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.passenger-live-map__route-progress-legend i {
+  width: 10px;
+  height: 4px;
+  border-radius: 999px;
+  background: #dbe3ec;
+}
+
+.passenger-live-map__route-progress-legend .is-traveled {
+  background: #16a34a;
+}
+
+.passenger-live-map__route-progress-legend .is-to-pickup {
+  background: #1677ff;
+}
+
+.passenger-live-map__traffic-note {
+  display: grid;
+  gap: 3px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.passenger-live-map__traffic-note strong {
+  font-size: 10px;
 }
 
 .passenger-live-map__gps-note {
@@ -478,6 +612,7 @@
   .passenger-live-map__sheet {
     width: calc(100% - 16px);
     bottom: max(8px, env(safe-area-inset-bottom));
+    max-height: min(70dvh, 560px);
     padding-left: 15px;
     padding-right: 15px;
     border-radius: 22px;

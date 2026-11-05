@@ -68,7 +68,7 @@ test.describe('CONNECT role-specific navigation', () => {
       await page.goto('/login');
 
       await page.getByLabel('Phone number').fill('0712345678');
-      await page.getByLabel('Password').fill('test-password-only');
+      await page.getByRole('textbox', { name: 'Password' }).fill('test-password-only');
       await page.getByRole('button', { name: 'Sign in' }).click();
 
       await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`));

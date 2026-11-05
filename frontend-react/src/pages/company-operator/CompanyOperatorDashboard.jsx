@@ -16,9 +16,30 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import './CompanyOperatorDashboard.css';
+
+const sectionByPath = {
+  '/company-operator': 'overview',
+  '/company-operator/overview': 'overview',
+  '/company-operator/bookings': 'bookings',
+  '/company-operator/trips': 'departures',
+  '/company-operator/departures': 'departures',
+  '/company-operator/drivers': 'drivers',
+  '/company-operator/capacity': 'capacity',
+  '/company-operator/operations': 'operations',
+};
+
+const pathBySection = {
+  overview: '/company-operator',
+  bookings: '/company-operator/bookings',
+  departures: '/company-operator/trips',
+  drivers: '/company-operator/drivers',
+  capacity: '/company-operator/capacity',
+  operations: '/company-operator/operations',
+};
 
 const formatDate = (value) => {
   if (!value) return '—';
@@ -496,6 +517,16 @@ function TripCard({ trip, onStatusChange, updating }) {
       </div>
 
       <div className="operator-trip-actions">
+        {String(trip.status || '').toLowerCase() === 'boarding' && (
+          <button
+            type="button"
+            className="operator-primary-button"
+            onClick={() => onStatusChange(trip, 'departed')}
+            disabled={updating}
+          >
+            {updating ? 'Confirming…' : 'Confirm bus departure'}
+          </button>
+        )}
         <label htmlFor={`trip-status-${trip.id}`}>
           Operational status
         </label>
@@ -628,30 +659,39 @@ function WalkInForm({ trip, onDone }) {
   );
 }
 
-const TRIP_STALE_HOURS = 12;
+const TRIP_HISTORY_DAYS = 30;
 
-const tripIsLog = (trip) => {
-  const status = String(trip?.status || '').toLowerCase();
-  if (status === 'completed' || status === 'cancelled') return true;
+const tripIsOutsideHistory = (trip) => {
   const departure = trip?.departure_at
     ? new Date(trip.departure_at).getTime()
     : NaN;
   if (Number.isNaN(departure)) return false;
-  return Date.now() - departure > TRIP_STALE_HOURS * 3600 * 1000;
+  return departure < Date.now() - TRIP_HISTORY_DAYS * 24 * 3600 * 1000;
 };
 
 export default function CompanyOperatorDashboard() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [activeSection, setActiveSection] = useState('overview');
+  const pathname = location.pathname.replace(/\/+$/, '') || '/company-operator';
+  const activeSection = sectionByPath[pathname];
+  const setActiveSection = (section) => {
+    const path = pathBySection[section];
+    if (path) navigate(path);
+  };
   const [trips, setTrips] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+  const [scheduleExceptions, setScheduleExceptions] = useState([]);
+  const [dataLoadedAt, setDataLoadedAt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [assigningBooking, setAssigningBooking] = useState(null);
   const [moveTarget, setMoveTarget] = useState('');
+  const [moveSearch, setMoveSearch] = useState('');
   const [movingBooking, setMovingBooking] = useState(false);
   const [moveError, setMoveError] = useState('');
   const [selectedDriver, setSelectedDriver] = useState('');
@@ -680,18 +720,22 @@ export default function CompanyOperatorDashboard() {
       setError('');
 
       try {
-        const [tripData, driverData, bookingData] = await Promise.all([
+        const [tripData, driverData, bookingData, incidentData, scheduleExceptionData] = await Promise.all([
           apiRequest(`/companies/${companyId}/trips/`),
           apiRequest(`/drivers/?company_id=${companyId}`),
           apiRequest(`/bookings/all/?company_id=${companyId}`),
+          apiRequest('/bookings/incidents/'),
+          apiRequest(`/companies/${companyId}/schedule-exceptions/`),
         ]);
 
-        setTrips(
-          (Array.isArray(tripData)
-            ? tripData
-            : tripData?.results || []
-          ).filter((trip) => !tripIsLog(trip))
+        const operationalTrips = (
+          Array.isArray(tripData) ? tripData : tripData?.results || []
+        ).filter((trip) => !tripIsOutsideHistory(trip));
+        const visibleTripIds = new Set(
+          operationalTrips.map((trip) => String(trip.id))
         );
+
+        setTrips(operationalTrips);
 
         setDrivers(
           Array.isArray(driverData)
@@ -704,6 +748,18 @@ export default function CompanyOperatorDashboard() {
             ? bookingData
             : bookingData?.results || []
         );
+        setIncidents(
+          (Array.isArray(incidentData)
+            ? incidentData
+            : incidentData?.results || []
+          ).filter((incident) =>
+            visibleTripIds.has(String(incident.trip))
+          )
+        );
+        setScheduleExceptions(
+          Array.isArray(scheduleExceptionData) ? scheduleExceptionData : []
+        );
+        setDataLoadedAt(Date.now());
       } catch (requestError) {
         setError(
           requestError?.message ||
@@ -794,6 +850,62 @@ export default function CompanyOperatorDashboard() {
       ),
     [trips]
   );
+
+  const interventionItems = useMemo(() => {
+    const activeIncidents = incidents
+      .filter((incident) =>
+        ['reported', 'investigating'].includes(
+          String(incident.status || '').toLowerCase()
+        )
+      )
+      .map((incident) => ({
+        key: `incident-${incident.id}`,
+        tripId: incident.trip,
+        title: `${incident.incident_type || 'Incident'} · Trip #${incident.trip}`,
+        detail: incident.description,
+        label: `INCIDENT · ${incident.status}`,
+      }));
+
+    const manualReviewTrips = trips
+      .filter((trip) => {
+        const departure = new Date(trip.departure_at || 0).getTime();
+        return (
+          String(trip.status || '').toLowerCase() === 'departed' &&
+          dataLoadedAt - departure >= 12 * 60 * 60 * 1000 &&
+          bookings.some(
+            (booking) =>
+              String(booking.trip_id) === String(trip.id) &&
+              getBookingStatus(booking) === 'confirmed'
+          )
+        );
+      })
+      .map((trip) => ({
+        key: `trip-review-${trip.id}`,
+        tripId: trip.id,
+        title: `Trip #${trip.id} needs review`,
+        detail: `${getTripRoute(trip)} departed over 12 hours ago and still has confirmed bookings.`,
+        label: 'DEPARTURE REVIEW',
+      }));
+
+    const generationIssues = scheduleExceptions.map((exception) => {
+      const causes = [];
+      if (exception.driver_unavailable_count) {
+        causes.push(`${exception.driver_unavailable_count} departures skipped: driver unavailable`);
+      }
+      if (exception.driver_conflict_count) {
+        causes.push(`${exception.driver_conflict_count} departures skipped: driver has a conflicting trip`);
+      }
+      return {
+        key: `schedule-generation-${exception.schedule_id}`,
+        title: `${exception.route_name} · Service template #${exception.schedule_id}`,
+        detail: `${causes.join('; ')}. Check the assigned driver and trip schedule, then escalate to the company manager. No automatic reassignment was made.`,
+        label: 'SCHEDULE GENERATION',
+        action: 'Review departures',
+      };
+    });
+
+    return [...activeIncidents, ...manualReviewTrips, ...generationIssues];
+  }, [bookings, dataLoadedAt, incidents, scheduleExceptions, trips]);
 
   const handleStatusChange = async (trip, newStatus) => {
     if (trip.status === newStatus) return;
@@ -934,6 +1046,7 @@ export default function CompanyOperatorDashboard() {
     setAssigningBooking(null);
     setSelectedDriver('');
     setMoveTarget('');
+    setMoveSearch('');
     setMoveError('');
   };
 
@@ -1589,32 +1702,89 @@ export default function CompanyOperatorDashboard() {
 
         <article className="operator-alert-card">
           <div className="operator-alert-icon">
+            <AlertCircle size={20} />
+          </div>
+
+          <div>
+            <span>NEEDS INTERVENTION</span>
+            <strong>{interventionItems.length}</strong>
+            <p>
+              Active incidents and overdue departures to review.
+            </p>
+          </div>
+        </article>
+
+        <article className={`operator-alert-card ${error ? '' : 'operator-alert-good'}`}>
+          <div className="operator-alert-icon">
+            {error ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+          </div>
+
+          <div>
+            <span>AUTOMATED MONITORING</span>
+            <strong>{error ? 'Attention required' : refreshing ? 'Refreshing' : 'Active'}</strong>
+            <p>
+              Updates every 30 seconds; load failures are shown above.
+            </p>
+          </div>
+        </article>
+
+        <article className="operator-alert-card">
+          <div className="operator-alert-icon">
             <Bus size={20} />
           </div>
 
           <div>
             <span>BOARDING</span>
             <strong>{boardingTrips.length}</strong>
-            <p>
-              Existing trips currently marked as boarding.
-            </p>
+            <p>Trips currently marked as boarding.</p>
           </div>
         </article>
+      </section>
 
-        <article className="operator-alert-card operator-alert-good">
-          <div className="operator-alert-icon">
-            <CheckCircle2 size={20} />
-          </div>
-
+      <section className="operator-panel">
+        <div className="operator-panel-heading">
           <div>
-            <span>SYSTEM STATUS</span>
-            <strong>Operational</strong>
-            <p>
-              Company operational data is refreshing
-              automatically.
-            </p>
+            <span className="operator-eyebrow">ACTION REQUIRED</span>
+            <h2>Exceptions needing intervention</h2>
           </div>
-        </article>
+        </div>
+
+        {interventionItems.length ? (
+          <div className="operator-new-bookings">
+            {interventionItems.map((item) => (
+              <article className="operator-booking-alert" key={item.key}>
+                <div className="operator-booking-alert-icon">
+                  <AlertCircle size={19} />
+                </div>
+                <div className="operator-booking-alert-content">
+                  <div className="operator-booking-alert-heading">
+                    <div>
+                      <span className="operator-eyebrow">{item.label}</span>
+                      <h3>{item.title}</h3>
+                    </div>
+                  </div>
+                  <p>{item.detail}</p>
+                </div>
+                <button
+                  type="button"
+                  className="operator-primary-button"
+                  onClick={() => setActiveSection('departures')}
+                >
+                  {item.action || 'Manage trip'}
+                  <ChevronRight size={16} />
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="operator-clear-state">
+            <div><CheckCircle2 size={23} /></div>
+            <div>
+              <strong>No operational exceptions need intervention</strong>
+              <span>New incidents and overdue departures will appear here.</span>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="operator-panel">
@@ -1686,6 +1856,10 @@ export default function CompanyOperatorDashboard() {
         return renderOverview();
     }
   };
+
+  if (!activeSection) {
+    return <Navigate to="/company-operator" replace />;
+  }
 
   return (
     <>
@@ -1821,6 +1995,16 @@ export default function CompanyOperatorDashboard() {
                   Or move this booking to another bus
                 </label>
 
+                <input
+                  type="search"
+                  className="operator-driver-select"
+                  value={moveSearch}
+                  onChange={(event) => setMoveSearch(event.target.value)}
+                  placeholder="Search trips by route, driver, bus or ID"
+                  aria-label="Search trips to move booking"
+                  disabled={movingBooking}
+                />
+
                 <select
                   id="operator-move-select"
                   className="operator-driver-select"
@@ -1829,15 +2013,28 @@ export default function CompanyOperatorDashboard() {
                   disabled={movingBooking}
                 >
                   <option value="">Choose a bus with free seats</option>
-                  {getMoveTargets().map(({ trip, free }) => (
-                    <option key={trip.id} value={trip.id}>
-                      {`Trip #${trip.id} • ${getTripRoute(trip)} • ${new Date(
-                        trip.departure_at
-                      ).toLocaleString()} • ${
-                        trip.driver_name || trip.driver?.name || 'No driver'
-                      } • ${free} free`}
-                    </option>
-                  ))}
+                  {getMoveTargets()
+                    .filter(({ trip }) =>
+                      [
+                        trip.id,
+                        getTripRoute(trip),
+                        trip.driver_name || trip.driver?.name,
+                        trip.driver_bus_number || trip.bus_number,
+                      ].some((value) =>
+                        String(value || '')
+                          .toLowerCase()
+                          .includes(moveSearch.trim().toLowerCase())
+                      )
+                    )
+                    .map(({ trip, free }) => (
+                      <option key={trip.id} value={trip.id}>
+                        {`Trip #${trip.id} • ${getTripRoute(trip)} • ${new Date(
+                          trip.departure_at
+                        ).toLocaleString()} • ${
+                          trip.driver_name || trip.driver?.name || 'No driver'
+                        } • ${free} free`}
+                      </option>
+                    ))}
                 </select>
 
                 {moveError && (

@@ -46,6 +46,7 @@ from .serializers import (
     IncidentSerializer,
 )
 from users.identity import drivers_for_user, is_driver_account_for
+from users.route_scope import operator_route_ids
 
 
 # ============================================================
@@ -3414,14 +3415,34 @@ def update_passenger_location(request, booking_id):
         )
 
     try:
-        booking = Booking.objects.get(
+        booking = Booking.objects.select_related('trip').get(
             id=booking_id,
-            user=request.user
+            user=request.user,
         )
     except Booking.DoesNotExist:
         return Response(
             {'error': 'Booking not found'},
             status=status.HTTP_404_NOT_FOUND
+        )
+
+    trip_status = (
+        str(booking.trip.status or '').lower()
+        if booking.trip else ''
+    )
+    if (
+        booking.status != 'confirmed'
+        or trip_status not in ('boarding', 'departed')
+        or booking.driver_id is None
+    ):
+        return Response(
+            {
+                'error': (
+                    'Location sharing starts when your confirmed trip '
+                    'is boarding or departed and has an assigned driver.'
+                ),
+                'trip_status': trip_status or None,
+            },
+            status=status.HTTP_409_CONFLICT,
         )
 
     serializer = PassengerLocationSerializer(
@@ -3566,10 +3587,14 @@ def _can_access_incident(user, incident):
     company_id = incident.trip.route.company_id
 
     if user.role in COMPANY_INCIDENT_ROLES:
-        return (
+        company_access = (
             user.company_id is not None
             and user.company_id == company_id
         )
+        if not company_access:
+            return False
+        route_ids = operator_route_ids(user)
+        return route_ids is None or incident.trip.route_id in route_ids
 
     if user.role == 'driver':
         return (
@@ -3593,10 +3618,14 @@ def _can_report_incident(user, trip):
     company_id = trip.route.company_id
 
     if user.role in {'company_manager', 'company_operator'}:
-        return (
+        company_access = (
             user.company_id is not None
             and user.company_id == company_id
         )
+        if not company_access:
+            return False
+        route_ids = operator_route_ids(user)
+        return route_ids is None or trip.route_id in route_ids
 
     if user.role == 'driver':
         return (
@@ -3636,6 +3665,10 @@ def incident_list(request):
         queryset = queryset.filter(
             trip__route__company_id=user.company_id
         )
+        if user.role == 'company_operator':
+            route_ids = operator_route_ids(user)
+            if route_ids is not None:
+                queryset = queryset.filter(trip__route_id__in=route_ids)
 
     elif user.role == 'driver':
         queryset = queryset.filter(
@@ -5064,7 +5097,6 @@ def walk_in_booking(request, trip_id):
 
 from users.route_scope import (  # noqa: E402
     can_handle_route,
-    operator_route_ids,
 )
 
 

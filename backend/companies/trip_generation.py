@@ -42,6 +42,9 @@ def regenerate_for_schedule(sch, days=HORIZON_DAYS, revive=True):
     counts = {k: 0 for k in (
         'created', 'revived', 'existing', 'past', 'driver_unavailable', 'driver_conflict', 'invalid')}
     if not sch.is_active:
+        counts['driver_unavailable'] = 0
+        counts['driver_conflict'] = 0
+        _save_generation_summary(sch, counts)
         return counts
     try:
         weekdays = sch.weekdays()
@@ -49,8 +52,23 @@ def regenerate_for_schedule(sch, days=HORIZON_DAYS, revive=True):
         weekdays = None
     if (not weekdays or any(w < 0 or w > 6 for w in weekdays)
             or not 1 <= sch.capacity <= 100
-            or sch.route.company_id != sch.driver.company_id):
+            or sch.route.company_id != sch.driver.company_id
+            or sch.normal_interval_minutes < 15
+            or sch.rush_interval_minutes < 15
+            or sch.rush_interval_minutes > sch.normal_interval_minutes
+            or ((sch.rush_start_time is None) != (sch.rush_end_time is None))
+            or (sch.service_end_time is not None
+                and sch.service_end_time <= sch.departure_time)
+            or (sch.rush_start_time is not None
+                and (sch.service_end_time is None
+                     or sch.rush_start_time < sch.departure_time
+                     or sch.rush_end_time <= sch.rush_start_time
+                     or sch.rush_end_time > sch.service_end_time))
+            or (not sch.auto_renew and
+                (sch.start_date is None or sch.end_date is None
+                 or (sch.end_date - sch.start_date).days > 6))):
         counts['invalid'] += 1
+        _save_generation_summary(sch, counts)
         return counts
     tz = timezone.get_current_timezone()
     now = timezone.now()
@@ -63,9 +81,52 @@ def regenerate_for_schedule(sch, days=HORIZON_DAYS, revive=True):
             continue
         if sch.end_date and d > sch.end_date:
             continue
-        dep = timezone.make_aware(datetime.combine(d, sch.departure_time), tz)
-        if dep <= now:
-            counts['past'] += 1
-            continue
-        counts[_slot(sch, dep, revive)] += 1
+        times = [sch.departure_time]
+        if sch.service_end_time is not None:
+            times = []
+
+            def add_segment(start, end, interval, inclusive_end):
+                current = datetime.combine(d, start)
+                limit = datetime.combine(d, end)
+                while current < limit or (inclusive_end and current == limit):
+                    times.append(current.time())
+                    current += timedelta(minutes=interval)
+
+            if sch.rush_start_time is None:
+                add_segment(
+                    sch.departure_time, sch.service_end_time,
+                    sch.normal_interval_minutes, True,
+                )
+            else:
+                add_segment(
+                    sch.departure_time, sch.rush_start_time,
+                    sch.normal_interval_minutes, False,
+                )
+                add_segment(
+                    sch.rush_start_time, sch.rush_end_time,
+                    sch.rush_interval_minutes, False,
+                )
+                add_segment(
+                    sch.rush_end_time, sch.service_end_time,
+                    sch.normal_interval_minutes, True,
+                )
+
+        for departure_time in times:
+            dep = timezone.make_aware(datetime.combine(d, departure_time), tz)
+            if dep <= now:
+                counts['past'] += 1
+                continue
+            counts[_slot(sch, dep, revive)] += 1
+    _save_generation_summary(sch, counts)
     return counts
+
+
+def _save_generation_summary(sch, counts):
+    """Persist the latest skipped-departure counts for manager/operator review."""
+    from .models import TripSchedule
+
+    TripSchedule.objects.filter(pk=sch.pk).update(
+        generation_checked_at=timezone.now(),
+        driver_unavailable_count=counts['driver_unavailable'],
+        driver_conflict_count=counts['driver_conflict'],
+    )

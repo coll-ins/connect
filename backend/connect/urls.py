@@ -6,6 +6,11 @@ from django.views.generic import TemplateView
 from django.http import JsonResponse
 from companies.views import get_trips, get_trip_details
 from connect.system_checks import run_system_checks
+from connect.demo_simulation import (
+    advance_demo_simulation,
+    demo_simulation_collection,
+    stop_demo_simulation,
+)
 
 def health_check(request):
     return JsonResponse({'status': 'ok', 'service': 'CONNECT API'})
@@ -38,6 +43,21 @@ urlpatterns = [
     system_diagnostics,
     name='system-diagnostics'
 ),
+    path(
+        'api/system/demo-simulation/',
+        demo_simulation_collection,
+        name='demo-simulation',
+    ),
+    path(
+        'api/system/demo-simulation/<int:simulation_id>/advance/',
+        advance_demo_simulation,
+        name='advance-demo-simulation',
+    ),
+    path(
+        'api/system/demo-simulation/<int:simulation_id>/stop/',
+        stop_demo_simulation,
+        name='stop-demo-simulation',
+    ),
 
     path('api/users/', include('users.urls')),
     path('api/companies/', include('companies.urls')),

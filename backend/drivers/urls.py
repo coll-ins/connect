@@ -13,6 +13,11 @@ urlpatterns = [
         name='my-driver-profile',
     ),
     path(
+        'me/timetable/',
+        views.my_driver_timetable,
+        name='my-driver-timetable',
+    ),
+    path(
         '',
         views.driver_list,
         name='driver-list',

@@ -26,6 +26,7 @@ export default defineConfig({
           proxy.on('proxyReqWs', (proxyReq) => {
             proxyReq.setHeader('origin', 'http://localhost:5173');
           });
+
         },
       },
       '/api': {
@@ -35,6 +36,22 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('origin', 'http://localhost:5173');
           });
+        },
+      },
+    },
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: '3d-vendor',
+              test: /node_modules\/(?:three|@react-three\/fiber)\//,
+              minSize: 32 * 1024,
+              maxSize: 450 * 1024,
+            },
+          ],
         },
       },
     },

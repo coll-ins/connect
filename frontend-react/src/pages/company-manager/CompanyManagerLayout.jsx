@@ -25,6 +25,8 @@ const nav = [
   { label: 'Routes', path: '/company-manager/routes', icon: Route },
   { label: 'Route planner', path: '/company-manager/route-planner', icon: MapPin },
   { label: 'Trips', path: '/company-manager/trips', icon: CalendarDays },
+  { label: 'Service templates', path: '/company-manager/services', icon: CalendarDays },
+  { label: 'Weekly reports', path: '/company-manager/reports', icon: BarChart3 },
   { label: 'Drivers', path: '/company-manager/drivers', icon: Users },
   { label: 'Operators', path: '/company-manager/operators', icon: ShieldCheck },
   { label: 'Bookings', path: '/company-manager/bookings', icon: ClipboardList },
@@ -42,9 +44,9 @@ export default function CompanyManagerLayout() {
 
   const closeMenu = () => setOpen(false);
 
-  const management = nav.slice(0, 10);
-  const operations = nav.slice(10, 13);
-  const settings = nav[13];
+  const management = nav.slice(0, 12);
+  const operations = nav.slice(12, 15);
+  const settings = nav[15];
 
   return (
     <div className="company-management-page">

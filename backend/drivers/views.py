@@ -1,3 +1,5 @@
+from datetime import datetime, time, timedelta
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
@@ -6,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from companies.models import Company
+from companies.models import Company, Trip
 from users.models import CustomUser
 from users.permissions import (
     can_manage_company,
@@ -621,5 +623,58 @@ def my_driver_profile(request):
 
     return Response(
         DriverSerializer(driver).data,
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_driver_timetable(request):
+    """Return the authenticated driver's assigned trips for the next seven local days."""
+    if request.user.role != 'driver':
+        return Response(
+            {'error': 'Driver account required.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    driver_ids = drivers_for_user(request.user).values('pk')
+    if not driver_ids.exists():
+        return Response(
+            {'error': 'No driver profile is linked to this account.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    start_date = timezone.localdate()
+    end_date = start_date + timedelta(days=7)
+    start_at = timezone.make_aware(datetime.combine(start_date, time.min))
+    end_at = timezone.make_aware(datetime.combine(end_date, time.min))
+    trips = (
+        Trip.objects.filter(
+            driver_id__in=driver_ids,
+            departure_at__gte=start_at,
+            departure_at__lt=end_at,
+        )
+        .select_related('driver', 'route')
+        .order_by('departure_at', 'id')
+    )
+
+    return Response(
+        {
+            'start_date': start_date.isoformat(),
+            'end_date': (end_date - timedelta(days=1)).isoformat(),
+            'trips': [
+                {
+                    'id': trip.id,
+                    'departure_at': trip.departure_at,
+                    'status': trip.status,
+                    'route_name': trip.route.name,
+                    'start_point': trip.route.start_point,
+                    'end_point': trip.route.end_point,
+                    'bus_number': trip.driver.bus_number,
+                    'capacity': trip.capacity,
+                }
+                for trip in trips
+            ],
+        },
         status=status.HTTP_200_OK,
     )

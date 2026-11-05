@@ -97,7 +97,20 @@ class RedTeamIdorTests(APITestCase):
                 self._as(u)
                 self.assertEqual(self.client.post(url, body, format="json").status_code, 404)
         self._as(self.owner)
+        response = self.client.post(url, body, format="json")
+        self.assertEqual(response.status_code, 409)
+        self.booking.refresh_from_db()
+        self.assertIsNone(self.booking.passenger_latitude)
+
+        Trip.objects.filter(pk=self.booking.trip_id).update(status="boarding")
         self.assertEqual(self.client.post(url, body, format="json").status_code, 200)
+
+        Booking.objects.filter(pk=self.booking.id).update(status="pending")
+        self.assertEqual(self.client.post(url, body, format="json").status_code, 409)
+
+        Booking.objects.filter(pk=self.booking.id).update(
+            status="confirmed", driver=None)
+        self.assertEqual(self.client.post(url, body, format="json").status_code, 409)
 
     def test_stage_departure_roles(self):
         url = reverse("bookings:set-stage-departure", args=[self.booking.id])

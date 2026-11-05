@@ -6,12 +6,17 @@ Responsive React/Vite frontend for the CONNECT matatu booking platform.
 
 - Passenger: `http://localhost:5173/passenger`
 - Driver: `http://localhost:5173/driver`
-- Company admin: `http://localhost:5173/company-admin`
+- Company manager: `http://localhost:5173/company-manager`
+- Company operator: `http://localhost:5173/company-operator`
+- Company auditor: `http://localhost:5173/company-auditor`
 - Platform admin: `http://localhost:5173/platform-admin`
 - Login: `http://localhost:5173/login`
 - Signup: `http://localhost:5173/signup`
 
 All protected pages redirect based on the role returned by the Django API.
+Drivers see their assigned trips on the **My timetable** page for today and
+the next six Nairobi calendar days; the overview also highlights today's
+departures.
 
 ## Start
 

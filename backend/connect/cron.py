@@ -19,6 +19,7 @@ JOBS = {
     'process-unapplied': ('process_unapplied', []),
     'reconcile-refunds': ('reconcile_refunds', []),
     'generate-trips': ('generate_scheduled_trips', []),
+    'weekly-operations-reports': ('send_weekly_operations_reports', []),
 }
 LOCK_TTL = 600  # seconds; a crashed run frees itself after this
 

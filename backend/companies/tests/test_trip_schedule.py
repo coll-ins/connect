@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from io import StringIO
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -29,7 +29,7 @@ class GenerateTripsTests(TestCase):
             name='D', phone_number='0700000000', bus_number='KAA 1', company=self.company)
         self.sch = TripSchedule.objects.create(
             route=self.route, driver=self.driver, capacity=30,
-            days_of_week='0,1,2,3,4', departure_time=time(7, 0))
+            days_of_week='0,1,2,3,4', departure_time=time(7, 0), auto_renew=True)
 
     def test_creates_weekday_trips_for_next_7_days(self):
         run(TUE_6AM)  # Tue Wed Thu Fri + next Mon
@@ -49,6 +49,20 @@ class GenerateTripsTests(TestCase):
         self.driver.save()
         run(TUE_6AM)
         self.assertEqual(Trip.objects.count(), 0)
+        self.sch.refresh_from_db()
+        self.assertEqual(self.sch.driver_unavailable_count, 5)
+        self.assertEqual(self.sch.driver_conflict_count, 0)
+        self.assertIsNotNone(self.sch.generation_checked_at)
+
+    def test_generation_exception_summary_clears_after_recovery(self):
+        self.driver.is_available = False
+        self.driver.save()
+        run(TUE_6AM)
+        self.driver.is_available = True
+        self.driver.save()
+        run(TUE_6AM)
+        self.sch.refresh_from_db()
+        self.assertEqual(self.sch.driver_unavailable_count, 0)
 
     def test_driver_conflict_slot_is_skipped(self):
         Trip.objects.create(
@@ -56,6 +70,8 @@ class GenerateTripsTests(TestCase):
             departure_at=datetime(2030, 1, 2, 7, 0, tzinfo=NBO))
         run(TUE_6AM)
         self.assertEqual(Trip.objects.filter(schedule=self.sch).count(), 4)
+        self.sch.refresh_from_db()
+        self.assertEqual(self.sch.driver_conflict_count, 1)
 
     def test_inactive_schedule_is_ignored(self):
         self.sch.is_active = False
@@ -97,3 +113,32 @@ class GenerateTripsTests(TestCase):
             regenerate_for_schedule(self.sch, revive=True)
             t.refresh_from_db()
             self.assertEqual(t.status, 'scheduled')
+
+    def test_generates_normal_and_rush_hour_departures(self):
+        self.sch.days_of_week = '1'
+        self.sch.departure_time = time(6, 0)
+        self.sch.service_end_time = time(9, 0)
+        self.sch.rush_start_time = time(7, 0)
+        self.sch.rush_end_time = time(8, 0)
+        self.sch.save()
+        run(TUE_6AM)
+        departures = list(
+            Trip.objects.filter(schedule=self.sch)
+            .order_by('departure_at')
+            .values_list('departure_at', flat=True)
+        )
+        self.assertEqual(
+            [departure.astimezone(NBO).strftime('%H:%M') for departure in departures],
+            ['07:00', '07:30', '08:00', '09:00'],
+        )
+
+    def test_manual_schedule_stops_after_its_week(self):
+        self.sch.days_of_week = '0,1,2,3,4,5,6'
+        self.sch.start_date = TUE_6AM.date()
+        self.sch.end_date = TUE_6AM.date() + timedelta(days=6)
+        self.sch.auto_renew = False
+        self.sch.save()
+        run(TUE_6AM)
+        self.assertEqual(Trip.objects.filter(schedule=self.sch).count(), 7)
+        run(TUE_6AM + timedelta(days=7))
+        self.assertEqual(Trip.objects.filter(schedule=self.sch).count(), 7)

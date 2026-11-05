@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import AppShell from '../../components/layout/AppShell';
+import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
 import PassengerLiveMap from './PassengerLiveMap';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
@@ -20,7 +21,7 @@ function Shell({ children }) {
   return <AppShell>{children}</AppShell>;
 }
 
-function PaymentModal({ booking, onClose, onPaid }) {
+function PaymentModal({ booking, onClose, onPaid, onPaymentConfirmed }) {
   const [step, setStep] = useState('method');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -63,21 +64,23 @@ function PaymentModal({ booking, onClose, onPaid }) {
       try {
         const status = await apiRequest(`/bookings/payments/${booking.booking_id}/status/`);
         if (!active) return;
-        if (status.payment_status === 'confirmed') { setStep('paid'); onPaid(); return; }
+        setError('');
+        if (status.payment_status === 'confirmed') { onPaymentConfirmed(); return; }
         if (status.payment_status === 'failed') { setError('The M-PESA payment failed. You can try again.'); setStep('method'); return; }
-      } catch {
-        // Keep polling while the gateway completes the transaction.
+      } catch (error) {
+        if (!active) return;
+        setError(error.message || 'We could not check your M-PESA payment. Try again.');
       }
       if (active && attempts < 60) window.setTimeout(poll, 3000);
       else if (active) setMessage('Still waiting for Paystack. You can refresh the status or close this window and check your bookings.');
     };
     poll();
     return () => { active = false; };
-  }, [step, booking.booking_id, onPaid]);
+  }, [step, booking.booking_id, onPaid, onPaymentConfirmed]);
 
   const verify = async () => {
     setBusy(true); setError('');
-    try { const data = await apiRequest(`/bookings/payments/${booking.booking_id}/verify/`, {method:'POST'}); if(data.payment_status==='confirmed'){setStep('paid');onPaid();} else setMessage(data.message || 'Payment is still pending.'); }
+    try { const data = await apiRequest(`/bookings/payments/${booking.booking_id}/verify/`, {method:'POST'}); if(data.payment_status==='confirmed'){onPaymentConfirmed();} else setMessage(data.message || 'Payment is still pending.'); }
     catch(e){setError(e.message)} finally{setBusy(false)}
   };
 
@@ -85,7 +88,13 @@ function PaymentModal({ booking, onClose, onPaid }) {
     <button className="btn btn-ghost modal-close" onClick={onClose}>Close</button>
     <p className="eyebrow">BOOKING {booking.booking_number}</p>
     <h2>{money(booking.total_amount)}</h2><p className="muted">Choose how you want to complete this trip.</p>
-    {error && <div className="error">{error}</div>}
+    {error && (
+      <NoticeStack>
+        <Notice title="Payment issue" onClose={() => setError('')}>
+          {error}
+        </Notice>
+      </NoticeStack>
+    )}
     {step==='method' && <div className="stack" style={{marginTop:18}}>
       <button className="pay-option" onClick={cash} disabled={busy}><div className="pay-icon">💵</div><div><strong>Pay with cash</strong><span>Pay the driver/conductor according to the trip rules.</span></div></button>
       <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon">💳</div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
@@ -160,7 +169,6 @@ function PaymentModal({ booking, onClose, onPaid }) {
 
     {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">Authorize the M-PESA prompt on the phone that received it.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
     {step==='cash-success' && <div className="success">Cash selected. Pay the driver in cash. Your boarding PIN will appear on your trip card as soon as the driver confirms the payment.</div>}
-    {step==='paid' && <div className="payment-status"><div style={{fontSize:48}}>✓</div><h3>Payment confirmed</h3><p className="muted">Your booking is confirmed. Enjoy your trip.</p><button className="btn btn-primary" onClick={onClose}>Done</button></div>}
   </div></div>;
 }
 
@@ -169,6 +177,7 @@ function LiveTripModal({ booking, onClose }) {
   return (
     <PassengerLiveMap
       bookingId={booking.booking_id || booking.id}
+      bookingDetails={booking}
       routeGeometry={booking.route_geometry}
       pickup={{
         latitude: booking.pickup_latitude,
@@ -233,6 +242,18 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       setError(e.message);
     }
   },[]);
+  const handlePaymentConfirmed = useCallback(() => {
+    const bookingId = paymentBooking?.booking_id || paymentBooking?.id;
+    setPaymentBooking(null);
+    if (bookingId) {
+      navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
+        state: { booking: paymentBooking },
+      });
+    } else {
+      navigate('/passenger');
+    }
+  }, [navigate, paymentBooking]);
+
   useEffect(()=>{apiRequest('/companies/').then(d=>setCompanies(Array.isArray(d)?d:[])).catch(e=>setError(e.message));refresh()},[refresh]);
   useEffect(()=>{if(!company){setRoutes([]);setTrips([]);return} apiRequest(`/companies/${company}/routes/`).then(d=>setRoutes(d||[])).catch(e=>setError(e.message))},[company]);
   useEffect(()=>{if(!company){setTrips([]);return} const q=route?`?route_id=${route}`:''; apiRequest(`/companies/${company}/trips/${q}`).then(d=>setTrips(Array.isArray(d)?d:[])).catch(e=>setError(e.message))},[company,route]);
@@ -408,19 +429,19 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   return <Shell>
     <div className="passenger-experience">
 
-      {error && (
-        <div className="connect-alert connect-alert-error">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError('')}>×</button>
-        </div>
-      )}
+      <NoticeStack>
+        {error && (
+          <Notice title="Something went wrong" onClose={() => setError('')}>
+            {error}
+          </Notice>
+        )}
 
-      {success && (
-        <div className="connect-alert connect-alert-success">
-          <span>{success}</span>
-          <button type="button" onClick={() => setSuccess('')}>×</button>
-        </div>
-      )}
+        {success && (
+          <Notice kind="success" title="Done" autoHideMs={8000} onClose={() => setSuccess('')}>
+            {success}
+          </Notice>
+        )}
+      </NoticeStack>
 
       {/* =====================================================
           STEP 1 — PASSENGER HOME
@@ -1146,6 +1167,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             refresh();
           }}
           onPaid={refresh}
+          onPaymentConfirmed={handlePaymentConfirmed}
         />
       )}
 
