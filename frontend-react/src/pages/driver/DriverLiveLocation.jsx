@@ -64,6 +64,7 @@ export default function DriverLiveLocation() {
   const driverIdRef = useRef(null);
   const lastSentAtRef = useRef(0);
   const sendingRef = useRef(false);
+  const loadingRef = useRef(false);
 
   /*
    * ------------------------------------------------------------
@@ -74,6 +75,9 @@ export default function DriverLiveLocation() {
    * The frontend does NOT select a booking or build a route.
    */
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+
     try {
       setError('');
 
@@ -101,6 +105,8 @@ export default function DriverLiveLocation() {
       console.error('[DRIVER LIVE] load error:', err);
       setError(err.message || 'Unable to load live trip data.');
       // keep the last known trip so the route and bus survive one bad poll
+    } finally {
+      loadingRef.current = false;
     }
   }, []);
 
@@ -367,11 +373,11 @@ export default function DriverLiveLocation() {
     return base;
   }, [driver, location]);
 
-  // Tick so GPS age keeps updating even when no new data arrives.
+  // Update the GPS status on the same cadence as the live-trip poll.
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    const id = window.setInterval(() => setNowTick(Date.now()), 5000);
     return () => window.clearInterval(id);
   }, []);
 
