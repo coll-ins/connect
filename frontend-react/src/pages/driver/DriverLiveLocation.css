@@ -1,0 +1,351 @@
+.driver-live-page .driver-live-sheet {
+  right: 24px !important;
+  bottom: 20px !important;
+  left: auto !important;
+  width: min(520px, calc(100% - 48px)) !important;
+  max-height: min(47dvh, 440px) !important;
+  transform: none !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+  border-radius: 22px !important;
+  background: rgba(15, 23, 42, 0.96) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34) !important;
+  backdrop-filter: blur(16px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
+}
+
+.driver-live-page .driver-live-sheet:not(.driver-live-sheet-open) {
+  max-height: 88px !important;
+}
+
+.driver-live-page .driver-live-sheet * {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.driver-live-page .driver-live-sheet h1,
+.driver-live-page .driver-live-sheet h2,
+.driver-live-page .driver-live-sheet h3,
+.driver-live-page .driver-live-sheet strong {
+  color: #f8fafc !important;
+}
+
+.driver-live-page .driver-live-sheet-header {
+  padding: 4px 20px 14px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.driver-live-page .driver-live-sheet-header > div > span {
+  color: #94a3b8 !important;
+}
+
+.driver-live-page .driver-live-sheet-header h1 {
+  font-size: 19px !important;
+}
+
+.driver-live-page .driver-live-handle {
+  height: 28px !important;
+}
+
+.driver-live-page .driver-live-handle span {
+  background: rgba(226, 232, 240, 0.65) !important;
+}
+
+.driver-live-page .driver-live-route {
+  margin: 12px 20px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.driver-live-page .driver-live-route > svg {
+  color: #60a5fa !important;
+}
+
+.driver-live-page .driver-live-route strong {
+  color: #f8fafc !important;
+}
+
+.driver-live-page .driver-live-route span,
+.driver-live-page .driver-live-trip-info span {
+  color: #cbd5e1 !important;
+}
+
+.driver-live-page .driver-live-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+  margin: 0 20px 8px !important;
+}
+
+.driver-live-page .driver-live-stats > div {
+  min-width: 0;
+  padding: 9px 7px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+.driver-live-page .driver-live-stats svg {
+  color: #93c5fd !important;
+}
+
+.driver-live-page .driver-live-stats span,
+.driver-live-page .driver-live-bookings label,
+.driver-live-page .driver-live-trip-card > label,
+.driver-live-page .driver-live-passenger-section > label {
+  color: #aab8ca !important;
+}
+
+.driver-live-page .driver-live-trip-card,
+.driver-live-page .driver-live-passenger-section,
+.driver-live-page .driver-live-bookings {
+  margin-right: 20px !important;
+  margin-left: 20px !important;
+}
+
+.driver-live-page .driver-live-trip-card {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+.driver-live-page .driver-live-trip-info {
+  display: grid;
+  gap: 5px;
+}
+
+.driver-live-page .driver-live-passenger-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px !important;
+}
+
+.driver-live-page .driver-live-passenger-card {
+  min-width: 0;
+  padding: 12px 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+}
+
+.driver-live-page .driver-live-passenger-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.driver-live-page .driver-live-passenger-identity {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.driver-live-page .driver-live-passenger-phone {
+  color: #cbd5e1 !important;
+}
+
+.driver-live-page .driver-live-passenger-status {
+  flex-shrink: 0;
+  padding: 4px 8px !important;
+  border: 1px solid rgba(74, 222, 128, 0.28) !important;
+  background: rgba(34, 197, 94, 0.16) !important;
+  color: #86efac !important;
+}
+
+.driver-live-page .driver-live-passenger-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.2fr) repeat(2, minmax(42px, 0.55fr));
+  gap: 10px;
+  margin-top: 10px !important;
+  padding-top: 9px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.driver-live-page .driver-live-passenger-meta > div {
+  min-width: 0;
+}
+
+.driver-live-page .driver-live-passenger-meta small {
+  display: block;
+  margin-bottom: 3px;
+  color: #94a3b8 !important;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.driver-live-page .driver-live-passenger-meta strong {
+  display: block;
+  overflow: hidden;
+  color: #e2e8f0 !important;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver-live-page .driver-live-stage-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.driver-live-page .driver-live-stage-row {
+  display: flex;
+  min-height: 36px !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 9px !important;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.driver-live-page .driver-live-stage-row > span {
+  color: #cbd5e1 !important;
+  font-size: 12px;
+}
+
+.driver-live-page .driver-live-stage-row > strong {
+  display: inline-flex;
+  min-width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #e2e8f0 !important;
+}
+
+.driver-live-page .driver-live-stage-assigned {
+  border-color: rgba(74, 222, 128, 0.2) !important;
+  background: rgba(34, 197, 94, 0.1) !important;
+}
+
+.driver-live-page .driver-live-stage-assigned > span {
+  color: #bbf7d0 !important;
+}
+
+.driver-live-page .driver-live-stage-assigned > strong {
+  background: #16a34a !important;
+  color: #fff !important;
+}
+
+.driver-live-page .driver-live-bookings > div {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.driver-live-page .driver-live-bookings > div > span {
+  color: #cbd5e1 !important;
+  font-size: 12px;
+}
+
+.driver-live-page .driver-live-error {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.driver-live-page .driver-live-update {
+  width: calc(100% - 40px) !important;
+  margin: 14px 20px 18px !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 12px !important;
+  background: #2563eb !important;
+  color: #fff !important;
+  font-weight: 800;
+}
+
+.driver-live-page .driver-live-update:hover {
+  background: #1d4ed8 !important;
+}
+
+.driver-live-page .driver-live-end-trip:disabled,
+.driver-live-page .driver-live-sheet button:disabled {
+  cursor: wait;
+  opacity: 0.65 !important;
+}
+
+.driver-live-page .driver-live-sheet::-webkit-scrollbar {
+  width: 6px;
+}
+
+.driver-live-page .driver-live-sheet::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #64748b;
+}
+
+@media (max-width: 700px) {
+  .driver-live-page .driver-live-sheet {
+    right: auto !important;
+    bottom: 8px !important;
+    left: 50% !important;
+    width: calc(100% - 16px) !important;
+    max-height: min(46dvh, 390px) !important;
+    transform: translateX(-50%) !important;
+  }
+
+  .driver-live-page .driver-live-sheet:not(.driver-live-sheet-open) {
+    max-height: 78px !important;
+  }
+
+  .driver-live-page .driver-live-sheet-header {
+    padding: 8px 14px 12px !important;
+  }
+
+  .driver-live-page .driver-live-route {
+    margin: 9px 12px !important;
+    padding: 10px 12px !important;
+  }
+
+  .driver-live-page .driver-live-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    margin: 0 12px 8px !important;
+  }
+
+  .driver-live-page .driver-live-trip-card,
+  .driver-live-page .driver-live-passenger-section,
+  .driver-live-page .driver-live-bookings,
+  .driver-live-page .driver-live-error {
+    margin-right: 12px !important;
+    margin-left: 12px !important;
+  }
+
+  .driver-live-page .driver-live-passenger-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+  }
+
+  .driver-live-page .driver-live-update {
+    width: calc(100% - 24px) !important;
+    margin: 10px 12px 14px !important;
+  }
+}
+
+@media (max-width: 380px), (max-height: 620px) {
+  .driver-live-page .driver-live-sheet {
+    bottom: 5px !important;
+    max-height: min(43dvh, 300px) !important;
+  }
+
+  .driver-live-page .driver-live-sheet:not(.driver-live-sheet-open) {
+    max-height: 72px !important;
+  }
+
+  .driver-live-page .driver-live-route {
+    margin-right: 9px !important;
+    margin-left: 9px !important;
+  }
+
+  .driver-live-page .driver-live-stats {
+    margin-right: 9px !important;
+    margin-left: 9px !important;
+  }
+
+  .driver-live-page .driver-live-passenger-meta {
+    gap: 6px 9px;
+  }
+}

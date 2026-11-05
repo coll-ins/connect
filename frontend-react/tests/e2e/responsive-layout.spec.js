@@ -161,3 +161,30 @@ test('company manager sidebar scrolls on short desktop screens', async ({ page }
     })).toBe(true);
   }
 });
+
+test('company manager sidebar and dashboard bottom remain reachable on a short phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 480 });
+  await prepareScreen(page, 'company_manager');
+  await page.goto('/company-manager');
+
+  const menu = page.getByRole('button', { name: 'Open navigation' });
+  await menu.click();
+
+  const sidebar = page.locator('.company-sidebar');
+  const settings = sidebar.locator('a[href="/company-manager/settings"]');
+  const logout = sidebar.locator('.company-manager-logout-link');
+  for (const target of [settings, logout]) {
+    await target.scrollIntoViewIfNeeded();
+    expect(await target.evaluate((el) => {
+      const bounds = el.closest('.company-sidebar').getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
+    })).toBe(true);
+  }
+
+  await page.getByRole('button', { name: 'Close navigation' }).click({
+    position: { x: 380, y: 460 },
+  });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(page.getByText('No bookings yet.')).toBeInViewport();
+});

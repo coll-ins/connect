@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import ConnectMap from '../../components/maps/ConnectMap';
+import './DriverLiveLocation.css';
 
 const formatDate = (value) =>
   value
@@ -770,9 +771,13 @@ export default function DriverLiveLocation() {
                 </span>
 
                 <span>
-                  {activeTrip.start_point || 'Start'}
+                  {activeTrip.route_start_point ||
+                    activeTrip.start_point ||
+                    'Start'}
                   {' → '}
-                  {activeTrip.end_point || 'Destination'}
+                  {activeTrip.route_end_point ||
+                    activeTrip.end_point ||
+                    'Destination'}
                 </span>
               </div>
             </div>

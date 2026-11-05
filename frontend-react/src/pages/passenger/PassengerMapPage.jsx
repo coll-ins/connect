@@ -15,6 +15,8 @@ export default function PassengerMapPage() {
     String(initialBooking.booking_id || initialBooking.id) ===
       String(requestedBookingId);
   const [booking, setBooking] = useState(hasInitialBooking ? initialBooking : null);
+  const bookingRef = useRef(hasInitialBooking ? initialBooking : null);
+  const [bookingPending, setBookingPending] = useState(Boolean(hasInitialBooking));
   const [trackingAvailable, setTrackingAvailable] = useState(
     Boolean(
       hasInitialBooking &&
@@ -29,6 +31,10 @@ export default function PassengerMapPage() {
   const [error, setError] = useState('');
   const bookingLoadInProgress = useRef(false);
   const hasLoadedBooking = useRef(Boolean(hasInitialBooking));
+  const updateBooking = useCallback((nextBooking) => {
+    bookingRef.current = nextBooking;
+    setBooking(nextBooking);
+  }, []);
 
   const loadBooking = useCallback(async () => {
     if (bookingLoadInProgress.current) return;
@@ -59,7 +65,20 @@ export default function PassengerMapPage() {
         );
 
         if (!exact) {
-          setBooking(null);
+          const handoffBooking = bookingRef.current;
+          if (
+            handoffBooking &&
+            String(handoffBooking.booking_id || handoffBooking.id) ===
+              String(requestedBookingId)
+          ) {
+            setBookingPending(true);
+            setTrackingAvailable(false);
+            setError('');
+            return;
+          }
+
+          setBookingPending(false);
+          updateBooking(null);
           setTrackingAvailable(false);
           setError('That booking could not be found in your bookings.');
           return;
@@ -89,14 +108,16 @@ export default function PassengerMapPage() {
               message = 'This booking is not confirmed.';
             }
 
-            setBooking(null);
+            updateBooking(null);
+            setBookingPending(false);
             setTrackingAvailable(false);
             setError(message);
             return;
           }
         }
 
-        setBooking(exact);
+        updateBooking(exact);
+        setBookingPending(false);
         setTrackingAvailable(isTrackable(exact));
         setError('');
         return;
@@ -118,7 +139,8 @@ export default function PassengerMapPage() {
         });
 
       if (!usable.length) {
-        setBooking(null);
+        setBookingPending(false);
+        updateBooking(null);
         setTrackingAvailable(false);
         setError(
           'You do not have an active trip to track yet. Live tracking is available once a confirmed trip is boarding or departed and has an assigned driver.',
@@ -126,12 +148,13 @@ export default function PassengerMapPage() {
         return;
       }
 
-      setBooking(usable[0]);
+      updateBooking(usable[0]);
+      setBookingPending(false);
       setTrackingAvailable(true);
       setError('');
     } catch (err) {
       if (!hasLoadedBooking.current) {
-        setBooking(null);
+        updateBooking(null);
         setTrackingAvailable(false);
       }
       setError(err.message || 'Unable to load your trips.');
@@ -140,7 +163,7 @@ export default function PassengerMapPage() {
       bookingLoadInProgress.current = false;
       setLoading(false);
     }
-  }, [requestedBookingId]);
+  }, [requestedBookingId, updateBooking]);
 
   useEffect(() => {
     loadBooking();
@@ -149,9 +172,8 @@ export default function PassengerMapPage() {
   useEffect(() => {
     if (
       !requestedBookingId ||
-      !booking ||
-      String(booking.booking_id || booking.id) !== String(requestedBookingId) ||
-      trackingAvailable
+      trackingAvailable ||
+      (!bookingPending && !booking)
     ) {
       return undefined;
     }
@@ -161,7 +183,7 @@ export default function PassengerMapPage() {
     }, 5000);
 
     return () => window.clearInterval(timer);
-  }, [booking, loadBooking, requestedBookingId, trackingAvailable]);
+  }, [booking, bookingPending, loadBooking, requestedBookingId, trackingAvailable]);
 
   if (loading) {
     return (

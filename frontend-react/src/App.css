@@ -596,6 +596,35 @@
   }
 }
 
+/* Keep manager navigation and page content reachable on short/mobile viewports. */
+.company-management-page {
+  min-height: 100dvh;
+}
+
+.company-sidebar {
+  height: 100dvh;
+  min-height: 0;
+  max-height: 100dvh;
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.company-management-main {
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.company-content {
+  padding-bottom: max(30px, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 650px) {
+  .company-content {
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
 /* =========================================================
    CONNECT PASSENGER EXPERIENCE
    Frosted white glass / premium transport UI
