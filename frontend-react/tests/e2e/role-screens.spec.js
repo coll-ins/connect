@@ -143,7 +143,7 @@ test.describe('CONNECT role screen interactions', () => {
   });
 });
 
-test('driver live-location screen sends simulated coordinates to the location endpoint', async ({ page, context }) => {
+test('driver live-location screen shows its route, styles the panel, and sends GPS updates', async ({ page, context }) => {
   const simulatedLocation = {
     latitude: -1.286389,
     longitude: 36.817223,
@@ -198,7 +198,24 @@ test('driver live-location screen sends simulated coordinates to the location en
         contentType: 'application/json',
         body: JSON.stringify({
           driver,
-          active_trip: null,
+          active_trip: {
+            id: 28,
+            route_name: 'Nairobi to Thika',
+            route_start_point: 'Nairobi CBD',
+            route_end_point: 'Thika Town',
+            departure_at: '2026-11-05T16:30:00Z',
+            route_geometry: {
+              type: 'LineString',
+              coordinates: [
+                [36.817223, -1.286389],
+                [36.830000, -1.275000],
+              ],
+            },
+            stages: [],
+            bookings: [],
+            passenger_count: 0,
+            booking_count: 0,
+          },
           bookings: [],
         }),
       });
@@ -238,8 +255,16 @@ test('driver live-location screen sends simulated coordinates to the location en
   await page.goto('/driver/location');
 
   await expect(
-    page.getByRole('heading', { level: 1, name: 'No assigned trip' }),
+    page.getByRole('heading', { level: 1, name: 'Nairobi to Thika' }),
   ).toBeVisible();
+  await expect(page.getByText('Nairobi CBD → Thika Town')).toBeVisible();
+  await expect(
+    page.locator('.leaflet-overlay-pane path[stroke="#1677ff"]').first(),
+  ).toBeVisible();
+  const sheetBackground = await page
+    .locator('.driver-live-sheet')
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(sheetBackground).toBe('rgba(15, 23, 42, 0.96)');
 
   await expect.poll(() => capturedGpsPayload, { timeout: 10000 })
     .toEqual(simulatedLocation);
@@ -261,4 +286,6 @@ test('driver live-location screen sends simulated coordinates to the location en
   await expect(page.locator('.driver-live-sheet')).toHaveClass(
     /driver-live-sheet-open/,
   );
+  await page.getByRole('button', { name: 'Dashboard' }).click();
+  await expect(page).toHaveURL(/\/driver$/);
 });

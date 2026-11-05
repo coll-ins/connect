@@ -43,7 +43,12 @@ function PaymentModal({
       });
       setStep('cash-success');
       onPaid();
-      onCashReserved(booking.booking_id);
+      onCashReserved({
+        ...booking,
+        status: 'pending',
+        payment_method: 'cash',
+        payment_status: 'pending',
+      });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -82,7 +87,7 @@ function PaymentModal({
         const status = await apiRequest(`/bookings/payments/${booking.booking_id}/status/`);
         if (!active) return;
         setError('');
-        if (status.payment_status === 'confirmed') { onPaymentConfirmed(); return; }
+        if (status.payment_status === 'confirmed') { onPaymentConfirmed(booking); return; }
         if (status.payment_status === 'failed') { setError('The M-PESA payment failed. You can try again.'); setStep('method'); return; }
       } catch (error) {
         if (!active) return;
@@ -97,7 +102,7 @@ function PaymentModal({
 
   const verify = async () => {
     setBusy(true); setError('');
-    try { const data = await apiRequest(`/bookings/payments/${booking.booking_id}/verify/`, {method:'POST'}); if(data.payment_status==='confirmed'){onPaymentConfirmed();} else setMessage(data.message || 'Payment is still pending.'); }
+    try { const data = await apiRequest(`/bookings/payments/${booking.booking_id}/verify/`, {method:'POST'}); if(data.payment_status==='confirmed'){onPaymentConfirmed(booking);} else setMessage(data.message || 'Payment is still pending.'); }
     catch(e){setError(e.message)} finally{setBusy(false)}
   };
 
@@ -265,22 +270,18 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       setError(e.message);
     }
   },[]);
-  const handlePaymentConfirmed = useCallback(() => {
-    const bookingId = paymentBooking?.booking_id || paymentBooking?.id;
-    setPaymentBooking(null);
-    if (bookingId) {
-      navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
-        state: { booking: paymentBooking },
-      });
-    } else {
-      navigate('/passenger');
-    }
-  }, [navigate, paymentBooking]);
+  const handleBookingMapEntry = useCallback((booking = paymentBooking) => {
+    const bookingId = booking?.booking_id ?? booking?.id;
 
-  const handleCashReserved = useCallback((bookingId) => {
+    if (!bookingId) {
+      setError('Your booking was saved, but its trip link is unavailable. Open My Trips to find it.');
+      setPaymentBooking(null);
+      return;
+    }
+
     setPaymentBooking(null);
     navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
-      state: { booking: paymentBooking },
+      state: { booking },
     });
   }, [navigate, paymentBooking]);
 
@@ -366,7 +367,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       await refresh();
 
       setPaymentBooking({
-        booking_id: b.booking_id,
+        ...b,
+        booking_id: b.booking_id ?? b.id,
         booking_number: b.booking_number,
         total_amount: b.total_amount
       });
@@ -1233,8 +1235,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             refresh();
           }}
           onPaid={refresh}
-          onPaymentConfirmed={handlePaymentConfirmed}
-          onCashReserved={handleCashReserved}
+          onPaymentConfirmed={handleBookingMapEntry}
+          onCashReserved={handleBookingMapEntry}
         />
       )}
 

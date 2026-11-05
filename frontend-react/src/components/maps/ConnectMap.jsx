@@ -754,7 +754,12 @@ export default function ConnectMap({
             </Popup>
           </Marker>
         )}
-        <RoadLayer geometry={routeGeometry} stages={stages} lat={driverLat} lng={driverLng} showStops={false} />
+        <RoadLayer
+          geometry={routeGeometry}
+          stages={stages}
+          showBus={false}
+          showStops={false}
+        />
 </MapContainer>
       </TiltedMapFrame>
       {tilt && <MapZoomButtons />}
