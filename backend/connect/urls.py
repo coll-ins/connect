@@ -2,7 +2,6 @@ from connect import cron as cron_views
 
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import TemplateView
 from django.http import JsonResponse
 from companies.views import get_trips, get_trip_details
 from connect.system_checks import run_system_checks
@@ -35,7 +34,7 @@ def system_diagnostics(request):
 
 
 urlpatterns = [
-    path('', TemplateView.as_view(template_name='index.html')),
+    path('', health_check, name='root'),
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health-check'),
     path(
