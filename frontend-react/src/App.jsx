@@ -1,7 +1,38 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Notice, { NoticeStack } from './components/ui/Notice';
+import { clearRequestError, getLatestRequestError } from './api';
+
+function RequestErrorNotice() {
+  const [message, setMessage] = useState(getLatestRequestError);
+
+  useEffect(() => {
+    const showError = (event) => {
+      setMessage(event.detail?.message || 'Something went wrong. Please try again.');
+    };
+    window.addEventListener('connect:request-error', showError);
+    return () => window.removeEventListener('connect:request-error', showError);
+  }, []);
+
+  return (
+    <NoticeStack>
+      {message && (
+        <Notice
+          kind="error"
+          title="Something went wrong"
+          onClose={() => {
+            clearRequestError();
+            setMessage('');
+          }}
+        >
+          {message}
+        </Notice>
+      )}
+    </NoticeStack>
+  );
+}
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
@@ -135,6 +166,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <div className="app-shell">
+          <RequestErrorNotice />
           <Suspense fallback={<div role="status">Loading CONNECT...</div>}>
             <AppRoutes />
           </Suspense>
