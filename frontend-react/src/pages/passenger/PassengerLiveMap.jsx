@@ -4,7 +4,7 @@ import { MapContainer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import BaseTileLayer from '../../components/maps/BaseTileLayer';
 import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
-import { apiRequest } from '../../api';
+import { API_HOST, apiRequest } from '../../api';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerLiveMap.css';
 import TiltedMapFrame, {
@@ -368,7 +368,7 @@ function useLiveSocket(bookingId, onLocation, enabled) {
 
       const scheme =
         window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url = `${scheme}://${import.meta.env.VITE_WS_HOST || window.location.host}/ws/bookings/${bookingId}/live/`;
+      const url = `${scheme}://${import.meta.env.VITE_WS_HOST || API_HOST || window.location.host}/ws/bookings/${bookingId}/live/`;
 
       try {
         socket = new WebSocket(url);

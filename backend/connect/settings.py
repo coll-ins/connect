@@ -255,6 +255,18 @@ if not DEBUG:
     )
 
 
+CROSS_SITE_COOKIE_AUTH = (
+    os.getenv('CROSS_SITE_COOKIE_AUTH', 'False').lower() == 'true'
+)
+if CROSS_SITE_COOKIE_AUTH:
+    if DEBUG:
+        raise ValueError(
+            'CROSS_SITE_COOKIE_AUTH requires HTTPS and DEBUG=False.'
+        )
+    SESSION_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SAMESITE = 'None'
+
+
 # Self-service platform-admin signup. On for local dev, off by default in
 # production: create the first admin with `manage.py createsuperuser`.
 ALLOW_ADMIN_SIGNUP = os.getenv(

@@ -51,10 +51,11 @@ export default function Login() {
           <label>
             Phone number
             <input
+              type="tel"
               className="input"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="07XX XXX XXX"
+              placeholder="07XX XXX XXX or +2547XX XXX XXX"
               autoComplete="tel"
               required
             />

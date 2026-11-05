@@ -107,10 +107,13 @@ frontend lint/build, and Playwright browser tests on every push and pull request
 ## Deployment
 
 The deployment kit targets a single Ubuntu VPS with nginx, Daphne, PostgreSQL and
-Redis. Follow the step-by-step [deployment runbook](./deploy/RUNBOOK.md); do not
-deploy the old `frontend/` app or use the retired Render/Vercel instructions.
-Production requires a chosen VPS/domain and real Paystack and Africa's Talking
-credentials. Never copy local `.env` values to the server.
+Redis. Follow the step-by-step [deployment runbook](./deploy/RUNBOOK.md) for a
+full deployment. The repository-root Vercel configuration deploys only the React
+frontend; the Django backend still needs a separate host. See the
+[frontend Vercel setup](./frontend-react/README.md#vercel-frontend) for its
+required environment variables. Production requires a chosen backend/domain and
+real Paystack and Africa's Talking credentials. Never copy local `.env` values
+to the server.
 
 ## Automation and operations
 
