@@ -30,13 +30,14 @@ class UsersTestSuite(APITestCase):
             "email": "newuser@example.com",
             "password": "StrongPassword123!",
             "password2": "StrongPassword123!",
-            "phone_number": "+254700000000",
+            "phone_number": "0700000000",
             "name": "Test User",
             "location": "Nairobi",
         }
         response = self.client.post(url, payload, format="json")
         self.assertIn(response.status_code, [status.HTTP_201_CREATED, status.HTTP_200_OK])
         self.assertEqual(response.data['user']['role'], 'passenger')
+        self.assertEqual(response.data['user']['phone_number'], '+254700000000')
         profile = self.client.get(self._get_url('user_profile'))
         self.assertEqual(profile.status_code, status.HTTP_200_OK)
         self.assertEqual(profile.data['phone_number'], '+254700000000')
@@ -59,6 +60,50 @@ class UserViewEdgeCaseTests(APITestCase):
         url = reverse('users:profile')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class KenyanPhoneLoginTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username='phone_format_admin',
+            password='StrongPassword123!',
+            phone_number='+254700001234',
+            email='phone-admin@example.test',
+        )
+        self.login_url = reverse('users:login')
+
+    def test_superuser_can_login_with_local_or_international_number(self):
+        for phone_number in ('0700001234', '+254700001234'):
+            with self.subTest(phone_number=phone_number):
+                response = self.client.post(
+                    self.login_url,
+                    {
+                        'phone_number': phone_number,
+                        'password': 'StrongPassword123!',
+                    },
+                    format='json',
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data['user']['role'], 'platform_admin')
+                self.client.logout()
+
+    def test_login_finds_legacy_local_number_stored_in_database(self):
+        User.objects.filter(pk=self.admin.pk).update(
+            phone_number='0700001234'
+        )
+
+        response = self.client.post(
+            self.login_url,
+            {
+                'phone_number': '+254700001234',
+                'password': 'StrongPassword123!',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['role'], 'platform_admin')
+
 
 class CompanyStaffManagementTests(APITestCase):
 

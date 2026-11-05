@@ -1,4 +1,6 @@
-const API_BASE_URL = '/api';
+const API_ORIGIN = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '';
+export const API_HOST = API_ORIGIN ? new URL(API_ORIGIN).host : '';
+const API_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
 
 function getCookie(name) {
   return document.cookie
@@ -8,13 +10,18 @@ function getCookie(name) {
 }
 
 async function ensureCsrf(signal) {
-  if (!getCookie('csrftoken')) {
-    await fetch(`${API_BASE_URL}/users/csrf/`, {
-      credentials: 'include',
-      signal,
-    });
+  const cookie = getCookie('csrftoken');
+  if (cookie) return decodeURIComponent(cookie);
+
+  const response = await fetch(`${API_BASE_URL}/users/csrf/`, {
+    credentials: 'include',
+    signal,
+  });
+  const data = await response.json();
+  if (!response.ok || !data?.csrfToken) {
+    throw new Error('Unable to establish a secure connection to CONNECT.');
   }
-  return getCookie('csrftoken');
+  return data.csrfToken;
 }
 
 export async function apiRequest(endpoint, options = {}) {
@@ -42,7 +49,7 @@ export async function apiRequest(endpoint, options = {}) {
   try {
     if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
       const csrfToken = await ensureCsrf(controller.signal);
-      if (csrfToken) headers['X-CSRFToken'] = decodeURIComponent(csrfToken);
+      if (csrfToken) headers['X-CSRFToken'] = csrfToken;
     }
 
     response = await fetch(url, { ...config, signal: controller.signal });

@@ -12,6 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
+from .phone import phone_variants
 from .throttles import LoginIPThrottle, LoginPhoneThrottle, SignupPhoneThrottle
 from .serializers import UserSerializer, CompanyStaffSerializer
 from django.contrib.auth.password_validation import validate_password
@@ -136,14 +137,10 @@ def user_login(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    normalized_phone = normalize_phone_number(raw_phone)
-
     user_obj = (
         CustomUser.objects
         .select_related('company')
-        .filter(
-            phone_number__in=[normalized_phone, str(raw_phone).strip()]
-        )
+        .filter(phone_number__in=phone_variants(raw_phone))
         .first()
     )
 

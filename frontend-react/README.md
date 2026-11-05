@@ -34,6 +34,31 @@ npm run lint
 npm run build
 ```
 
+## Vercel frontend
+
+The repository-root `vercel.json` builds and serves this Vite frontend. Django
+must remain deployed separately; Vercel hosts the static frontend, not the
+Channels/Django backend.
+
+Set these Vercel project environment variables for the production deployment:
+
+- `VITE_API_URL`: HTTPS origin of the Django backend, for example
+  `https://api.example.com` (no trailing slash or `/api`).
+- `VITE_WS_HOST`: backend hostname for live-location WebSockets, for example
+  `api.example.com` (no scheme or path).
+
+On the backend, include the API hostname in `ALLOWED_HOSTS`, and set
+`CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` to the exact Vercel frontend origin.
+If frontend and backend are on different site domains, also set
+`CROSS_SITE_COOKIE_AUTH=True`; this requires HTTPS and enables cross-site
+session/CSRF cookies. For reliable session authentication, use a custom
+frontend domain on the same site as the API (for example, `app.example.com`
+and `api.example.com`); browsers may block third-party cookies when using the
+default `*.vercel.app` domain. For the demo simulator, deploy a separate
+staging backend with `DEBUG=False`, `APP_ENVIRONMENT=staging`, and
+`DEMO_SIMULATION_ENABLED=True`. Production intentionally keeps the simulator
+disabled.
+
 ## Payment flow
 
 1. Passenger creates a booking.
