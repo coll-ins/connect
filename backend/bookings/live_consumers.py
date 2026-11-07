@@ -1,6 +1,7 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from users.identity import is_driver_account_for
+from users.route_scope import can_handle_route
 
 
 class BookingLiveConsumer(AsyncJsonWebsocketConsumer):
@@ -64,4 +65,5 @@ class BookingLiveConsumer(AsyncJsonWebsocketConsumer):
         return (
             role in {"company_manager", "company_auditor", "company_operator"}
             and getattr(user, "company_id", None) == booking.route.company_id
+            and can_handle_route(user, booking.route_id)
         )

@@ -1,0 +1,57 @@
+/* Phones and tablets: every control gets a 44px hit area (WCAG 2.5.5),
+   and form text stays at 16px so iOS Safari does not zoom on focus. */
+@media (pointer: coarse) {
+  button:not(.leaflet-container *, .maplibregl-map *),
+  [role='button']:not(.leaflet-container *, .maplibregl-map *),
+  select,
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='hidden']) {
+    min-height: 44px !important;
+  }
+
+  button:not(.leaflet-container *, .maplibregl-map *),
+  [role='button']:not(.leaflet-container *, .maplibregl-map *) {
+    min-width: 44px !important;
+  }
+
+  input:not([type='checkbox'], [type='radio'], [type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  nav a,
+  .pa-link,
+  .audit-nav-item,
+  aside a {
+    min-height: 44px !important;
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 20px;
+    height: 20px;
+  }
+
+  .journey-back {
+    min-height: 44px;
+  }
+
+  .driver-timetable-link,
+  .company-panel-header a,
+  .company-section-head a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+.trip-info span,
+.data-card-details span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+small {
+  font-size: max(11px, 0.8em);
+}

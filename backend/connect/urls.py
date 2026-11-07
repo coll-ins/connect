@@ -5,10 +5,11 @@ from django.urls import path, include
 from django.http import JsonResponse
 from companies.views import get_trips, get_trip_details
 from connect.system_checks import run_system_checks
-from connect.demo_simulation import (
-    advance_demo_simulation,
-    demo_simulation_collection,
-    stop_demo_simulation,
+from companies.simulation import (
+    active_trip_simulation,
+    advance_trip_simulation,
+    start_trip_simulation,
+    stop_trip_simulation,
 )
 
 def health_check(request):
@@ -43,19 +44,24 @@ urlpatterns = [
     name='system-diagnostics'
 ),
     path(
-        'api/system/demo-simulation/',
-        demo_simulation_collection,
-        name='demo-simulation',
+        'api/system/trips/<int:trip_id>/simulate/',
+        start_trip_simulation,
+        name='start-trip-simulation',
     ),
     path(
-        'api/system/demo-simulation/<int:simulation_id>/advance/',
-        advance_demo_simulation,
-        name='advance-demo-simulation',
+        'api/system/trip-simulations/active/',
+        active_trip_simulation,
+        name='active-trip-simulation',
     ),
     path(
-        'api/system/demo-simulation/<int:simulation_id>/stop/',
-        stop_demo_simulation,
-        name='stop-demo-simulation',
+        'api/system/trip-simulations/<int:simulation_id>/advance/',
+        advance_trip_simulation,
+        name='advance-trip-simulation',
+    ),
+    path(
+        'api/system/trip-simulations/<int:simulation_id>/stop/',
+        stop_trip_simulation,
+        name='stop-trip-simulation',
     ),
 
     path('api/users/', include('users.urls')),

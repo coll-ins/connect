@@ -26,7 +26,7 @@ export function CharterList() {
       <div className="svc-page">
         <div className="svc-head">
           <div>
-            <span className="glass-eyebrow">BUS HIRE</span>
+            <span className="glass-eyebrow">Bus hire</span>
             <h1>Your bus hire requests</h1>
             <p>Hire a whole bus for a school trip, wedding, tour or event. Tell the company what you need, they send you a price, and you pay in the app to confirm.</p>
           </div>
@@ -38,7 +38,7 @@ export function CharterList() {
         {rows === null ? (
           <div className="glass-empty">Loading…</div>
         ) : !rows.length ? (
-          <div className="glass-empty"><Bus size={28} /><strong>No requests yet.</strong></div>
+          <div className="glass-empty"><Bus size={28} /><strong>No requests yet.</strong><span>Hire a whole bus for a school trip, wedding or event. You only pay once you accept a quote.</span></div>
         ) : (
           <div className="svc-list">
             {rows.map((c) => (
@@ -124,7 +124,7 @@ export function CharterNew() {
         {companies === null ? (
           <div className="glass-empty">Loading…</div>
         ) : !companies.length ? (
-          <div className="glass-empty"><strong>No company is taking bus hire requests right now.</strong></div>
+          <div className="glass-empty"><Bus size={28} /><strong>No company is taking bus hire requests right now.</strong><span>Companies switch bus hire on from their dashboard. Your past requests stay under Bus hire.</span><Link to="/passenger/charter" className="glass-empty-action">Back to bus hire</Link></div>
         ) : (
           <form className="svc-card" onSubmit={submit}>
             <div className="svc-form">

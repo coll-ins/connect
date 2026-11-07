@@ -1,11 +1,9 @@
-"""SHOWCASE: drive a demo bus along a real route through the real GPS endpoint.
+"""SHOWCASE: drive a bus along a real route through the real GPS endpoint.
 
 Only the movement is simulated. Bookings, payments, boarding, the departure
 trigger and the SMS are the production code paths. By default it talks to the
 RUNNING server over HTTP, so websocket pushes happen inside that server.
 """
-import json
-import math
 import random
 import select
 import sys
@@ -21,71 +19,9 @@ from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from companies.geo import haversine_m, orient_path, parse_geometry, point_along
 from companies.models import Trip
 from users.phone import phone_variants
-
-
-def haversine_m(a, b):
-    dlat = math.radians(b[0] - a[0])
-    dlng = math.radians(b[1] - a[1])
-    h = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(math.radians(a[0])) * math.cos(math.radians(b[0]))
-        * math.sin(dlng / 2) ** 2
-    )
-    return 6371000.0 * 2 * math.asin(math.sqrt(h))
-
-
-def parse_geometry(raw):
-    """GeoJSON LineString/Feature/MultiLineString -> [(lat, lng), ...] or None."""
-    if not raw:
-        return None
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except ValueError:
-            return None
-    if not isinstance(raw, dict):
-        return None
-    if raw.get('type') == 'Feature':
-        raw = raw.get('geometry') or {}
-    if raw.get('type') == 'FeatureCollection':
-        feats = raw.get('features') or []
-        raw = (feats[0].get('geometry') if feats else {}) or {}
-    kind, coords = raw.get('type'), raw.get('coordinates')
-    if kind == 'LineString':
-        pts = coords
-    elif kind == 'MultiLineString':
-        pts = [p for line in (coords or []) for p in line]
-    else:
-        return None
-    out = []
-    for p in pts or []:
-        try:
-            out.append((float(p[1]), float(p[0])))  # GeoJSON is [lng, lat]
-        except (TypeError, ValueError, IndexError):
-            continue
-    return out if len(out) >= 2 else None
-
-
-def orient_path(path, start):
-    """Make the path begin at the end nearest the boarding stage."""
-    if haversine_m(path[-1], start) < haversine_m(path[0], start):
-        return list(reversed(path))
-    return list(path)
-
-
-def point_along(path, dist_m):
-    remaining = dist_m
-    for a, b in zip(path, path[1:]):
-        seg = haversine_m(a, b)
-        if seg == 0:
-            continue
-        if remaining <= seg:
-            f = remaining / seg
-            return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), False
-        remaining -= seg
-    return path[-1], True
 
 
 def path_length_m(path):
@@ -98,10 +34,10 @@ def mask(phone):
 
 
 class Command(BaseCommand):
-    help = 'SHOWCASE: move a demo bus along its route via the real GPS endpoint.'
+    help = 'SHOWCASE: move a bus along its route via the real GPS endpoint.'
 
     def add_arguments(self, parser):
-        parser.add_argument('--trip', type=int, help='Trip id (default: newest boarding DEMO trip).')
+        parser.add_argument('--trip', type=int, required=True, help='Trip id to drive.')
         parser.add_argument('--speed-kmh', type=float, default=40.0)
         parser.add_argument('--approach-m', type=float, default=0.0,
                             help='Start this many metres before the first stage and drive in.')
@@ -120,29 +56,20 @@ class Command(BaseCommand):
         from bookings.models import Booking
 
         trips = Trip.objects.select_related('route', 'driver')
-        trip = (
-            trips.filter(pk=opts['trip']).first() if opts['trip']
-            else trips.filter(status='boarding', driver__bus_number__startswith='DEMO')
-            .order_by('-id').first()
-        )
+        trip = trips.filter(pk=opts['trip']).first()
         if trip is None:
-            raise CommandError('No trip found. Run seed_demo first, or pass --trip ID.')
+            raise CommandError(f'Trip {opts["trip"]} not found.')
         driver, route = trip.driver, trip.route
-        if not driver.bus_number.startswith('DEMO-'):
-            raise CommandError(
-                'simulate_bus only moves trips assigned to a DEMO-prefixed bus.'
-            )
         stage = route.pickup_stages.filter(is_active=True).order_by('order', 'id').first()
         if stage is None:
             raise CommandError(f'Route "{route.name}" has no active first stage.')
         start = (float(stage.latitude), float(stage.longitude))
 
         User = get_user_model()
-        user = (
-            User.objects.filter(role='driver', company_id=driver.company_id,
-                                phone_number__in=phone_variants(driver.phone_number)).first()
-            or User.objects.filter(username='demo_driver').first()
-        )
+        user = User.objects.filter(
+            role='driver', company_id=driver.company_id,
+            phone_number__in=phone_variants(driver.phone_number),
+        ).first()
         if user is None:
             raise CommandError('No driver login matches this driver. Run seed_demo first.')
 

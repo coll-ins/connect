@@ -6,6 +6,7 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db import transaction
 from rest_framework import status
+from django.contrib.auth.hashers import make_password
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -13,7 +14,13 @@ from rest_framework.response import Response
 
 from .models import CustomUser
 from .phone import phone_variants
-from .throttles import LoginIPThrottle, LoginPhoneThrottle, SignupPhoneThrottle
+from .throttles import (
+    LoginIPThrottle,
+    SignupPhoneThrottle,
+    clear_login_failures,
+    login_blocked,
+    record_login_failure,
+)
 from .serializers import UserSerializer, CompanyStaffSerializer
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -135,7 +142,7 @@ def admin_signup(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([LoginPhoneThrottle, LoginIPThrottle])
+@throttle_classes([LoginIPThrottle])
 def user_login(request):
     raw_phone = request.data.get('phone_number')
     password = request.data.get('password')
@@ -148,6 +155,13 @@ def user_login(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    client_ip = LoginIPThrottle().get_ident(request)
+    if login_blocked(raw_phone, client_ip):
+        return Response(
+            {'error': 'Too many failed attempts. Try again in an hour.'},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
     user_obj = (
         CustomUser.objects
         .select_related('company')
@@ -156,22 +170,25 @@ def user_login(request):
     )
 
     if user_obj is None:
-        return Response(
-            {'error': 'Invalid phone number or password.'},
-            status=status.HTTP_401_UNAUTHORIZED,
+        # Spend the same hashing time as a real check so response timing
+        # does not reveal which phone numbers are registered.
+        make_password(password)
+        user = None
+    else:
+        user = authenticate(
+            request,
+            username=user_obj.username,
+            password=password,
         )
-
-    user = authenticate(
-        request,
-        username=user_obj.username,
-        password=password,
-    )
 
     if user is None:
+        record_login_failure(raw_phone, client_ip)
         return Response(
             {'error': 'Invalid phone number or password.'},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+    clear_login_failures(raw_phone)
 
     if not user.is_active:
         return Response(

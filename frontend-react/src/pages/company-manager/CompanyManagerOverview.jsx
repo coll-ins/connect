@@ -127,7 +127,7 @@ export default function CompanyManagerOverview() {
             <>
               <section className="company-welcome">
                 <div>
-                  <p className="company-eyebrow">WELCOME BACK</p>
+                  <p className="company-eyebrow">Company overview</p>
                   <h2>{company?.name || user?.company_name || 'Your company'}</h2>
                   <p>
                     Manage your company's routes, departures, drivers,
@@ -221,7 +221,7 @@ export default function CompanyManagerOverview() {
                   <div className="company-panel-header">
                     <div>
                       <span className="company-panel-kicker">
-                        UPCOMING
+                        Upcoming
                       </span>
                       <h3>Departures</h3>
                     </div>
@@ -268,7 +268,7 @@ export default function CompanyManagerOverview() {
                   <div className="company-panel-header">
                     <div>
                       <span className="company-panel-kicker">
-                        CAPACITY
+                        Capacity
                       </span>
                       <h3>Network capacity</h3>
                     </div>
@@ -314,7 +314,7 @@ export default function CompanyManagerOverview() {
                 <div className="company-panel-header">
                   <div>
                     <span className="company-panel-kicker">
-                      RECENT ACTIVITY
+                      Recent activity
                     </span>
                     <h3>Bookings</h3>
                   </div>

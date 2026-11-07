@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Bus, Check } from 'lucide-react';
 
 import { apiRequest } from '../../api';
 import AppShell from '../../components/layout/AppShell';
@@ -102,7 +102,7 @@ export function CharterNew() {
         {companies === null ? (
           <div className="glass-empty">Loading…</div>
         ) : !companies.length ? (
-          <div className="glass-empty"><strong>No company is taking bus hire requests right now.</strong></div>
+          <div className="glass-empty"><Bus size={28} /><strong>No company is taking bus hire requests right now.</strong><span>Companies switch bus hire on from their dashboard. Your past requests stay under Bus hire.</span><Link to="/passenger/charter" className="glass-empty-action">Back to bus hire</Link></div>
         ) : (
           <div className="svc-card">
             {step === 0 && (

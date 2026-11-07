@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-// Platform admin runs the client demo trip on the real API.
-test('platform admin runs, follows and stops the demo trip', async ({ page }) => {
+// The platform admin simulates the seeded boarding trip (bus KDA 123A): the
+// trip's real driver moves through the same code path as live GPS.
+test('platform admin simulates a real trip, the driver moves, then stops it', async ({ page }) => {
   const problems = [];
   page.on('pageerror', (e) => problems.push(e.message));
 
@@ -12,20 +13,27 @@ test('platform admin runs, follows and stops the demo trip', async ({ page }) =>
   await expect(page).toHaveURL(/\/platform-admin/);
 
   await page.goto('/platform-admin/trips');
-  const panel = page.getByTestId('demo-simulation-panel');
-  const route = panel.getByLabel('Demo route');
-  await route.selectOption({ index: 1 });
-  await panel.locator('.pa-primary-button').click();
+  const row = page.getByRole('row').filter({ hasText: 'Peter Mwangi' });
+  await row.getByRole('button', { name: 'Simulate' }).click();
 
-  await expect(panel.locator('.bus-icon')).toBeVisible();
-  const progress = async () => Number((await panel.getByText(/% complete/).textContent()).match(/\d+/)[0]);
+  const status = row.getByRole('status');
+  await expect(status).toContainText('Moving');
+  const progress = async () => Number((await status.textContent()).match(/(\d+)%/)[1]);
   const first = await progress();
-  await expect.poll(progress, { timeout: 15000 }).toBeGreaterThan(first);
+  await expect.poll(progress, { timeout: 20000 }).toBeGreaterThan(first);
 
-  await panel.getByRole('button', { name: 'Show whole route' }).click();
-  await expect(panel.getByRole('button', { name: 'Follow bus' })).toBeVisible();
+  // The real driver record moved: the API reports the live position.
+  const position = await page.evaluate(async () => {
+    const res = await fetch('/api/system/trip-simulations/active/', { credentials: 'include' });
+    return res.json();
+  });
+  expect(position.simulation?.status).toBe('running');
 
-  await panel.getByRole('button', { name: /Stop simulation/ }).click();
-  await expect(panel.getByRole('button', { name: /Stop simulation/ })).toHaveCount(0);
+  // Every other trip waits its turn.
+  const other = page.getByRole('row').filter({ hasText: 'Joseph Kiprop' });
+  await expect(other.getByRole('button', { name: 'Simulate' })).toBeDisabled();
+
+  await row.getByRole('button', { name: 'Stop' }).click();
+  await expect(row.getByRole('button', { name: 'Simulate' })).toBeVisible();
   expect(problems).toEqual([]);
 });

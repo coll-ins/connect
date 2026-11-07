@@ -248,38 +248,33 @@ class WeeklyOperationsReport(models.Model):
         ]
 
 
-class DemoTripSimulation(models.Model):
+class TripSimulation(models.Model):
+    """An admin-run walk of a trip's bus along its route, via the real GPS path."""
     STATUS_CHOICES = [
         ('running', 'Running'),
-        ('completed', 'Completed'),
         ('stopped', 'Stopped'),
+        ('completed', 'Completed'),
         ('expired', 'Expired'),
     ]
 
-    created_by = models.ForeignKey(
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name='simulations'
+    )
+    started_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name='demo_trip_simulations',
+        related_name='trip_simulations',
     )
-    route_id = models.PositiveBigIntegerField()
-    route_name = models.CharField(max_length=200)
-    company_name = models.CharField(max_length=100)
-    start_point = models.CharField(max_length=100)
-    end_point = models.CharField(max_length=100)
-    bus_number = models.CharField(max_length=30, default='DEMO BUS')
     path = models.JSONField()
     position_index = models.PositiveSmallIntegerField(default=0)
     status = models.CharField(
-        max_length=10,
-        choices=STATUS_CHOICES,
-        default='running',
+        max_length=10, choices=STATUS_CHOICES, default='running'
     )
+    expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField()
-    finished_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -287,6 +282,6 @@ class DemoTripSimulation(models.Model):
             models.UniqueConstraint(
                 fields=['status'],
                 condition=Q(status='running'),
-                name='uniq_running_demo_trip_simulation',
+                name='uniq_running_trip_simulation',
             ),
         ]

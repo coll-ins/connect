@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Armchair, ArrowUpRight, Banknote, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
 
 import { apiRequest } from '../../api';
-import { useAuth } from '../../context/AuthContext';
 import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
@@ -108,7 +108,7 @@ function PaymentModal({
 
   return <div className="modal-backdrop"><div className="modal">
     <button className="btn btn-ghost modal-close" onClick={onClose}>Close</button>
-    <p className="eyebrow">BOOKING {booking.booking_number}</p>
+    <p className="eyebrow">Booking {booking.booking_number}</p>
     <h2>{money(booking.total_amount)}</h2><p className="muted">Choose how you want to complete this trip.</p>
     {error && (
       <NoticeStack>
@@ -118,12 +118,12 @@ function PaymentModal({
       </NoticeStack>
     )}
     {step==='method' && <div className="stack" style={{marginTop:18}}>
-      <button className="pay-option" onClick={cash} disabled={busy}><div className="pay-icon">💵</div><div><strong>Pay with cash</strong><span>Pay the driver/conductor according to the trip rules.</span></div></button>
-      <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon">💳</div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
+      <button className="pay-option" onClick={cash} disabled={busy}><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay with cash</strong><span>Pay the driver/conductor according to the trip rules.</span></div></button>
+      <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
     </div>}
     {step==='online' && <div className="stack" style={{marginTop:18}}>
-      <button className="pay-option" onClick={()=>setStep('mpesa-number')} disabled={busy}><div className="pay-icon">📱</div><div><strong>M-PESA</strong><span>Choose which phone number will receive the payment prompt.</span></div></button>
-      <button className="pay-option" onClick={card} disabled={busy}><div className="pay-icon">💳</div><div><strong>Card</strong><span>Secure Paystack checkout. Card authentication stays with Paystack.</span></div></button>
+      <button className="pay-option" onClick={()=>setStep('mpesa-number')} disabled={busy}><div className="pay-icon"><Smartphone size={20} aria-hidden="true" /></div><div><strong>M-PESA</strong><span>Choose which phone number will receive the payment prompt.</span></div></button>
+      <button className="pay-option" onClick={card} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Card</strong><span>Secure Paystack checkout. Card authentication stays with Paystack.</span></div></button>
       <button className="btn btn-ghost" onClick={()=>setStep('method')}>← Back</button>
     </div>}
     {step==='mpesa-number' && <div style={{marginTop:18}}>
@@ -133,7 +133,7 @@ function PaymentModal({
         disabled={busy}
         type="button"
       >
-        <div className="pay-icon">📱</div>
+        <div className="pay-icon"><Smartphone size={20} aria-hidden="true" /></div>
         <div>
           <strong>Pay with my number</strong>
           <span>Use the phone number saved on your CONNECT account.</span>
@@ -242,7 +242,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const urlJourney = fromSearch(location.search, initialJourneyStep);
-  const { user } = useAuth();
   const [companies,setCompanies]=useState([]),[routes,setRoutes]=useState([]),[trips,setTrips]=useState([]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
@@ -253,7 +252,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
-  const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1),[pickup,setPickup]=useState(user?.location||'Main Stage');
+  const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1);
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
@@ -335,11 +334,11 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const canBookTrip=(t)=>seatsLeft(t)>0&&(t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId)));
   const tripButtonLabel=(t)=>{
     if(seatsLeft(t)<=0) return 'Fully booked';
-    if(canBookTrip(t)) return 'Select trip →';
+    if(canBookTrip(t)) return 'Select trip';
     if(t.status==='boarding') return 'Boarding at first stage only';
     return 'Unavailable';
   };
-  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1);setPickup(user?.location||'Main Stage')};
+  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1)};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
 
@@ -535,7 +534,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         <section className="passenger-home">
           <div className="passenger-welcome">
             <div>
-              <span className="glass-eyebrow">CONNECT • SMART MATATU TRAVEL</span>
+              <span className="glass-eyebrow">CONNECT matatu booking</span>
               <h1>Where are you<br />going today?</h1>
               <p>
                 Choose how you want to travel and we'll guide you
@@ -543,11 +542,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               </p>
             </div>
 
-            <div className="welcome-orb" aria-hidden="true">
-              <div className="welcome-orb-inner">
-                <span>✦</span>
-              </div>
-            </div>
           </div>
 
           <div className="journey-choice-grid">
@@ -559,17 +553,16 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             >
               <div className="journey-choice-image journey-seat-image" style={{ backgroundImage: `url(${bookSeatImage})` }}>
                 <div className="journey-image-overlay" />
-                <span className="journey-icon">🚌</span>
+                <span className="journey-icon"><Armchair size={18} aria-hidden="true" /></span>
               </div>
 
               <div className="journey-choice-content">
-                <span className="journey-number">01</span>
-                <h2>Book a Seat</h2>
+                <h2>Book a seat</h2>
                 <p>
                   Find an available departure and reserve your seat
                   quickly.
                 </p>
-                <span className="journey-arrow">Explore seats <b>→</b></span>
+                <span className="journey-arrow">Find a trip</span>
               </div>
             </button>
 
@@ -580,16 +573,15 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             >
               <div className="journey-choice-image journey-travel-image" style={{ backgroundImage: `url(${deliveryImage})` }}>
                 <div className="journey-image-overlay" />
-                <span className="journey-icon">✦</span>
+                <span className="journey-icon"><Package size={18} aria-hidden="true" /></span>
               </div>
 
               <div className="journey-choice-content">
-                <span className="journey-number">02</span>
-                <h2>Order Delivery</h2>
+                <h2>Send a parcel</h2>
                 <p>
                   Send a parcel safely through the CONNECT transport network.
                 </p>
-                <span className="journey-arrow">Send a parcel <b>→</b></span>
+                <span className="journey-arrow">Send a parcel</span>
               </div>
             </button>
 
@@ -600,16 +592,15 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             >
               <div className="journey-choice-image journey-bus-image" style={{ backgroundImage: `url(${bookBusImage})` }}>
                 <div className="journey-image-overlay" />
-                <span className="journey-icon">🚍</span>
+                <span className="journey-icon"><Bus size={18} aria-hidden="true" /></span>
               </div>
 
               <div className="journey-choice-content">
-                <span className="journey-number">03</span>
-                <h2>Book a Bus</h2>
+                <h2>Hire a bus</h2>
                 <p>
                   Reserve a whole bus for groups, events and private travel.
                 </p>
-                <span className="journey-arrow">Request a bus <b>→</b></span>
+                <span className="journey-arrow">Request a bus</span>
               </div>
             </button>
 
@@ -620,7 +611,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             style={{ marginTop: 28 }}
           >
             <div className="journey-heading">
-              <span className="glass-eyebrow">MY TRIPS</span>
+              <span className="glass-eyebrow">My trips</span>
               <h2>Upcoming and active bookings</h2>
               <p>
                 View your confirmed trips and track an assigned bus when live
@@ -630,7 +621,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
             {!bookings.length ? (
               <div className="glass-empty">
-                <span>You do not have any bookings yet.</span>
+                <span>No upcoming trips. Choose Book a seat above to find one.</span>
               </div>
                 ) : (
                   <div className="modern-trip-list">
@@ -643,7 +634,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                       key={b.booking_id}
                     >
                       <div className="trip-time-block">
-                        <span>TRIP</span>
+                        <span>Trip</span>
                         <strong>{b.booking_number}</strong>
                         <small>{date(b.departure_at)}</small>
                         {b.verification_pin && (
@@ -675,10 +666,10 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
                       <div className="trip-info">
                         <span>
-                          🚌 {b.driver_bus_number || 'Bus pending'}
+                          <Bus size={14} aria-hidden="true" /> {b.driver_bus_number || 'Bus pending'}
                         </span>
                         <span>
-                          📍 {b.pickup_stage_name || b.pickup_location || 'Pickup pending'}
+                          <MapPin size={14} aria-hidden="true" /> {b.pickup_stage_name || b.pickup_location || 'Pickup pending'}
                         </span>
                         <span>
                           {b.status}
@@ -706,7 +697,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                               )
                             }
                           >
-                            Track trip →
+                            Track trip
                           </button>
                         ) : (
                           <span className="trip-status-label">
@@ -743,13 +734,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             )}
           </section>
 
-          <div className="passenger-home-footer">
-            <span>Secure booking</span>
-            <span>•</span>
-            <span>Wallet protected</span>
-            <span>•</span>
-            <span>Real-time departures</span>
-          </div>
         </section>
       )}
 
@@ -766,7 +750,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </button>
 
             <span className="glass-eyebrow">
-              BOOK A SEAT
+              Book a seat
             </span>
 
             <h1>Choose your transport company</h1>
@@ -800,22 +784,20 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                   }}
                 >
                   <div className="company-image-shade" />
-                  <div className="company-bus-mark">🚌</div>
-                  <span className="company-image-label">CONNECT FLEET</span>
-                </div>
+                  <div className="company-bus-mark"><Bus size={18} aria-hidden="true" /></div>
+                                  </div>
 
                 <div className="company-card-content">
                   <div>
-                    <span className="company-kicker">TRANSPORT COMPANY</span>
+                    <span className="company-kicker">Transport company</span>
                     <h2>{c.name}</h2>
                   </div>
 
-                  <span className="company-card-arrow">↗</span>
+                  <span className="company-card-arrow"><ArrowUpRight size={16} aria-hidden="true" /></span>
                 </div>
 
                 <div className="company-card-footer">
                   <span>View routes</span>
-                  <span>→</span>
                 </div>
               </button>
             ))}
@@ -842,7 +824,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </button>
 
             <span className="glass-eyebrow">
-              {selectedCompany?.name || 'TRANSPORT COMPANY'}
+              {selectedCompany?.name || 'Transport company'}
             </span>
 
             <h1>Where would you like to go?</h1>
@@ -853,7 +835,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
           </div>
 
           <div className="selected-company-strip">
-            <div className="selected-company-icon">🚌</div>
+            <div className="selected-company-icon"><Bus size={20} aria-hidden="true" /></div>
             <div>
               <span>Selected company</span>
               <strong>{selectedCompany?.name || 'Transport company'}</strong>
@@ -918,12 +900,12 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         ← Back to routes
       </button>
 
-      <span className="glass-eyebrow">STEP 3 OF 4</span>
+      <span className="glass-eyebrow">Step 3 of 4</span>
     </div>
 
     <div className="pickup-stage-heading">
       <div>
-        <span className="pickup-stage-kicker">PICKUP LOCATION</span>
+        <span className="pickup-stage-kicker">Pickup location</span>
         <h1>Where will you board?</h1>
         <p>
           Choose a pickup stage along your journey. We'll use this location
@@ -932,7 +914,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       </div>
 
       <div className="pickup-route-pill">
-        <span>ROUTE</span>
+        <span>Route</span>
         <strong>
           {selectedRoute?.start_point || selectedRoute?.origin || 'Origin'}
           <b>→</b>
@@ -944,7 +926,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     <div className="pickup-stage-card">
       <div className="pickup-stage-card-header">
         <div>
-          <span className="pickup-stage-label">AVAILABLE STAGES</span>
+          <span className="pickup-stage-label">Available stages</span>
           <h2>Select your boarding point</h2>
         </div>
 
@@ -970,7 +952,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 {String(index + 1).padStart(2, '0')}
               </span>
 
-              <span className="pickup-stage-icon">📍</span>
+              <span className="pickup-stage-icon"><MapPin size={18} aria-hidden="true" /></span>
 
               <span className="pickup-stage-info">
                 <strong>{stage.name}</strong>
@@ -984,7 +966,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
       {(selectedRoute?.pickup_stages || []).length === 0 && (
         <div className="pickup-stage-empty">
-          <span className="pickup-stage-empty-icon">📍</span>
+          <span className="pickup-stage-empty-icon"><MapPin size={22} aria-hidden="true" /></span>
           <strong>No mapped pickup stages yet</strong>
           <p>
             You can enter another pickup location below.
@@ -997,7 +979,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       <div className="pickup-other-icon">＋</div>
 
       <div className="pickup-other-content">
-        <span className="pickup-stage-label">CUSTOM PICKUP</span>
+        <span className="pickup-stage-label">Custom pickup</span>
         <h2>Can't find your stage?</h2>
         <p>Enter another pickup location along the route.</p>
 
@@ -1019,14 +1001,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             disabled={!otherPickup.trim()}
             onClick={() => setJourneyStep('trips')}
           >
-            Continue →
+            Continue
           </button>
         </div>
       </div>
     </div>
 
     <div className="pickup-stage-help">
-      <span>✓</span>
+      <span><Check size={16} aria-hidden="true" /></span>
       <p>
         Select a recognized stage whenever possible for a smoother boarding
         experience.
@@ -1045,7 +1027,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </button>
 
             <span className="glass-eyebrow">
-              AVAILABLE DEPARTURES
+              Available departures
             </span>
 
             <h1>{selectedRoute?.name || 'Available trips'}</h1>
@@ -1092,7 +1074,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <article className="modern-trip-card" key={t.id}>
 
                   <div className="trip-time-block">
-                    <span>DEPARTURE</span>
+                    <span>Departure</span>
                     <strong>
                       {new Date(t.departure_at).toLocaleTimeString(
                         'en-KE',
@@ -1122,10 +1104,10 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
                   <div className="trip-info">
                     <span>
-                      🚌 {t.driver_bus_number || 'Bus pending'}
+                      <Bus size={14} aria-hidden="true" /> {t.driver_bus_number || 'Bus pending'}
                     </span>
                     <span>
-                      💺 {seatsLeft(t)} of {t.capacity || 0} seats left
+                      <Armchair size={14} aria-hidden="true" /> {seatsLeft(t)} of {t.capacity || 0} seats left
                     </span>
                     <span>
                       {t.status}
@@ -1168,7 +1150,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               Close
             </button>
 
-            <span className="glass-eyebrow">CONFIRM YOUR JOURNEY</span>
+            <span className="glass-eyebrow">Confirm your journey</span>
 
             <h2>{bookingTrip.route_details?.name}</h2>
 
@@ -1214,14 +1196,10 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 />
               </label>
 
-              <label className="field">
-                Pickup location
-                <input
-                  className="input"
-                  value={pickup}
-                  onChange={(e) => setPickup(e.target.value)}
-                />
-              </label>
+              <div className="field">
+                Boarding at
+                <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
+              </div>
 
               <div className="booking-total-glass">
                 <span>Total journey cost</span>
@@ -1241,7 +1219,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               >
                 {loading
                   ? 'Creating booking…'
-                  : 'Confirm booking & continue →'}
+                  : 'Confirm booking'}
               </button>
             </div>
           </div>

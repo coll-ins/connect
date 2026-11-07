@@ -178,13 +178,13 @@ function OperatorShell({
         </div>
 
         <div className="operator-company-card">
-          <span>COMPANY</span>
+          <span>Company</span>
           <strong>{companyName}</strong>
           <small>Operator workspace</small>
         </div>
 
         <nav className="operator-nav" aria-label="Operations navigation">
-          <span className="operator-nav-label">WORKSPACE</span>
+          <span className="operator-nav-label">Workspace</span>
 
           {navigation.map((item) => {
             const Icon = item.icon;
@@ -255,7 +255,7 @@ function OperatorShell({
           </button>
 
           <div className="operator-topbar-title">
-            <span>COMPANY OPERATIONS</span>
+            <span>Company operations</span>
             <strong>
               {navigation.find((item) => item.id === activeSection)?.label ||
                 'Overview'}
@@ -315,7 +315,7 @@ function NewBookingCard({ booking, onAssign }) {
       <div className="operator-booking-alert-content">
         <div className="operator-booking-alert-heading">
           <div>
-            <span className="operator-eyebrow">NEW BOOKING</span>
+            <span className="operator-eyebrow">New booking</span>
             <h3>#{bookingId || '—'}</h3>
           </div>
 
@@ -398,7 +398,7 @@ function BookingRow({
     <article className="operator-booking-row">
       <div className="operator-booking-main">
         <div className="operator-booking-id">
-          <span>BOOKING</span>
+          <span>Booking</span>
           <strong>#{bookingId || '—'}</strong>
         </div>
 
@@ -413,7 +413,7 @@ function BookingRow({
       </div>
 
       <div className="operator-booking-driver">
-        <span>DRIVER</span>
+        <span>Driver</span>
         <strong>{driver || 'Not assigned'}</strong>
       </div>
 
@@ -454,7 +454,7 @@ function BookingRow({
               : 'Tell passengers when the bus leaves this stage'
           }
         >
-          <span>LEAVES STAGE</span>
+          <span>Leaves stage</span>
           <select
             value=""
             disabled={departingBooking === bookingId}
@@ -492,7 +492,7 @@ function TripCard({ trip, onStatusChange, updating }) {
         </div>
 
         <div className="operator-trip-main">
-          <span className="operator-eyebrow">DEPARTURE</span>
+          <span className="operator-eyebrow">Departure</span>
           <h3>{getTripRoute(trip)} <small style={{ opacity: 0.65, fontWeight: 600 }}>#{trip.id}</small></h3>
         </div>
 
@@ -501,17 +501,17 @@ function TripCard({ trip, onStatusChange, updating }) {
 
       <div className="operator-trip-details">
         <div>
-          <span>DEPARTURE</span>
+          <span>Departure</span>
           <strong>{formatShortDate(trip.departure_at)}</strong>
         </div>
 
         <div>
-          <span>DRIVER</span>
+          <span>Driver</span>
           <strong>{trip.driver_name || 'Not assigned'}</strong>
         </div>
 
         <div>
-          <span>CAPACITY</span>
+          <span>Capacity</span>
           <strong>{trip.capacity || '—'} seats</strong>
         </div>
       </div>
@@ -634,6 +634,7 @@ function WalkInForm({ trip, onDone }) {
         <input
           type="tel"
           placeholder="Passenger phone e.g. 0712345678"
+          aria-label="Passenger phone number"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           required
@@ -863,7 +864,7 @@ export default function CompanyOperatorDashboard() {
         tripId: incident.trip,
         title: `${incident.incident_type || 'Incident'} · Trip #${incident.trip}`,
         detail: incident.description,
-        label: `INCIDENT · ${incident.status}`,
+        label: `Incident · ${incident.status}`,
       }));
 
     const manualReviewTrips = trips
@@ -884,7 +885,7 @@ export default function CompanyOperatorDashboard() {
         tripId: trip.id,
         title: `Trip #${trip.id} needs review`,
         detail: `${getTripRoute(trip)} departed over 12 hours ago and still has confirmed bookings.`,
-        label: 'DEPARTURE REVIEW',
+        label: 'Departure review',
       }));
 
     const generationIssues = scheduleExceptions.map((exception) => {
@@ -899,7 +900,7 @@ export default function CompanyOperatorDashboard() {
         key: `schedule-generation-${exception.schedule_id}`,
         title: `${exception.route_name} · Service template #${exception.schedule_id}`,
         detail: `${causes.join('; ')}. Check the assigned driver and trip schedule, then escalate to the company manager. No automatic reassignment was made.`,
-        label: 'SCHEDULE GENERATION',
+        label: 'Schedule generation',
         action: 'Review departures',
       };
     });
@@ -1155,16 +1156,13 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-hero">
         <div>
           <span className="operator-eyebrow">
-            LIVE OPERATIONS
+            Live operations
           </span>
 
-          <h1>
-            Good to see you, {user?.username || 'Operator'}.
-          </h1>
+          <h1>Today's operations</h1>
 
           <p>
-            Coordinate today's passenger activity, drivers and
-            departures from one operational workspace.
+            Boarding, departures and drivers across your routes, live.
           </p>
         </div>
 
@@ -1221,7 +1219,7 @@ export default function CompanyOperatorDashboard() {
           <div className="operator-panel-heading">
             <div>
               <span className="operator-eyebrow">
-                ACTION REQUIRED
+                Action required
               </span>
               <h2>Booking queue</h2>
             </div>
@@ -1267,7 +1265,7 @@ export default function CompanyOperatorDashboard() {
           <div className="operator-panel-heading">
             <div>
               <span className="operator-eyebrow">
-                SYSTEM
+                System
               </span>
               <h2>Operational health</h2>
             </div>
@@ -1309,7 +1307,7 @@ export default function CompanyOperatorDashboard() {
         <div className="operator-panel-heading">
           <div>
             <span className="operator-eyebrow">
-              DEPARTURE BOARD
+              Departure board
             </span>
             <h2>Upcoming departures</h2>
           </div>
@@ -1349,7 +1347,7 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-page-heading">
         <div>
           <span className="operator-eyebrow">
-            BOOKING DESK
+            Booking desk
           </span>
           <h1>Bookings</h1>
           <p>
@@ -1376,7 +1374,7 @@ export default function CompanyOperatorDashboard() {
         <div className="operator-panel-heading">
           <div>
             <span className="operator-eyebrow">
-              ACTIVE QUEUE
+              Active queue
             </span>
             <h2>{activeBookings.length} active bookings</h2>
           </div>
@@ -1414,7 +1412,7 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-page-heading">
         <div>
           <span className="operator-eyebrow">
-            DEPARTURE DESK
+            Departure desk
           </span>
           <h1>Departures</h1>
           <p>
@@ -1441,7 +1439,7 @@ export default function CompanyOperatorDashboard() {
         <div className="operator-panel-heading">
           <div>
             <span className="operator-eyebrow">
-              TRIP CONTROL
+              Trip control
             </span>
             <h2>{upcomingTrips.length} operational trips</h2>
           </div>
@@ -1472,7 +1470,7 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-page-heading">
         <div>
           <span className="operator-eyebrow">
-            DRIVER DESK
+            Driver desk
           </span>
           <h1>Drivers</h1>
           <p>
@@ -1486,7 +1484,7 @@ export default function CompanyOperatorDashboard() {
         <div className="operator-panel-heading">
           <div>
             <span className="operator-eyebrow">
-              COMPANY FLEET
+              Company fleet
             </span>
             <h2>{drivers.length} drivers</h2>
           </div>
@@ -1516,7 +1514,7 @@ export default function CompanyOperatorDashboard() {
                 </div>
 
                 <div className="operator-driver-info">
-                  <span>DRIVER</span>
+                  <span>Driver</span>
                   <h3>{driverName}</h3>
 
                   {driver.bus_number && (
@@ -1547,7 +1545,7 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-page-heading">
         <div>
           <span className="operator-eyebrow">
-            CAPACITY DESK
+            Capacity desk
           </span>
           <h1>Capacity</h1>
           <p>
@@ -1561,7 +1559,7 @@ export default function CompanyOperatorDashboard() {
         <div className="operator-panel-heading">
           <div>
             <span className="operator-eyebrow">
-              SEAT UTILIZATION
+              Seat utilization
             </span>
             <h2>Upcoming trip capacity</h2>
           </div>
@@ -1662,7 +1660,7 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-page-heading">
         <div>
           <span className="operator-eyebrow">
-            OPERATIONS
+            Operations
           </span>
           <h1>Operational monitor</h1>
           <p>
@@ -1692,7 +1690,7 @@ export default function CompanyOperatorDashboard() {
           </div>
 
           <div>
-            <span>UNASSIGNED BOOKINGS</span>
+            <span>Unassigned bookings</span>
             <strong>{unassignedBookings.length}</strong>
             <p>
               Active bookings waiting for driver assignment.
@@ -1706,7 +1704,7 @@ export default function CompanyOperatorDashboard() {
           </div>
 
           <div>
-            <span>NEEDS INTERVENTION</span>
+            <span>Needs intervention</span>
             <strong>{interventionItems.length}</strong>
             <p>
               Active incidents and overdue departures to review.
@@ -1720,7 +1718,7 @@ export default function CompanyOperatorDashboard() {
           </div>
 
           <div>
-            <span>AUTOMATED MONITORING</span>
+            <span>Automated monitoring</span>
             <strong>{error ? 'Attention required' : refreshing ? 'Refreshing' : 'Active'}</strong>
             <p>
               Updates every 30 seconds; load failures are shown above.
@@ -1734,7 +1732,7 @@ export default function CompanyOperatorDashboard() {
           </div>
 
           <div>
-            <span>BOARDING</span>
+            <span>Boarding</span>
             <strong>{boardingTrips.length}</strong>
             <p>Trips currently marked as boarding.</p>
           </div>
@@ -1744,7 +1742,7 @@ export default function CompanyOperatorDashboard() {
       <section className="operator-panel">
         <div className="operator-panel-heading">
           <div>
-            <span className="operator-eyebrow">ACTION REQUIRED</span>
+            <span className="operator-eyebrow">Action required</span>
             <h2>Exceptions needing intervention</h2>
           </div>
         </div>
@@ -1791,7 +1789,7 @@ export default function CompanyOperatorDashboard() {
         <div className="operator-panel-heading">
           <div>
             <span className="operator-eyebrow">
-              LIVE SNAPSHOT
+              Live snapshot
             </span>
             <h2>Current operating position</h2>
           </div>
@@ -1891,12 +1889,6 @@ export default function CompanyOperatorDashboard() {
 
         {renderSection()}
 
-        <footer className="operator-footer">
-          <span>CONNECT Operations</span>
-          <span>
-            Operator access • Company scoped
-          </span>
-        </footer>
       </OperatorShell>
 
       {assigningBooking && (
@@ -1910,7 +1902,7 @@ export default function CompanyOperatorDashboard() {
             <div className="operator-modal-header">
               <div>
                 <span className="operator-eyebrow">
-                  DRIVER ASSIGNMENT
+                  Driver assignment
                 </span>
                 <h2 id="operator-assignment-title">
                   Assign existing driver
@@ -1930,7 +1922,7 @@ export default function CompanyOperatorDashboard() {
 
             <div className="operator-modal-booking">
               <span>
-                BOOKING #{getBookingId(assigningBooking)}
+                Booking #{getBookingId(assigningBooking)}
               </span>
 
               <strong>
