@@ -113,7 +113,27 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
   expect(modalBounds.y).toBeGreaterThanOrEqual(0);
   expect(modalBounds.y + modalBounds.height).toBeLessThanOrEqual(844);
 
+  // On a short phone, the seat buttons, Confirm and the payment choices must
+  // all be on screen without scrolling.
+  await page.setViewportSize({ width: 360, height: 640 });
+  const expectOnScreen = async (locator) => {
+    await expect(locator).toBeVisible();
+    const box = await locator.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(640);
+  };
+  await expectOnScreen(page.getByRole('button', { name: 'Add a seat' }));
+  await expectOnScreen(page.getByRole('button', { name: 'Confirm booking' }));
+
+  await page.getByRole('button', { name: 'Add a seat' }).click();
+  await expect(page.locator('.booking-seat-stepper strong')).toHaveText('2');
+  await page.getByRole('button', { name: 'Remove a seat' }).click();
+  await expect(page.locator('.booking-seat-stepper strong')).toHaveText('1');
+
   await page.getByRole('button', { name: 'Confirm booking' }).click();
+  await expectOnScreen(page.getByRole('button', { name: /Pay with cash/ }));
+  await expectOnScreen(page.getByRole('button', { name: /Pay online/ }));
   await page.getByRole('button', { name: /Pay with cash/ }).click();
 
   await expect(page).toHaveURL(/\/passenger\/map\?booking=42$/);

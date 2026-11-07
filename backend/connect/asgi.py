@@ -5,6 +5,10 @@ from django.core.asgi import get_asgi_application
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'connect.settings')
 django_asgi_app = get_asgi_application()
 
+from connect.startup import ensure_platform_admin  # noqa: E402
+
+ensure_platform_admin()
+
 from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
