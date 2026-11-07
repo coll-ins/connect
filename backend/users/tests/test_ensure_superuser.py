@@ -41,6 +41,39 @@ class EnsureSuperuserTests(TestCase):
         ):
             ensure_platform_admin()
 
+    def test_health_check_reports_the_outcome_without_any_credential(self):
+        from connect.startup import ensure_platform_admin
+        from companies.models import Company
+
+        def health():
+            return self.client.get('/api/health/').json()['admin_setup']
+
+        with mock.patch.dict('os.environ', ENV):
+            ensure_platform_admin()
+        self.assertEqual(health(), 'ready')
+        body = self.client.get('/api/health/').content.decode()
+        self.assertNotIn(ENV['ADMIN_PASSWORD'], body)
+        self.assertNotIn('712345678', body)
+
+        with mock.patch.dict('os.environ', ENV), mock.patch(
+            'connect.startup.call_command', side_effect=RuntimeError('no database'),
+        ):
+            ensure_platform_admin()
+        self.assertEqual(health(), 'failed')
+
+        co = Company.objects.create(name='Metro', areas_served='Nairobi')
+        User.objects.create_user(
+            username='mgr', password='x', phone_number='+254711222444',
+            company=co, role='company_manager')
+        staff_env = {'ADMIN_PHONE': '+254711222444', 'ADMIN_PASSWORD': 'Str0ng-pass-91'}
+        with mock.patch.dict('os.environ', staff_env):
+            ensure_platform_admin()
+        self.assertEqual(health(), 'company_account')
+
+        with mock.patch.dict('os.environ', {'ADMIN_PHONE': '', 'ADMIN_PASSWORD': ''}):
+            ensure_platform_admin()
+        self.assertEqual(health(), 'not_configured')
+
     def test_noop_when_unset(self):
         with mock.patch.dict('os.environ', {}, clear=False) as env:
             env.pop('ADMIN_PHONE', None)
