@@ -24,6 +24,14 @@ test('passenger books, pays later from My bookings, then cancels', async ({ page
   await page.goto(`/passenger?step=stages&mode=seat&company=${target.company}&route=${target.route}`);
   await page.getByText('Kencom House').first().click();
 
+  // The seeded scheduled trip leaves 3 hours after seeding, which is
+  // tomorrow in Nairobi when the suite runs late in the day: show its date.
+  const trips = await (await page.request.get(`/api/companies/${target.company}/trips/`)).json();
+  const later = trips.find((t) => t.status === 'scheduled' && t.route === target.route)
+    || trips.find((t) => t.status === 'scheduled');
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Nairobi' }).format(new Date(later.departure_at));
+  await page.getByLabel('Departure date').fill(day);
+
   const scheduled = page.locator('article', { hasText: 'scheduled' }).first();
   await expect(scheduled).toContainText('seats left');
   await scheduled.getByRole('button', { name: 'Select trip' }).click();
