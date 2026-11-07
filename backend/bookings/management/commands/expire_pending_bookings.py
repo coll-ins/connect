@@ -15,6 +15,7 @@ from django.db import OperationalError, transaction
 from django.utils import timezone
 
 from bookings.models import Booking, Payment
+from bookings.services import cancel_dead_pending_bookings
 
 
 class Command(BaseCommand):
@@ -49,5 +50,7 @@ class Command(BaseCommand):
             except OperationalError:
                 # Lock conflict with a payment in flight: leave it for the next run.
                 continue
+
+        cancelled += cancel_dead_pending_bookings(Booking.objects.all())
 
         self.stdout.write(f'expire_pending_bookings: cancelled {cancelled}')

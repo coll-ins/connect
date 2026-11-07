@@ -30,6 +30,51 @@ def trip_has_departed(trip):
     return True
 
 
+def cancel_dead_pending_bookings(bookings):
+    """
+    Cancel unpaid bookings whose trip is gone (see trip_has_departed), so they
+    stop showing as waiting for a payment that can no longer be accepted.
+    Each row is locked first, so a payment confirmed a moment earlier wins.
+    Returns how many were cancelled.
+    """
+    from django.db import OperationalError
+    from django.db.models import Q
+
+    from .models import Booking, Payment
+
+    now = timezone.now()
+    dead_ids = list(
+        bookings.filter(status='pending')
+        .filter(
+            Q(trip__isnull=True)
+            | Q(trip__status__in=['departed', 'completed', 'cancelled'])
+            | Q(trip__status='scheduled', trip__departure_at__lte=now)
+            | Q(
+                trip__status='boarding',
+                trip__departure_at__lte=now - BOARDING_BOOKABLE_WINDOW,
+            )
+        )
+        .values_list('pk', flat=True)
+    )
+
+    cancelled = 0
+    for pk in dead_ids:
+        try:
+            with transaction.atomic():
+                booking = Booking.objects.select_for_update().get(pk=pk)
+                if booking.status != 'pending':
+                    continue
+                if Payment.objects.filter(booking=booking, status='confirmed').exists():
+                    continue
+                booking.status = 'cancelled'
+                booking.save(update_fields=['status'])
+                cancelled += 1
+        except OperationalError:
+            # Lock conflict with a payment in flight: leave it for the next run.
+            continue
+    return cancelled
+
+
 import logging
 
 logger = logging.getLogger(__name__)

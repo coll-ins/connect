@@ -162,6 +162,34 @@ export function parkedBusLabel({ tripStatus, departureAt, now, timeZone }) {
   return boarding ? `Boarding · departs ${when}` : `Departs ${when}`;
 }
 
+const lowerText = (value) => String(value || '').toLowerCase();
+
+/* Can this booking's map be opened? It stays useful from booking to arrival. */
+export function canOpenTripMap(booking) {
+  const status = lowerText(booking?.status);
+  const tripStatus = lowerText(booking?.trip_status);
+
+  if (!['scheduled', 'boarding', 'departed'].includes(tripStatus)) return false;
+  if (status === 'confirmed') return true;
+  if (status === 'completed') {
+    return booking.boarded === true && tripStatus !== 'scheduled';
+  }
+
+  return (
+    status === 'pending' &&
+    lowerText(booking.payment_method) === 'cash' &&
+    lowerText(booking.payment_status) === 'pending'
+  );
+}
+
+/* Still ahead of the passenger, or still under way. */
+export function isActiveBooking(booking) {
+  return (
+    !['cancelled', 'completed', 'no_show'].includes(lowerText(booking?.status)) ||
+    canOpenTripMap(booking)
+  );
+}
+
 export const OFF_ROUTE_KM = 0.06;
 
 /* Shortest distance from a point to a [lat, lng] line, in km. */

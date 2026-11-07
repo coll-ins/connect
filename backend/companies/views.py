@@ -735,8 +735,19 @@ def update_trip_status(request, trip_id, *args, **kwargs):
                 status=status.HTTP_409_CONFLICT
             )
 
+        refund_claims = []
+        if new_status == 'completed' and current_status != 'completed':
+            # Same closing rule as the driver's End trip: nobody stays stuck
+            # on a finished trip as pending or confirmed.
+            from bookings.services import settle_unboarded_no_shows
+            settle_unboarded_no_shows(trip, claims=refund_claims)
+
         trip.status = new_status
         trip.save(update_fields=['status'])
+
+    # Paystack is called only after the trip lock has been released.
+    from bookings.services import run_refund_claims
+    run_refund_claims(refund_claims)
 
     return Response({
         'message': 'Trip status updated successfully.',
