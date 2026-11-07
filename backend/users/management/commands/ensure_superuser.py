@@ -18,7 +18,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         phone = canonical_phone(os.environ.get('ADMIN_PHONE', ''))
-        password = os.environ.get('ADMIN_PASSWORD', '')
+        # A space picked up when pasting into the host's settings would make
+        # the password impossible to type at the login screen.
+        password = os.environ.get('ADMIN_PASSWORD', '').strip()
         if not phone or not password:
             return
         User = get_user_model()

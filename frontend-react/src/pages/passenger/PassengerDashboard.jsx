@@ -107,7 +107,9 @@ function PaymentModal({
     catch(e){setError(e.message)} finally{setBusy(false)}
   };
 
-  return <div className="modal-backdrop"><div className="modal">
+  // Rendered on the body: an animated page section would otherwise anchor this
+  // "fixed" window to itself, leaving it down the page instead of on screen.
+  return createPortal(<div className="modal-backdrop"><div className="modal">
     <button className="btn btn-ghost modal-close" onClick={onClose}>Close</button>
     <p className="eyebrow">Booking {booking.booking_number}</p>
     <h2>{money(booking.total_amount)}</h2><p className="muted">Choose how you want to complete this trip.</p>
@@ -192,7 +194,7 @@ function PaymentModal({
 
     {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">Authorize the M-PESA prompt on the phone that received it.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
     {step==='cash-success' && <div className="success">Cash selected. Pay the driver in cash. Your boarding PIN will appear on your trip card as soon as the driver confirms the payment.</div>}
-  </div></div>;
+  </div></div>, document.body);
 }
 
 
@@ -1216,31 +1218,39 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               </div>
             </div>
 
-            <div className="form-stack">
-              <label className="field">
-                Seats
-                <input
-                  className="input"
-                  type="number"
-                  min="1"
-                  max={Math.min(20, seatsLeft(bookingTrip))}
-                  value={seats}
-                  onChange={(e) =>
-                    setSeats(
-                      Math.max(
-                        1,
-                        Math.min(20, seatsLeft(bookingTrip), Number(e.target.value) || 1)
-                      )
-                    )
-                  }
-                />
-              </label>
-
-              <div className="field">
-                Boarding at
-                <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
+            <div className="booking-modal-rows">
+              <div className="booking-seat-row">
+                <span>Seats</span>
+                <div className="booking-seat-stepper">
+                  <button
+                    type="button"
+                    aria-label="Remove a seat"
+                    onClick={() => setSeats(Math.max(1, Number(seats) - 1))}
+                    disabled={Number(seats) <= 1}
+                  >
+                    −
+                  </button>
+                  <strong aria-live="polite">{seats}</strong>
+                  <button
+                    type="button"
+                    aria-label="Add a seat"
+                    onClick={() =>
+                      setSeats(Math.min(20, seatsLeft(bookingTrip), Number(seats) + 1))
+                    }
+                    disabled={Number(seats) >= Math.min(20, seatsLeft(bookingTrip))}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
+              <div className="booking-seat-row">
+                <span>Boarding at</span>
+                <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
+              </div>
+            </div>
+
+            <div className="booking-modal-footer">
               <div className="booking-total-glass">
                 <span>Total journey cost</span>
                 <strong>
