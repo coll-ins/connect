@@ -29,12 +29,12 @@
   margin: 0;
   padding: 12px;
   border: 1px solid rgba(255,255,255,.12);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .service-template-days legend {
   padding: 0 5px;
-  color: #cbd8e6;
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
 }
@@ -43,21 +43,21 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #cbd8e6;
+  color: var(--text);
   font-size: 13px;
 }
 
 .service-template-days input,
 .service-template-renew input {
-  accent-color: #62d9af;
+  accent-color: var(--accent-text);
 }
 
 .service-template-renew {
   grid-column: 1 / -1;
   padding: 13px;
-  border: 1px solid rgba(98,217,175,.22);
-  border-radius: 12px;
-  background: rgba(98,217,175,.06);
+  border: 1px solid rgb(var(--accent-rgb) / 0.22);
+  border-radius: 14px;
+  background: rgb(var(--accent-rgb) / 0.06);
 }
 
 .service-template-renew span,
@@ -67,7 +67,7 @@
 
 .service-template-renew small {
   margin-top: 4px;
-  color: #91a4b9;
+  color: var(--text-2);
   font-weight: 400;
   line-height: 1.5;
 }
@@ -79,7 +79,7 @@
 
 .service-template-hint {
   align-self: center;
-  color: #91a4b9;
+  color: var(--text-2);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -102,7 +102,7 @@
 
 .service-template-card p {
   margin: 7px 0 0;
-  color: #91a4b9;
+  color: var(--text-2);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -127,8 +127,8 @@
 .service-template-empty {
   padding: 18px;
   border: 1px dashed rgba(255,255,255,.16);
-  border-radius: 12px;
-  color: #91a4b9;
+  border-radius: 14px;
+  color: var(--text-2);
   font-size: 13px;
 }
 

@@ -193,10 +193,8 @@ function PlatformShell({ logout, children }) {
           min-height: 100vh;
           display: flex;
           background:
-            radial-gradient(circle at 10% 10%, rgba(16,185,129,.10), transparent 30%),
-            radial-gradient(circle at 90% 90%, rgba(59,130,246,.08), transparent 35%),
-            #07111f;
-          color: #e8f0f7;
+            var(--surface);
+          color: var(--text);
         }
 
         .pa-sidebar {
@@ -209,9 +207,8 @@ function PlatformShell({ logout, children }) {
           padding: 22px 16px;
           display: flex;
           flex-direction: column;
-          background: rgba(5,15,27,.88);
+          background: var(--bg);
           border-right: 1px solid rgba(255,255,255,.08);
-          backdrop-filter: blur(22px);
           z-index: 20;
         }
 
@@ -225,13 +222,13 @@ function PlatformShell({ logout, children }) {
         .pa-brand-mark {
           width: 40px;
           height: 40px;
-          border-radius: 12px;
+          border-radius: 14px;
           display: grid;
           place-items: center;
-          font-weight: 900;
-          background: linear-gradient(135deg,#10b981,#059669);
+          font-weight: 700;
+          background: var(--accent);
           color: white;
-          box-shadow: 0 8px 25px rgba(16,185,129,.22);
+          box-shadow: none;
         }
 
         .pa-brand strong,
@@ -241,7 +238,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-brand small,
         .pa-admin-card span {
-          color: #8292a5;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -262,8 +259,8 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           border-radius: 10px;
-          color: #6ee7b7;
-          background: rgba(16,185,129,.12);
+          color: var(--accent-text);
+          background: rgb(var(--accent-rgb) / 0.12);
         }
 
         .pa-nav {
@@ -275,7 +272,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-nav-label {
           margin: 15px 8px 5px;
-          color: #5e7187;
+          color: var(--text-3);
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0;
@@ -287,29 +284,29 @@ function PlatformShell({ logout, children }) {
           gap: 11px;
           padding: 10px 11px;
           border-radius: 10px;
-          color: #91a1b3;
+          color: var(--text-2);
           text-decoration: none;
           font-size: 13px;
           transition: .18s ease;
         }
 
         .pa-link:hover {
-          color: #fff;
+          color: var(--text);
           background: rgba(255,255,255,.045);
         }
 
         .pa-link.active {
-          color: #fff;
-          background: rgba(16,185,129,.13);
-          box-shadow: inset 3px 0 0 #10b981;
+          color: var(--text);
+          background: rgb(var(--accent-rgb) / 0.13);
+          box-shadow: none;
         }
 
         .pa-logout {
           margin-top: auto;
           border: 1px solid rgba(255,255,255,.08);
-          border-radius: 11px;
+          border-radius: 10px;
           background: rgba(255,255,255,.035);
-          color: #a7b4c2;
+          color: var(--text-2);
           padding: 11px;
           display: flex;
           gap: 10px;
@@ -339,9 +336,9 @@ function PlatformShell({ logout, children }) {
             height: 44px;
             z-index: 100;
             border: 1px solid rgba(255,255,255,.10);
-            border-radius: 13px;
-            background: rgba(7,17,31,.90);
-            color: #e8f1f7;
+            border-radius: 14px;
+            background: var(--bg);
+            color: var(--text);
             font-size: 22px;
             line-height: 1;
             cursor: pointer;
@@ -404,14 +401,14 @@ function PlatformShell({ logout, children }) {
           justify-content: space-between;
           align-items: center;
           padding: 19px 30px;
-          background: rgba(7,17,31,.78);
+          background: var(--bg);
           border-bottom: 1px solid rgba(255,255,255,.07);
           backdrop-filter: blur(18px);
         }
 
         .pa-overline,
         .pa-card-eyebrow {
-          color: #5ee7b7;
+          color: var(--accent-text);
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0;
@@ -467,7 +464,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-user span {
-          color: #77899c;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -477,9 +474,9 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           border-radius: 50%;
-          background: rgba(16,185,129,.16);
-          color: #6ee7b7;
-          font-weight: 800;
+          background: rgb(var(--accent-rgb) / 0.16);
+          color: var(--accent-text);
+          font-weight: 700;
         }
 
         .pa-content {
@@ -491,7 +488,7 @@ function PlatformShell({ logout, children }) {
         .pa-system-status {
           border: 1px solid rgba(255,255,255,.09);
           background: rgba(255,255,255,.04);
-          color: #b7c3d0;
+          color: var(--text-2);
           border-radius: 10px;
           padding: 8px 11px;
           display: inline-flex;
@@ -501,15 +498,15 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-system-status.healthy {
-          color: #6ee7b7;
+          color: var(--accent-text);
         }
 
         .pa-system-status.warning {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-system-status.critical {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-status-dot {
@@ -538,7 +535,7 @@ function PlatformShell({ logout, children }) {
         .pa-page-head p,
         .pa-section-heading p {
           margin: 0;
-          color: #7f91a5;
+          color: var(--text-3);
           font-size: 13px;
         }
 
@@ -564,24 +561,24 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-primary-button {
-          background: #10b981;
+          background: var(--accent);
           color: #04150f;
         }
 
         .pa-primary-button:hover {
-          background: #34d399;
+          background: var(--accent);
         }
 
         .pa-secondary-button {
-          color: #d3dde7;
+          color: var(--text);
           background: rgba(255,255,255,.045);
           border-color: rgba(255,255,255,.08);
         }
 
         .pa-danger-button {
-          color: #fecaca;
-          background: rgba(239,68,68,.09);
-          border-color: rgba(239,68,68,.2);
+          color: var(--text);
+          background: rgb(var(--danger-rgb) / 0.09);
+          border-color: rgb(var(--danger-rgb) / 0.2);
         }
 
         button:disabled {
@@ -603,8 +600,7 @@ function PlatformShell({ logout, children }) {
         .pa-issue-summary-card {
           border: 1px solid rgba(255,255,255,.08);
           background: rgba(255,255,255,.035);
-          border-radius: 15px;
-          backdrop-filter: blur(14px);
+          border-radius: 14px;
         }
 
         .pa-stat-card {
@@ -613,7 +609,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-stat-card span {
           display: block;
-          color: #7f91a5;
+          color: var(--text-3);
           font-size: 11px;
           margin-bottom: 7px;
         }
@@ -645,7 +641,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-command-card p {
-          color: #8192a5;
+          color: var(--text-3);
           line-height: 1.6;
           font-size: 13px;
         }
@@ -653,28 +649,28 @@ function PlatformShell({ logout, children }) {
         .pa-command-icon {
           width: 40px;
           height: 40px;
-          border-radius: 11px;
+          border-radius: 10px;
           display: grid;
           place-items: center;
-          background: rgba(16,185,129,.11);
-          color: #6ee7b7;
+          background: rgb(var(--accent-rgb) / 0.11);
+          color: var(--accent-text);
         }
 
         .pa-command-icon.warning {
-          color: #fbbf24;
-          background: rgba(251,191,36,.10);
+          color: var(--warn);
+          background: rgb(var(--warn-rgb) / 0.1);
         }
 
         .pa-command-icon.critical {
-          color: #f87171;
-          background: rgba(248,113,113,.10);
+          color: var(--danger-text);
+          background: rgb(var(--danger-rgb) / 0.1);
         }
 
         .pa-command-message {
           padding: 11px 14px;
-          border: 1px solid rgba(16,185,129,.2);
-          background: rgba(16,185,129,.07);
-          color: #9be8c9;
+          border: 1px solid rgb(var(--accent-rgb) / 0.2);
+          background: rgb(var(--accent-rgb) / 0.07);
+          color: var(--accent-text);
           border-radius: 10px;
           margin-bottom: 16px;
           font-size: 12px;
@@ -684,7 +680,7 @@ function PlatformShell({ logout, children }) {
           overflow: hidden;
           margin-top: 16px;
           border: 1px solid rgba(255,255,255,.08);
-          border-radius: 12px;
+          border-radius: 14px;
         }
 
         .pa-demo-bus-icon {
@@ -692,11 +688,11 @@ function PlatformShell({ logout, children }) {
           place-items: center;
           border: 2px solid white;
           border-radius: 999px;
-          background: #2563eb;
+          background: var(--accent);
           box-shadow: 0 2px 9px rgba(0,0,0,.4);
           color: white;
           font-size: 11px;
-          font-weight: 900;
+          font-weight: 700;
         }
 
         .pa-demo-meta {
@@ -704,7 +700,7 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           flex-wrap: wrap;
           gap: 8px 18px;
-          color: #b7c3d0;
+          color: var(--text-2);
           font-size: 12px;
         }
 
@@ -733,7 +729,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-panel-header p {
           margin: 4px 0 0;
-          color: #718399;
+          color: var(--text-3);
           font-size: 12px;
         }
 
@@ -773,7 +769,7 @@ function PlatformShell({ logout, children }) {
         .pa-report-row span,
         .pa-setting-row span,
         .pa-test-row span {
-          color: #74869a;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -789,7 +785,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-table th {
           text-align: left;
-          color: #718399;
+          color: var(--text-3);
           font-weight: 700;
           padding: 11px 10px;
           border-bottom: 1px solid rgba(255,255,255,.08);
@@ -798,11 +794,11 @@ function PlatformShell({ logout, children }) {
         .pa-table td {
           padding: 12px 10px;
           border-bottom: 1px solid rgba(255,255,255,.055);
-          color: #cbd5df;
+          color: var(--text);
         }
 
         .pa-table td strong {
-          color: #f1f5f9;
+          color: var(--text);
         }
 
         .pa-actions {
@@ -816,15 +812,15 @@ function PlatformShell({ logout, children }) {
           height: 31px;
           border: 1px solid rgba(255,255,255,.08);
           background: rgba(255,255,255,.035);
-          color: #aab8c7;
-          border-radius: 8px;
+          color: var(--text-2);
+          border-radius: 10px;
           display: grid;
           place-items: center;
           cursor: pointer;
         }
 
         .pa-icon-button.danger {
-          color: #fca5a5;
+          color: var(--danger-text);
         }
 
         .pa-badge {
@@ -833,24 +829,24 @@ function PlatformShell({ logout, children }) {
           padding: 4px 8px;
           border-radius: 999px;
           font-size: 11px;
-          font-weight: 800;
-          background: rgba(16,185,129,.1);
-          color: #6ee7b7;
+          font-weight: 700;
+          background: rgb(var(--accent-rgb) / 0.1);
+          color: var(--accent-text);
         }
 
         .pa-badge.warning {
-          background: rgba(251,191,36,.1);
-          color: #fbbf24;
+          background: rgb(var(--warn-rgb) / 0.1);
+          color: var(--warn);
         }
 
         .pa-badge.danger {
-          background: rgba(239,68,68,.1);
-          color: #fca5a5;
+          background: rgb(var(--danger-rgb) / 0.1);
+          color: var(--danger-text);
         }
 
         .pa-badge.muted {
           background: rgba(148,163,184,.1);
-          color: #94a3b8;
+          color: var(--text-2);
         }
 
         .pa-empty-state {
@@ -860,7 +856,7 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           justify-content: center;
           gap: 8px;
-          color: #8192a5;
+          color: var(--text-3);
           text-align: center;
           border: 1px dashed rgba(255,255,255,.1);
           border-radius: 14px;
@@ -868,7 +864,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-empty-state strong {
-          color: #e5edf5;
+          color: var(--text);
         }
 
         .pa-form {
@@ -893,7 +889,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-field label {
-          color: #91a1b3;
+          color: var(--text-2);
           font-size: 11px;
           font-weight: 700;
         }
@@ -904,9 +900,9 @@ function PlatformShell({ logout, children }) {
           width: 100%;
           box-sizing: border-box;
           border: 1px solid rgba(255,255,255,.09);
-          border-radius: 9px;
+          border-radius: 10px;
           background: rgba(0,0,0,.18);
-          color: #edf4fa;
+          color: var(--text);
           padding: 10px 11px;
           outline: none;
           font: inherit;
@@ -921,14 +917,14 @@ function PlatformShell({ logout, children }) {
         .pa-field input:focus,
         .pa-field select:focus,
         .pa-field textarea:focus {
-          border-color: rgba(16,185,129,.5);
+          border-color: rgb(var(--accent-rgb) / 0.5);
         }
 
         .pa-modal-backdrop {
           position: fixed;
           inset: 0;
           z-index: 100;
-          background: rgba(0,0,0,.62);
+          background: var(--bg);
           display: grid;
           place-items: center;
           padding: 20px;
@@ -938,9 +934,9 @@ function PlatformShell({ logout, children }) {
           width: min(700px,100%);
           max-height: 90vh;
           overflow-y: auto;
-          background: #0b1726;
+          background: var(--surface);
           border: 1px solid rgba(255,255,255,.1);
-          border-radius: 17px;
+          border-radius: 16px;
           box-shadow: 0 25px 80px rgba(0,0,0,.5);
           padding: 22px;
         }
@@ -958,7 +954,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-modal-head p {
           margin: 5px 0 0;
-          color: #718399;
+          color: var(--text-3);
           font-size: 12px;
         }
 
@@ -973,9 +969,9 @@ function PlatformShell({ logout, children }) {
           padding: 11px 13px;
           margin-bottom: 15px;
           border-radius: 10px;
-          color: #fecaca;
-          background: rgba(239,68,68,.08);
-          border: 1px solid rgba(239,68,68,.18);
+          color: var(--text);
+          background: rgb(var(--danger-rgb) / 0.08);
+          border: 1px solid rgb(var(--danger-rgb) / 0.18);
           font-size: 12px;
         }
 
@@ -994,15 +990,15 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-summary-card.critical {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-issue-summary-card.warning {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-issue-summary-card.healthy {
-          color: #6ee7b7;
+          color: var(--accent-text);
         }
 
         .pa-issue-summary-card strong,
@@ -1016,7 +1012,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-summary-card span {
-          color: #718399;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -1033,7 +1029,7 @@ function PlatformShell({ logout, children }) {
           gap: 12px;
           text-align: left;
           padding: 13px;
-          border-radius: 11px;
+          border-radius: 10px;
           border: 1px solid rgba(255,255,255,.06);
           background: rgba(255,255,255,.025);
           color: inherit;
@@ -1041,11 +1037,11 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-row.critical {
-          border-color: rgba(239,68,68,.18);
+          border-color: rgb(var(--danger-rgb) / 0.18);
         }
 
         .pa-issue-row.warning {
-          border-color: rgba(251,191,36,.15);
+          border-color: rgb(var(--warn-rgb) / 0.15);
         }
 
         .pa-issue-icon {
@@ -1053,11 +1049,11 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-row.critical .pa-issue-icon {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-issue-row.warning .pa-issue-icon {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-issue-content {
@@ -1074,7 +1070,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-content span {
-          color: #77899c;
+          color: var(--text-3);
           font-size: 11px;
           margin-top: 3px;
         }
@@ -1100,7 +1096,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-test-summary span {
-          color: #718399;
+          color: var(--text-3);
           font-size: 11px;
           margin-top: 4px;
         }
@@ -1114,20 +1110,20 @@ function PlatformShell({ logout, children }) {
           height: 32px;
           display: grid;
           place-items: center;
-          border-radius: 8px;
+          border-radius: 10px;
           background: rgba(255,255,255,.04);
         }
 
         .pa-test-row.passed .pa-test-icon {
-          color: #6ee7b7;
+          color: var(--accent-text);
         }
 
         .pa-test-row.warning .pa-test-icon {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-test-row.failed .pa-test-icon {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-test-row > div:nth-child(2) {
@@ -1157,7 +1153,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-setting-value {
-          color: #6ee7b7 !important;
+          color: var(--accent-text) !important;
         }
 
         .pa-spin {

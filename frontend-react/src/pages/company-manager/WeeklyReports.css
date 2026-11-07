@@ -14,7 +14,7 @@
 
 .weekly-reports-heading > div > span,
 .weekly-report-kicker {
-  color: #5fd9b0;
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -38,7 +38,7 @@
   gap: 8px;
   padding: 9px 13px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 9px;
+  border-radius: 10px;
   color: inherit;
   background: rgba(255, 255, 255, 0.06);
   cursor: pointer;
@@ -54,7 +54,7 @@
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  background: rgba(9, 25, 30, 0.66);
+  background: var(--surface);
 }
 
 .weekly-report-email {
@@ -68,27 +68,27 @@
 }
 
 .weekly-report-email-sent {
-  color: #8cebc6;
-  background: rgba(66, 196, 137, 0.14);
+  color: var(--accent-text);
+  background: rgb(var(--accent-rgb) / 0.14);
 }
 
 .weekly-report-email-failed {
-  color: #ffaaa4;
-  background: rgba(222, 77, 77, 0.14);
+  color: var(--danger-text);
+  background: rgb(var(--danger-rgb) / 0.14);
 }
 
 .weekly-report-email-skipped,
 .weekly-report-email-pending {
-  color: #f0d48b;
-  background: rgba(196, 150, 66, 0.14);
+  color: var(--warn);
+  background: rgb(var(--warn-rgb) / 0.14);
 }
 
 .weekly-report-delivery-note,
 .weekly-reports-error {
   padding: 10px 12px;
-  border-radius: 9px;
-  color: #ffd1c9;
-  background: rgba(191, 61, 50, 0.14);
+  border-radius: 10px;
+  color: var(--text);
+  background: rgb(var(--danger-rgb) / 0.14);
 }
 
 .weekly-report-grid {

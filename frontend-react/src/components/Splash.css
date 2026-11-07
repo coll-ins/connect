@@ -7,7 +7,7 @@
   height: 100dvh;
   overflow: hidden;
   isolation: isolate;
-  background: #04140a;
+  background: var(--bg);
   transition: opacity .45s ease;
 }
 .splash.leaving { opacity: 0; pointer-events: none; }
@@ -28,7 +28,7 @@
   bottom: 0;
   width: 0;
   height: 3px;
-  background: #4ade80;
+  background: var(--accent);
   animation: splash-bar 2.6s linear forwards;
 }
 .splash-skip {
@@ -39,10 +39,8 @@
   padding: 8px 15px;
   border: 1px solid rgba(255,255,255,.24);
   border-radius: 999px;
-  color: #eafff2;
+  color: var(--text);
   background: rgba(0,0,0,.48);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   font: inherit;
   font-size: 13px;
   font-weight: 700;

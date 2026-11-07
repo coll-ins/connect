@@ -35,7 +35,7 @@
   gap: 12px;
 
   padding: 10px 12px;
-  border-radius: 18px;
+  border-radius: 16px;
 
   background: rgba(255,255,255,.94);
   border: 1px solid rgba(15,23,42,.08);
@@ -47,7 +47,7 @@
   width: 42px;
   height: 42px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 14px;
 
   display: grid;
   place-items: center;
@@ -70,7 +70,7 @@
 
   color: #0f172a;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .passenger-live-map__trip-title span {
@@ -79,7 +79,7 @@
   gap: 4px;
   margin-top: 3px;
 
-  color: #64748b;
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 700;
 }
@@ -93,7 +93,7 @@
   border-radius: 999px;
 
   background: #ecfdf3;
-  color: #15803d;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -129,7 +129,7 @@
 }
 
 .passenger-live-map__locate.is-active {
-  background: #111827;
+  background: var(--surface);
   color: white;
 }
 
@@ -143,7 +143,7 @@
   z-index: 1000;
 
   padding: 12px 18px 18px;
-  border-radius: 25px;
+  border-radius: 16px;
   max-height: min(72dvh, 620px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -170,7 +170,7 @@
 }
 
 .passenger-live-map__eyebrow {
-  color: #64748b;
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -189,7 +189,7 @@
   column-gap: 5px;
   align-items: center;
   padding: 8px 10px;
-  border-radius: 13px;
+  border-radius: 14px;
   background: #f8fafc;
   color: #334155;
 }
@@ -200,7 +200,7 @@
 
 .passenger-live-map__distance span {
   grid-column: 2;
-  color: #94a3b8;
+  color: var(--text-2);
   font-size: 11px;
   font-weight: 700;
 }
@@ -266,13 +266,13 @@
   height: 10px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #111827;
+  background: var(--surface);
   box-shadow: 0 0 0 5px #e2e8f0;
 }
 
 .passenger-live-map__pickup span {
   display: block;
-  color: #94a3b8;
+  color: var(--text-2);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -307,7 +307,7 @@
 }
 
 .passenger-live-map__route-progress-heading span {
-  color: #64748b;
+  color: var(--text-3);
   text-align: right;
 }
 
@@ -323,7 +323,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: inherit;
-  background: #16a34a;
+  background: var(--accent);
 }
 
 .passenger-live-map__route-progress-bus,
@@ -338,22 +338,22 @@
   height: 13px;
   border: 2px solid #fff;
   border-radius: 50%;
-  background: #1677ff;
-  box-shadow: 0 0 0 1px #1677ff;
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .passenger-live-map__route-progress-pickup {
   width: 3px;
   height: 13px;
-  border-radius: 2px;
-  background: #111827;
+  border-radius: 6px;
+  background: var(--surface);
 }
 
 .passenger-live-map__route-progress-labels {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: #64748b;
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 700;
 }
@@ -371,7 +371,7 @@
   justify-content: space-between;
   gap: 8px;
   margin-top: 9px;
-  color: #64748b;
+  color: var(--text-3);
   font-size: 11px;
 }
 
@@ -389,11 +389,11 @@
 }
 
 .passenger-live-map__route-progress-legend .is-traveled {
-  background: #16a34a;
+  background: var(--accent);
 }
 
 .passenger-live-map__route-progress-legend .is-to-pickup {
-  background: #1677ff;
+  background: var(--accent);
 }
 
 .passenger-live-map__traffic-note {
@@ -401,9 +401,9 @@
   gap: 3px;
   margin-top: 10px;
   padding: 9px 11px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #eff6ff;
-  color: #1e3a8a;
+  color: var(--accent);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -415,9 +415,9 @@
 .passenger-live-map__gps-note {
   margin-top: 11px;
   padding: 9px 11px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff7ed;
-  color: #9a3412;
+  color: var(--danger);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -431,9 +431,9 @@
   z-index: 1000;
 
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
 
-  background: rgba(15,23,42,.9);
+  background: var(--surface);
   color: white;
   font-size: 11px;
   box-shadow: 0 10px 30px rgba(15,23,42,.2);
@@ -443,7 +443,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(127,29,29,.94);
+  background: rgb(var(--danger-rgb) / 0.94);
 }
 
 .passenger-live-map__error span {
@@ -452,12 +452,12 @@
 
 .passenger-live-map__error button {
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 6px 9px;
   background: white;
-  color: #7f1d1d;
+  color: var(--danger);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -615,7 +615,7 @@
     max-height: min(70dvh, 560px);
     padding-left: 15px;
     padding-right: 15px;
-    border-radius: 22px;
+    border-radius: 16px;
   }
 
   .passenger-live-map__locate {
@@ -823,13 +823,13 @@
   color: #0f172a;
   font-size: 29px;
   line-height: 1.05;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: -.04em;
 }
 
 .passenger-live-map__arrival p {
   margin: 5px 0 0;
-  color: #64748b;
+  color: var(--text-3);
   font-size: 11px;
   font-weight: 600;
 }
@@ -837,10 +837,10 @@
 .passenger-live-map__distance-card {
   min-width: 94px;
   padding: 10px 11px;
-  border-radius: 15px;
+  border-radius: 14px;
 
   background: #f1f5f9;
-  color: #2563eb;
+  color: var(--accent-text);
 
   display: grid;
   grid-template-columns: 18px 1fr;
@@ -855,7 +855,7 @@
 
 .passenger-live-map__distance-card span {
   grid-column: 2;
-  color: #94a3b8;
+  color: var(--text-2);
   font-size: 11px;
   font-weight: 600;
 }
@@ -875,12 +875,12 @@
 }
 
 .passenger-live-map__progress-line .is-bus {
-  background: #1677ff;
-  box-shadow: 0 0 0 4px rgba(22,119,255,.12);
+  background: var(--accent);
+  box-shadow: none;
 }
 
 .passenger-live-map__progress-line .is-pickup {
-  background: #111827;
+  background: var(--surface);
   box-shadow: 0 0 0 4px #e2e8f0;
 }
 
@@ -896,7 +896,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #1677ff;
+  background: var(--accent);
 }
 
 .passenger-live-map__route-labels {
@@ -904,7 +904,7 @@
   justify-content: space-between;
   gap: 10px;
 
-  color: #94a3b8;
+  color: var(--text-2);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -927,13 +927,13 @@
   height: 42px;
   flex: 0 0 auto;
 
-  border-radius: 13px;
+  border-radius: 14px;
 
   background:
     linear-gradient(
       145deg,
-      #182333,
-      #060b13
+      var(--surface-2),
+      var(--bg)
     );
 
   box-shadow:
@@ -949,13 +949,13 @@
   right: 7px;
   top: 7px;
   height: 11px;
-  border-radius: 5px 5px 3px 3px;
+  border-radius: 6px 6px 6px 6px;
 
   background:
     linear-gradient(
       180deg,
       #dff3ff,
-      #8ab7d7
+      var(--accent)
     );
 }
 
@@ -966,15 +966,15 @@
   right: 7px;
   bottom: 7px;
   height: 8px;
-  border-radius: 3px;
+  border-radius: 6px;
 
   background:
     linear-gradient(
       90deg,
-      #1e293b 30%,
+      var(--surface-2) 30%,
       #d7e7f3 31%,
       #d7e7f3 69%,
-      #1e293b 70%
+      var(--surface-2) 70%
     );
 }
 
@@ -985,7 +985,7 @@
   bottom: 3px;
   height: 3px;
   border-radius: 99px;
-  background: #050a10;
+  background: var(--bg);
 }
 
 @media (max-width: 640px) {

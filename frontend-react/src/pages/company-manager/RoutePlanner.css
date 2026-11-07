@@ -6,12 +6,12 @@
   height: 22px;
   border-radius: 50%;
   border: 3px solid #fff;
-  background: #facc15;
+  background: var(--warn);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
   cursor: grab;
 }
 .rp2-dot.inactive { background: #64748b; }
-.rp2-dot.moved { background: #fb923c; }
+.rp2-dot.moved { background: var(--warn); }
 .rp2-live {
   position: absolute;
   left: 10px;
@@ -19,9 +19,9 @@
   z-index: 1000;
   padding: 8px 12px;
   border-radius: 10px;
-  background: #071522;
-  color: #fff;
-  border: 1px solid #38bdf8;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--accent);
   font-size: 13px;
   pointer-events: none;
 }
@@ -33,10 +33,10 @@
   gap: 10px;
   margin-top: 8px;
   padding: 10px 12px;
-  border: 1px solid #294057;
-  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
 }
-.rp2-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 8px; vertical-align: middle; }
-.rp2-off { color: #8fa5ba; }
-.rp2-off.far { color: #fbbf24; font-weight: 700; }
-.rp2-block { margin: 10px 0 0; color: #fbbf24; font-size: 13px; }
+.rp2-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 6px; margin-right: 8px; vertical-align: middle; }
+.rp2-off { color: var(--text-2); }
+.rp2-off.far { color: var(--warn); font-weight: 700; }
+.rp2-block { margin: 10px 0 0; color: var(--warn); font-size: 13px; }
