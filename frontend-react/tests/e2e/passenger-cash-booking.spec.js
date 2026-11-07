@@ -115,15 +115,24 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
 
   // On a short phone, the seat buttons, Confirm and the payment choices must
   // all be on screen without scrolling.
-  await page.setViewportSize({ width: 360, height: 640 });
+  // 540 is what a small phone has left once its browser bars are showing.
+  await page.setViewportSize({ width: 360, height: 540 });
   const expectOnScreen = async (locator) => {
     await expect(locator).toBeVisible();
     const box = await locator.boundingBox();
     expect(box).not.toBeNull();
     expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.y + box.height).toBeLessThanOrEqual(640);
+    expect(box.y + box.height).toBeLessThanOrEqual(540);
+    // Nothing is covering it, so it can be tapped without scrolling.
+    const onTop = await locator.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return el === hit || el.contains(hit);
+    });
+    expect(onTop).toBe(true);
   };
   await expectOnScreen(page.getByRole('button', { name: 'Add a seat' }));
+  await expectOnScreen(page.getByRole('button', { name: 'Remove a seat' }));
   await expectOnScreen(page.getByRole('button', { name: 'Confirm booking' }));
 
   await page.getByRole('button', { name: 'Add a seat' }).click();
