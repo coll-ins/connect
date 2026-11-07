@@ -8,6 +8,8 @@ const python = process.env.PYTHON || '.venv/bin/python';
 export default defineConfig({
   testDir: './tests/fullstack',
   fullyParallel: false,
+  // One shared database: run the journeys one after another.
+  workers: 1,
   reporter: 'list',
   timeout: 120000,
   use: {

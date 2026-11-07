@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -25,8 +25,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import L from 'leaflet';
-import { MapContainer, Marker, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   NavLink,
@@ -36,6 +35,8 @@ import {
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import BaseTileLayer from '../../components/maps/BaseTileLayer';
+import BusMarker from '../../components/maps/BusMarker';
+import { buildRoute } from '../../components/maps/route';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -97,23 +98,23 @@ const emptyOperator = {
   password: '',
 };
 
-const demoBusIcon = L.divIcon({
-  className: 'pa-demo-bus-icon',
-  html: '<span>DEMO</span>',
-  iconSize: [48, 28],
-  iconAnchor: [24, 14],
-});
-
-function DemoMapBounds({ path }) {
+// Follow: street-level camera that glides with the bus (what a client
+// watches). Otherwise: the whole route in view.
+function DemoCamera({ path, position, follow }) {
   const map = useMap();
-  const fitted = useRef(false);
 
   useEffect(() => {
-    if (!fitted.current && path.length > 1) {
-      map.fitBounds(path, { padding: [24, 24] });
-      fitted.current = true;
+    if (!follow && path.length > 1) map.fitBounds(path, { padding: [24, 24] });
+  }, [map, path, follow]);
+
+  useEffect(() => {
+    if (!follow) return;
+    if (map.getZoom() < 15) {
+      map.setView(position, 15, { animate: false });
+    } else {
+      map.panTo(position, { animate: true, duration: 1.5, easeLinearity: 1 });
     }
-  }, [map, path]);
+  }, [map, position, follow]);
 
   return null;
 }
@@ -121,23 +122,45 @@ function DemoMapBounds({ path }) {
 function DemoTripMap({ simulation }) {
   const path = simulation.path;
   const progressPath = path.slice(0, simulation.position_index + 1);
+  // Same road-following, heading-aware bus as the passenger live map: it
+  // glides along the road between ticks instead of jumping point to point.
+  const road = useMemo(
+    () => buildRoute({ coordinates: path.map(([lat, lng]) => [lng, lat]) }),
+    [path],
+  );
+
+  const [follow, setFollow] = useState(true);
 
   return (
+    <div style={{ position: 'relative' }}>
+    <button
+      type="button"
+      onClick={() => setFollow((v) => !v)}
+      style={{
+        position: 'absolute', top: 12, right: 12, zIndex: 500, minHeight: 40,
+        padding: '8px 16px', borderRadius: 8, border: 0,
+        background: 'rgba(11, 18, 32, 0.9)', color: '#fff', fontWeight: 600,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)', cursor: 'pointer',
+      }}
+    >
+      {follow ? 'Show whole route' : 'Follow bus'}
+    </button>
     <MapContainer
       key={simulation.id}
       center={simulation.position}
-      zoom={12}
+      zoom={15}
       scrollWheelZoom={false}
-      style={{ height: 320, width: '100%', borderRadius: 12 }}
+      style={{ height: 'min(60vh, 460px)', width: '100%', borderRadius: 12 }}
     >
       <BaseTileLayer />
-      <DemoMapBounds path={path} />
+      <DemoCamera path={path} position={simulation.position} follow={follow} />
       <Polyline positions={path} pathOptions={{ color: '#10b981', weight: 5, opacity: 0.6 }} />
       {progressPath.length > 1 && (
         <Polyline positions={progressPath} pathOptions={{ color: '#2563eb', weight: 6 }} />
       )}
-      <Marker position={simulation.position} icon={demoBusIcon} />
+      <BusMarker route={road} lat={simulation.position[0]} lng={simulation.position[1]} />
     </MapContainer>
+    </div>
   );
 }
 

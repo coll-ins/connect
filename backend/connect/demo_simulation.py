@@ -15,7 +15,11 @@ from companies.models import DemoTripSimulation, PickupStage, Route
 
 SESSION_TTL = timedelta(minutes=20)
 HISTORY_TTL = timedelta(days=7)
-MAX_PATH_POINTS = 60
+# The demo bus moves one path point per tick. Points are spaced evenly along
+# the road so it keeps a steady speed and never cuts a corner.
+STEP_METERS = 75
+MIN_PATH_POINTS = 60
+MAX_PATH_POINTS = 200
 
 
 def _authorize(request):
@@ -161,13 +165,38 @@ def _route_path(route):
             unique.append(point)
     if len(unique) < 2:
         return []
-    if len(unique) > MAX_PATH_POINTS:
-        last_index = len(unique) - 1
-        unique = [
-            unique[round(index * last_index / (MAX_PATH_POINTS - 1))]
-            for index in range(MAX_PATH_POINTS)
-        ]
-    return unique
+    return _resample_evenly(unique)
+
+
+def _meters(left, right):
+    k = math.cos(math.radians((left[0] + right[0]) / 2))
+    dy = (right[0] - left[0]) * 111320
+    dx = (right[1] - left[1]) * 111320 * k
+    return math.hypot(dx, dy)
+
+
+def _resample_evenly(points):
+    cumulative = [0.0]
+    for left, right in zip(points, points[1:]):
+        cumulative.append(cumulative[-1] + _meters(left, right))
+    total = cumulative[-1]
+    if total <= 0:
+        return []
+    count = max(MIN_PATH_POINTS, min(MAX_PATH_POINTS, round(total / STEP_METERS) + 1))
+    result = []
+    segment = 0
+    for index in range(count):
+        target = total * index / (count - 1)
+        while segment < len(points) - 2 and cumulative[segment + 1] < target:
+            segment += 1
+        span = cumulative[segment + 1] - cumulative[segment]
+        t = 0.0 if span <= 0 else (target - cumulative[segment]) / span
+        left, right = points[segment], points[segment + 1]
+        result.append([
+            round(left[0] + (right[0] - left[0]) * t, 6),
+            round(left[1] + (right[1] - left[1]) * t, 6),
+        ])
+    return result
 
 
 def _available_routes():

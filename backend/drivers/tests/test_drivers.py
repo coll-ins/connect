@@ -233,6 +233,18 @@ class DriversAppTests(APITestCase):
             driver_user.username.startswith("driver_")
         )
 
+    def test_manager_creates_driver_without_sending_company(self):
+        # The manager app's Add Driver form sends no company field.
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.post(
+            reverse("drivers:driver-list"),
+            {"name": "Form Driver", "phone_number": "+254733333390",
+             "bus_number": "KDD 090D", "password": "driverpass123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["company"], self.company.id)
+
     def test_manager_cannot_create_driver_without_password(self):
         self.client.force_authenticate(user=self.manager)
 

@@ -1806,7 +1806,7 @@ def get_all_bookings(request):
         )
 
     # Platform superuser can view bookings across all companies.
-    if request.user.is_superuser or request.user.role == 'platform_admin':
+    if request.user.is_superuser:
         bookings = Booking.objects.all()
 
         if company_id:

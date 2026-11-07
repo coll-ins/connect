@@ -45,6 +45,10 @@ class Command(BaseCommand):
             PickupStage.objects.create(
                 route=route, name='Kencom House', order=1,
                 latitude='-1.285582', longitude='36.824962')
+            # A second stage gives the route a drawable path (demo trip, maps).
+            PickupStage.objects.create(
+                route=route, name='Prestige', order=2,
+                latitude='-1.299720', longitude='36.787239')
         company = route.company
         stage = route.pickup_stages.filter(is_active=True).order_by('order', 'id').first()
 

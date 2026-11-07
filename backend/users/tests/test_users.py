@@ -692,3 +692,23 @@ class StaffManagementGuardTests(APITestCase):
         self.manager.refresh_from_db()
         self.assertEqual(self.manager.role, "company_manager")
         self.assertTrue(self.manager.is_active)
+
+
+class PlatformAdminRightsTests(APITestCase):
+    def test_platform_admin_role_without_superuser_gets_no_admin_power(self):
+        fake = User.objects.create_user(
+            username="fake", password="pw-123456", phone_number="+254700000301",
+            role="platform_admin",
+        )
+        self.client.force_authenticate(fake)
+        self.assertEqual(self.client.get("/api/bookings/all/").status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse("users:profile")).data["role"], "passenger")
+
+    def test_superuser_role_is_always_platform_admin(self):
+        su = User.objects.create_superuser(
+            username="su", password="pw-123456", phone_number="+254700000302",
+            email="su@example.com", role="company_manager",
+        )
+        su.refresh_from_db()
+        self.assertEqual(su.role, "platform_admin")

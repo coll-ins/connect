@@ -28,6 +28,17 @@ def normalize_phone_number(phone_number):
     return f'+254{digits}' if digits else ''
 
 
+def session_role(user):
+    """Platform admin is is_superuser and nothing else: a stored
+    'platform_admin' role without superuser grants nothing, so it must not
+    open the admin screens either."""
+    if user.is_superuser:
+        return 'platform_admin'
+    if user.role == 'platform_admin':
+        return 'passenger'
+    return user.role
+
+
 def serialize_session_user(user):
     company = getattr(user, 'company', None)
     return {
@@ -38,7 +49,7 @@ def serialize_session_user(user):
         'phone': user.phone_number,
         'phone_number': user.phone_number,
         'location': user.location,
-        'role': 'platform_admin' if user.is_superuser else user.role,
+        'role': session_role(user),
         'company_id': user.company_id,
         'company_name': company.name if company else None,
         'is_staff': user.is_staff,
@@ -204,7 +215,7 @@ def user_api_root(request):
                 'username': u.username,
                 'email': u.email,
                 'phone_number': u.phone_number,
-                'role': 'platform_admin' if u.is_superuser else u.role,
+                'role': session_role(u),
                 'company': u.company_id,
                 'company_name': u.company.name if u.company else None,
                 'is_active': u.is_active,
