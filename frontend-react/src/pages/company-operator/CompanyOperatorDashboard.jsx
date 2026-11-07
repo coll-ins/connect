@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import { confirmTripCancel } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import './CompanyOperatorDashboard.css';
 
@@ -910,6 +911,7 @@ export default function CompanyOperatorDashboard() {
 
   const handleStatusChange = async (trip, newStatus) => {
     if (trip.status === newStatus) return;
+    if (!confirmTripCancel(newStatus)) return;
 
     setUpdatingTrip(trip.id);
     setError('');

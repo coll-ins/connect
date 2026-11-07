@@ -138,6 +138,29 @@ class Command(BaseCommand):
                     f"{payment.booking.booking_number}: {e}"
                 )
 
+        # Refunds Paystack refused when the company cancelled the trip.
+        stuck_cancelled_trip_refunds = Payment.objects.filter(
+            method="digital",
+            status="confirmed",
+            booking__status="cancelled",
+            booking__trip__status="cancelled",
+            refund_status__in=["not_requested", "failed"],
+            amount__gte=Decimal("5.00"),
+        )
+
+        for payment in stuck_cancelled_trip_refunds:
+            try:
+                settle_booking_fault(
+                    payment.booking,
+                    fault_party="company",
+                )
+                refunds_retried += 1
+            except ValueError as e:
+                self.stderr.write(
+                    f"Refund retry failed for "
+                    f"{payment.booking.booking_number}: {e}"
+                )
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Processed {trips_processed} departed trip(s), "
