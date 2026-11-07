@@ -24,6 +24,8 @@ import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '.
 import { stopIcon } from '../../components/maps/StopMarker';
 import {
   estimateBusSpeedKmh,
+  parkedBusLabel,
+  planParkedBus,
   recordDriverPosition,
 } from './liveMapUtils';
 
@@ -221,15 +223,24 @@ function MapFollow({ position }) {
   return null;
 }
 
-function createVehicleIcon() {
+function createVehicleIcon({ label = null, heading = null } = {}) {
+  const parked = label != null;
+  const busStyle = Number.isFinite(heading)
+    ? ` style="transform: rotate(${heading}deg)"`
+    : '';
+  const labelHtml = parked
+    ? `<div class="passenger-vehicle-marker__parked-label">${label}</div>`
+    : '';
+
   return L.divIcon({
-    className: 'passenger-vehicle-marker',
+    className: `passenger-vehicle-marker${parked ? ' is-parked' : ''}`,
     html: `
       <div class="passenger-vehicle-marker__scene">
+        ${labelHtml}
         <div class="passenger-vehicle-marker__shadow"></div>
         <div class="passenger-vehicle-marker__glow"></div>
 
-        <div class="passenger-vehicle-marker__bus">
+        <div class="passenger-vehicle-marker__bus"${busStyle}>
           <div class="passenger-vehicle-marker__roof"></div>
           <div class="passenger-vehicle-marker__windshield"></div>
 
@@ -868,10 +879,56 @@ export default function PassengerLiveMap({
     !busStale &&
     tripLifecycleLive;
 
+  // Until the bus is really moving, show it waiting at the start of the route.
+  const parkedTripStatus = live?.trip_status || bookingDetails?.trip_status;
+  const routeStartLatitude = bookingDetails?.route_start_latitude;
+  const routeStartLongitude = bookingDetails?.route_start_longitude;
+  const parkedBus = useMemo(
+    () =>
+      tripIsLive
+        ? null
+        : planParkedBus({
+            geometry,
+            routeStart: normalizePosition({
+              latitude: routeStartLatitude,
+              longitude: routeStartLongitude,
+            }),
+            pickup: pickupPosition,
+            tripStatus: parkedTripStatus,
+          }),
+    [
+      tripIsLive,
+      geometry,
+      routeStartLatitude,
+      routeStartLongitude,
+      pickupPosition,
+      parkedTripStatus,
+    ],
+  );
+  const parkedLabel = parkedBus
+    ? parkedBusLabel({
+        tripStatus: parkedTripStatus,
+        departureAt: live?.departure_at || bookingDetails?.departure_at,
+        now: clockNow,
+      })
+    : null;
+  const parkedHeading = parkedBus?.heading ?? null;
+  const parkedIcon = useMemo(
+    () =>
+      parkedLabel == null
+        ? null
+        : createVehicleIcon({ label: parkedLabel, heading: parkedHeading }),
+    [parkedLabel, parkedHeading],
+  );
+  const parkedStageName = bookingDetails?.route_start_point || 'the first stage';
+  const liveBadge = tripIsLive ? 'Live' : parkedBus ? 'Parked' : 'Offline';
+
   let busStatus;
 
   if (tripStatus === 'completed') {
     busStatus = 'Trip completed';
+  } else if (parkedBus && !(trackingAvailable && driverTarget)) {
+    busStatus = `Parked at ${parkedStageName} · ${parkedLabel}`;
   } else if (!trackingAvailable) {
     busStatus = 'Live tracking starts once boarding begins and a driver is assigned';
   } else if (!matchedDriverPosition) {
@@ -915,6 +972,12 @@ export default function PassengerLiveMap({
     destinationRouteIndex,
     matchedDriverPosition,
   ]);
+
+  const blueRoute = parkedBus
+    ? parkedBus.pickupLeg
+    : busUnreliable
+      ? []
+      : remainingRoute;
 
   const distanceToPickupKm = useMemo(() => {
     if (
@@ -1153,10 +1216,10 @@ export default function PassengerLiveMap({
             </>
           )}
 
-          {!busUnreliable && remainingRoute.length > 1 && (
+          {blueRoute.length > 1 && (
             <>
               <Polyline
-                positions={remainingRoute}
+                positions={blueRoute}
                 pathOptions={{
                   color: '#1677ff',
                   weight: 12,
@@ -1168,7 +1231,7 @@ export default function PassengerLiveMap({
               />
 
               <Polyline
-                positions={remainingRoute}
+                positions={blueRoute}
                 pathOptions={{
                   color: '#1677ff',
                   weight: 6,
@@ -1249,6 +1312,22 @@ export default function PassengerLiveMap({
 
           {!MAP_TILT_ENABLED && following && passengerPosition && (
             <MapFollow position={passengerPosition} />
+          )}
+
+          {parkedBus && parkedIcon && (
+            <Marker
+              position={parkedBus.position}
+              icon={parkedIcon}
+              zIndexOffset={1000}
+            >
+              <Popup>
+                <strong>{busNumber}</strong>
+                <br />
+                Parked at {parkedStageName}
+                <br />
+                {parkedLabel}
+              </Popup>
+            </Marker>
           )}
 
           {tripIsLive && matchedDriverPosition && (
@@ -1343,7 +1422,7 @@ export default function PassengerLiveMap({
           aria-live="polite"
         >
           <span />
-          {tripIsLive ? 'Live' : 'Offline'}
+          {liveBadge}
         </div>
       </header>
 
@@ -1531,7 +1610,7 @@ export default function PassengerLiveMap({
             aria-live="polite"
           >
             <span />
-            {tripIsLive ? 'Live' : 'Offline'}
+            {liveBadge}
           </div>
         </div>
 
