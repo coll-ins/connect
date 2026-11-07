@@ -124,15 +124,22 @@ function TripSimulateControl({ trip, sim, busy, onStart, onStop }) {
     reason = 'Only scheduled, boarding or departed trips can be simulated.';
   } else if (!(trip.driver || trip.driver_name)) reason = 'Assign a driver first.';
   return (
-    <button
-      type="button"
-      className="pa-secondary-button"
-      onClick={() => onStart(trip)}
-      disabled={Boolean(reason) || busy}
-      title={reason || undefined}
-    >
-      Simulate
-    </button>
+    <>
+      <button
+        type="button"
+        className="pa-secondary-button"
+        onClick={() => onStart(trip)}
+        disabled={Boolean(reason) || busy}
+        title={reason || undefined}
+      >
+        Simulate
+      </button>
+      {reason && (
+        <small style={{ display: 'block', marginTop: 4, color: 'var(--text-2)' }}>
+          {reason}
+        </small>
+      )}
+    </>
   );
 }
 
@@ -3077,6 +3084,26 @@ export default function PlatformAdminDashboard() {
                                   trip.route
                                 )}
                             </strong>
+                            {user?.is_superuser && (
+                              <div style={{ marginTop: 8 }}>
+                                <TripSimulateControl
+                                  trip={trip}
+                                  sim={sim}
+                                  busy={simBusy}
+                                  onStart={startSimulation}
+                                  onStop={stopSimulation}
+                                />
+                                <TripJourneyControls
+                                  trip={trip}
+                                  sim={sim}
+                                  bookings={bookings}
+                                  busy={simBusy}
+                                  onDivert={divertSimulation}
+                                  onBoard={boardPassenger}
+                                  onEnd={endSimulatedTrip}
+                                />
+                              </div>
+                            )}
                           </td>
 
                           <td>
@@ -3162,26 +3189,6 @@ export default function PlatformAdminDashboard() {
                                 Cancelled
                               </option>
                             </select>
-                            {user?.is_superuser && (
-                              <div style={{ marginTop: 8 }}>
-                                <TripSimulateControl
-                                  trip={trip}
-                                  sim={sim}
-                                  busy={simBusy}
-                                  onStart={startSimulation}
-                                  onStop={stopSimulation}
-                                />
-                                <TripJourneyControls
-                                  trip={trip}
-                                  sim={sim}
-                                  bookings={bookings}
-                                  busy={simBusy}
-                                  onDivert={divertSimulation}
-                                  onBoard={boardPassenger}
-                                  onEnd={endSimulatedTrip}
-                                />
-                              </div>
-                            )}
                           </td>
                         </tr>
                       ))}

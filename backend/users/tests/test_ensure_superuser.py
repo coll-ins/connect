@@ -18,6 +18,29 @@ def run():
 
 
 class EnsureSuperuserTests(TestCase):
+    def test_server_startup_creates_the_admin_who_can_then_log_in(self):
+        from connect.startup import ensure_platform_admin
+
+        pasted = {'ADMIN_PHONE': ' 0712345678 ', 'ADMIN_PASSWORD': ' Str0ng-admin-pass\n'}
+        with mock.patch.dict('os.environ', pasted):
+            ensure_platform_admin()
+
+        resp = self.client.post(
+            '/api/users/login/',
+            {'phone_number': '0712345678', 'password': 'Str0ng-admin-pass'},
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(resp.json()['user']['is_superuser'])
+
+    def test_server_startup_survives_a_failure(self):
+        from connect.startup import ensure_platform_admin
+
+        with mock.patch.dict('os.environ', ENV), mock.patch(
+            'connect.startup.call_command', side_effect=RuntimeError('no database'),
+        ):
+            ensure_platform_admin()
+
     def test_noop_when_unset(self):
         with mock.patch.dict('os.environ', {}, clear=False) as env:
             env.pop('ADMIN_PHONE', None)

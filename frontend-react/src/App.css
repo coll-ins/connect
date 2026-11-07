@@ -5419,3 +5419,72 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   color: var(--text-2);
   font-size: 13px;
 }
+
+/* Confirm booking: everything in reach without scrolling, on short phones too. */
+.modern-booking-modal .booking-modal-glass-summary {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+}
+
+.booking-modal-rows {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.booking-seat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.booking-seat-row > strong {
+  min-width: 0;
+  text-align: right;
+}
+
+.booking-seat-stepper {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+.booking-seat-stepper button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.booking-seat-stepper button:disabled {
+  opacity: .4;
+}
+
+.booking-seat-stepper strong {
+  min-width: 24px;
+  font-size: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-modal-footer {
+  position: sticky;
+  bottom: -16px;
+  display: grid;
+  gap: 10px;
+  margin: 0 -4px -4px;
+  padding: 8px 4px 4px;
+  background: var(--surface);
+}
+
+.booking-modal-footer .booking-total-glass {
+  padding: 10px 14px;
+}
