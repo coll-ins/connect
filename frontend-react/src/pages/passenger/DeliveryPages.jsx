@@ -32,7 +32,7 @@ export function DeliveryList() {
       <div className="svc-page">
         <div className="svc-head">
           <div>
-            <span className="glass-eyebrow">DELIVERY</span>
+            <span className="glass-eyebrow">Delivery</span>
             <h1>Your parcels</h1>
             <p>Send a parcel on a scheduled trip. You pay in the app, and the driver only hands it over against the receiver&apos;s PIN.</p>
           </div>
@@ -44,7 +44,7 @@ export function DeliveryList() {
         {parcels === null ? (
           <div className="glass-empty">Loading…</div>
         ) : !parcels.length ? (
-          <div className="glass-empty"><Package size={28} /><strong>No parcels yet.</strong></div>
+          <div className="glass-empty"><Package size={28} /><strong>No parcels yet.</strong><span>Send a parcel on a scheduled trip. The receiver collects it with a PIN.</span></div>
         ) : (
           <div className="svc-list">
             {parcels.map((p) => (
@@ -133,7 +133,7 @@ export function DeliveryNew() {
         {options === null ? (
           <div className="glass-empty">Loading…</div>
         ) : !options.length ? (
-          <div className="glass-empty"><strong>No company is carrying parcels right now.</strong></div>
+          <div className="glass-empty"><Package size={28} /><strong>No company is carrying parcels right now.</strong><span>Parcels open on a route once a company sets its parcel rates.</span><Link to="/passenger/delivery" className="glass-empty-action">Back to parcels</Link></div>
         ) : (
           <form className="svc-card" onSubmit={submit}>
             <div className="svc-form">

@@ -135,3 +135,13 @@ test('manager can review the weekly report and email delivery status', async ({ 
   await expect(page.getByText('Email skipped')).toBeVisible();
   await expect(page.getByText(/Email is not configured/)).toBeVisible();
 });
+
+test('auditor incident register lists reported incidents from the API', async ({ page }) => {
+  await openDashboard(page, 'company_auditor', '/company-auditor/incidents');
+
+  await expect(page.getByText('1 incident on record.')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Replacement tire required.' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'breakdown' })).toBeVisible();
+  await expect(page.getByText('investigating')).toBeVisible();
+  await expect(page.getByText(/incident-list endpoint/)).toHaveCount(0);
+});

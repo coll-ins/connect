@@ -20,7 +20,7 @@
 
 .passenger-home .passenger-welcome { margin-bottom: 28px; }
 .passenger-home .welcome-orb { display: none; }
-.passenger-home .glass-eyebrow { color: var(--ph-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.passenger-home .glass-eyebrow { color: var(--ph-accent); font-size: 11px; font-weight: 600; letter-spacing: 0; }
 .passenger-home .passenger-welcome h1 {
   margin: 10px 0; color: #fff; font-size: clamp(30px, 3.6vw, 42px);
   font-weight: 800; line-height: 1.1; letter-spacing: -0.035em; max-width: 700px;
@@ -50,7 +50,7 @@
   background: rgba(8,20,32,.75); border: 1px solid rgba(255,255,255,.18); box-shadow: none;
 }
 .passenger-home .journey-choice-content { position: static; display: flex; flex: 1; flex-direction: column; align-items: flex-start; padding: 16px 18px 18px; }
-.passenger-home .journey-number { color: var(--ph-muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.passenger-home .journey-number { color: var(--ph-muted); font-size: 11px; font-weight: 600; letter-spacing: 0; }
 .passenger-home .journey-choice h2 { margin: 6px 0; color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
 .passenger-home .journey-choice p { margin: 0; color: var(--ph-muted); font-size: 12px; line-height: 1.55; }
 .passenger-home .journey-arrow { margin-top: auto; padding-top: 14px; color: var(--ph-accent); font-size: 12px; font-weight: 750; }
@@ -67,7 +67,7 @@
   background: var(--ph-card); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 .passenger-home .modern-trip-card:hover { transform: none; border-color: rgba(255,255,255,.18); }
-.passenger-home .trip-time-block span { color: var(--ph-muted); font-size: 9px; }
+.passenger-home .trip-time-block span { color: var(--ph-muted); font-size: 11px; }
 .passenger-home .trip-time-block strong { color: #fff; font-size: 17px; overflow-wrap: anywhere; }
 .passenger-home .trip-time-block small { color: var(--ph-muted); font-size: 11px; }
 .passenger-home .trip-route-line span { border-color: var(--ph-accent); }

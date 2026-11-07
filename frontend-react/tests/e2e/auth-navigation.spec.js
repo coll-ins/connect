@@ -105,7 +105,7 @@ test.describe('CONNECT public entry and access guards', () => {
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(page).toHaveURL(/\/passenger$/);
-    await expect(page.getByRole('button', { name: /Book a Seat/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Book a seat/i })).toBeVisible();
     expect(registrationPayload).toMatchObject({
       name: 'New Passenger',
       phone_number: '0712345678',

@@ -19,7 +19,7 @@ const scenarios = [
   {
     role: 'company_operator',
     path: '/company-operator',
-    heading: /Good to see you/i,
+    heading: /Today's operations/i,
   },
   {
     role: 'company_auditor',

@@ -1,5 +1,5 @@
 @import "tailwindcss";
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e8eef7;background:#07111f;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}html,body,#root{min-height:100%;margin:0}body{min-width:320px;background:radial-gradient(circle at 20% 0%,#12304a 0,transparent 35%),linear-gradient(135deg,#07111f,#091827 55%,#07111f)}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.55}a{color:inherit;text-decoration:none}.app-shell{min-height:100vh}.loading-screen{min-height:100vh;display:grid;place-items:center;color:#9fb1c7;font-weight:700}.auth-page{min-height:100vh;display:grid;place-items:center;padding:24px}.auth-card{width:min(460px,100%);padding:34px;border:1px solid #20354b;background:rgba(9,24,39,.92);border-radius:24px;box-shadow:0 24px 70px rgba(0,0,0,.35)}.brand-mark{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#16c784,#07966a);font-weight:900;font-size:24px;color:#03120e}.eyebrow{font-size:11px;letter-spacing:.16em;font-weight:800;color:#61d7b2;margin:22px 0 8px}.auth-card h1{font-size:34px;margin:0 0 8px}.muted{color:#91a4b9;line-height:1.55}.auth-footer{text-align:center;color:#91a4b9;margin:22px 0 0}.auth-footer a{color:#61d7b2;font-weight:800}.form-stack{display:grid;gap:16px;margin-top:24px}.form-stack label{display:grid;gap:7px;color:#cbd8e6;font-size:13px;font-weight:750}.input,.select{width:100%;border:1px solid #294057;background:#071522;color:#f4f8fb;border-radius:12px;padding:13px 14px;outline:none}.input:focus,.select:focus{border-color:#1ec98c;box-shadow:0 0 0 3px rgba(30,201,140,.12)}
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e8eef7;background:#07111f;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}html,body,#root{min-height:100%;margin:0}body{min-width:320px;background:radial-gradient(circle at 20% 0%,#12304a 0,transparent 35%),linear-gradient(135deg,#07111f,#091827 55%,#07111f)}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.55}a{color:inherit;text-decoration:none}.app-shell{min-height:100vh}.loading-screen{min-height:100vh;display:grid;place-items:center;color:#9fb1c7;font-weight:700}.auth-page{min-height:100vh;display:grid;place-items:center;padding:24px}.auth-card{width:min(460px,100%);padding:34px;border:1px solid #20354b;background:rgba(9,24,39,.92);border-radius:24px;box-shadow:0 24px 70px rgba(0,0,0,.35)}.brand-mark{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#16c784,#07966a);font-weight:900;font-size:24px;color:#03120e}.eyebrow{font-size:11px;letter-spacing: 0;font-weight: 600;color:#61d7b2;margin:22px 0 8px}.auth-card h1{font-size:34px;margin:0 0 8px}.muted{color:#91a4b9;line-height:1.55}.auth-footer{text-align:center;color:#91a4b9;margin:22px 0 0}.auth-footer a{color:#61d7b2;font-weight:800}.form-stack{display:grid;gap:16px;margin-top:24px}.form-stack label{display:grid;gap:7px;color:#cbd8e6;font-size:13px;font-weight:750}.input,.select{width:100%;border:1px solid #294057;background:#071522;color:#f4f8fb;border-radius:12px;padding:13px 14px;outline:none}.input:focus,.select:focus{border-color:#1ec98c;box-shadow:0 0 0 3px rgba(30,201,140,.12)}
 
 /* =========================================================
    CONNECT DRIVER PORTAL
@@ -145,7 +145,7 @@
 .driver-mini-copy span {
   margin-top: 2px;
   color: #687f96;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .driver-signout {
@@ -196,9 +196,9 @@
 .driver-eyebrow {
   display: block;
   color: #5fcfae;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 850;
-  letter-spacing: 0.16em;
+  letter-spacing: 0;
 }
 
 .driver-topbar-title strong {
@@ -286,7 +286,7 @@
 
 .driver-vehicle-chip span {
   color: #71869c;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
 }
 
@@ -387,10 +387,9 @@
 
 .driver-stat-content span {
   color: #70859b;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 .driver-stat-content strong {
@@ -406,7 +405,7 @@
   margin-top: 3px;
   overflow: hidden;
   color: #61768b;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -451,9 +450,9 @@
   border: 1px solid rgba(40, 207, 145, 0.12);
   border-radius: 7px;
   color: #66d8b6;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 850;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .driver-live-indicator span {
@@ -551,10 +550,9 @@
 
 .driver-profile-list span {
   color: #697f95;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
 .driver-profile-list strong {
@@ -628,9 +626,9 @@
 
 .driver-booking-number {
   color: #5f7890;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 850;
-  letter-spacing: 0.10em;
+  letter-spacing: 0;
 }
 
 .driver-booking-card h3 {
@@ -643,10 +641,9 @@
   align-self: flex-start;
   padding: 5px 8px;
   border-radius: 7px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 850;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 
 .driver-booking-status.confirmed {
@@ -684,9 +681,8 @@
 
 .driver-route-box span {
   color: #60768d;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .driver-route-box strong {
@@ -708,9 +704,8 @@
 
 .driver-booking-details span {
   color: #60768d;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .driver-booking-details strong {
@@ -938,8 +933,8 @@
   display: block;
   margin-bottom: 5px;
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-weight: 600;
+  letter-spacing: 0;
   color: #64748b;
 }
 
@@ -994,8 +989,7 @@
   font-size: 11px;
   font-weight: 700;
   color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 
 .driver-boarding-summary strong {
@@ -1432,7 +1426,7 @@
   color: #ffffff;
 
   font-family: Arial, sans-serif;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   font-weight: 900;
 
@@ -1532,8 +1526,8 @@
   color: #166534;
 
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0;
 
   box-shadow: 0 5px 18px rgba(0, 0, 0, 0.16);
   backdrop-filter: blur(8px);
@@ -1637,9 +1631,9 @@
 
   color: #475569;
 
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.09em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-live-sheet-header h1 {
@@ -1764,7 +1758,7 @@
 
 .driver-live-stats span {
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1780,10 +1774,9 @@
 
   color: #475569;
 
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-live-bookings select {
@@ -2092,9 +2085,9 @@
 .driver-eyebrow,
 .driver-card-label {
   color: #2563eb;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .12em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-stat-grid {
@@ -2201,9 +2194,8 @@
   padding: 6px 9px;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .driver-booking-grid {
@@ -2224,9 +2216,8 @@
 .driver-boarding-details span {
   display: block;
   color: #94a3b8;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: .07em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .driver-booking-grid strong,
@@ -2325,7 +2316,7 @@
 .driver-quick-panel small {
   margin-top: 2px;
   color: #94a3b8;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .driver-empty {
@@ -2547,7 +2538,7 @@
 .driver-map-topbar span {
   margin-top: 2px;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .driver-map-back {
@@ -2609,7 +2600,7 @@
   padding: 6px 9px;
   background: #dcfce7;
   color: #15803d;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 900;
 }
 
@@ -2643,8 +2634,7 @@
 
 .driver-map-stats span {
   color: #94a3b8;
-  font-size: 9px;
-  text-transform: uppercase;
+  font-size: 11px;
 }
 
 .driver-map-stats strong {
@@ -2721,7 +2711,7 @@
   border: 3px solid #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
   color: #fff;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .driver-modal-backdrop {
@@ -3092,9 +3082,9 @@
 .driver-eyebrow,
 .driver-card-label {
   color: #2563eb;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .12em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-stat-grid {
@@ -3201,9 +3191,8 @@
   padding: 6px 9px;
   background: #eff6ff;
   color: #2563eb;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .driver-booking-grid {
@@ -3224,9 +3213,8 @@
 .driver-boarding-details span {
   display: block;
   color: #94a3b8;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: .07em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .driver-booking-grid strong,
@@ -3325,7 +3313,7 @@
 .driver-quick-panel small {
   margin-top: 2px;
   color: #94a3b8;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .driver-empty {
@@ -3547,7 +3535,7 @@
 .driver-map-topbar span {
   margin-top: 2px;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .driver-map-back {
@@ -3609,7 +3597,7 @@
   padding: 6px 9px;
   background: #dcfce7;
   color: #15803d;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 900;
 }
 
@@ -3643,8 +3631,7 @@
 
 .driver-map-stats span {
   color: #94a3b8;
-  font-size: 9px;
-  text-transform: uppercase;
+  font-size: 11px;
 }
 
 .driver-map-stats strong {
@@ -3721,7 +3708,7 @@
   border: 3px solid #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
   color: #fff;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .driver-modal-backdrop {
@@ -3977,9 +3964,9 @@
 
 .driver-live-sheet-header > div > span {
   color: #64748b !important;
-  font-size: 10px !important;
-  font-weight: 900 !important;
-  letter-spacing: 0.12em !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
 }
 
 .driver-live-sheet-header h1 {
@@ -4171,9 +4158,9 @@
 .driver-live-trip-card > label,
 .driver-live-bookings > label {
   color: #64748b !important;
-  font-size: 10px !important;
-  font-weight: 900 !important;
-  letter-spacing: 0.12em;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0;
 }
 
 /* Passenger card */
@@ -4231,9 +4218,8 @@
   background: #ecfdf5;
   color: #047857 !important;
 
-  font-size: 10px !important;
-  font-weight: 900 !important;
-  text-transform: uppercase;
+  font-size: 11px !important;
+  font-weight: 600 !important;
 }
 
 /* Passenger details */
@@ -4264,9 +4250,9 @@
 
   color: #94a3b8;
 
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-live-passenger-details strong {
@@ -4412,7 +4398,7 @@
 
 .driver-live-stats span {
   color: #64748b !important;
-  font-size: 9px !important;
+  font-size: 11px !important;
 }
 
 /* Better spacing at bottom */
@@ -4620,9 +4606,9 @@
 
   color: #64748b !important;
 
-  font-size: 8px !important;
-  font-weight: 900 !important;
-  letter-spacing: 0.10em;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0;
 }
 
 .driver-live-passenger-meta strong {
@@ -4911,7 +4897,7 @@
   }
 
   .driver-live-passenger-phone {
-    font-size: 10px !important;
+    font-size: 11px !important;
     margin-top: 2px !important;
   }
 
@@ -4938,12 +4924,12 @@
   }
 
   .driver-live-passenger-meta small {
-    font-size: 7px !important;
+    font-size: 11px !important;
     margin-bottom: 2px !important;
   }
 
   .driver-live-passenger-meta strong {
-    font-size: 10px !important;
+    font-size: 11px !important;
     line-height: 1.15 !important;
   }
 

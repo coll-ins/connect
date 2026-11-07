@@ -26,7 +26,7 @@ test('passenger books, pays later from My bookings, then cancels', async ({ page
 
   const scheduled = page.locator('article', { hasText: 'scheduled' }).first();
   await expect(scheduled).toContainText('seats left');
-  await scheduled.getByRole('button', { name: 'Select trip →' }).click();
+  await scheduled.getByRole('button', { name: 'Select trip' }).click();
   await page.getByRole('button', { name: /Confirm booking/ }).click();
 
   // Walk away from the payment window: the booking must still be payable.

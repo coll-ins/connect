@@ -51,7 +51,7 @@ export function ManagerParcels() {
     <div className="svc-page">
       <div className="svc-head">
         <div>
-          <span className="glass-eyebrow">DELIVERY</span>
+          <span className="glass-eyebrow">Delivery</span>
           <h1>Parcels</h1>
           <p>Set what you charge to carry parcels on each route. Leave a size blank and that size is not carried. A route with no prices carries no parcels.</p>
         </div>
@@ -73,6 +73,7 @@ export function ManagerParcels() {
                     {SIZES.map((s) => (
                       <td key={s}>
                         <input className="input svc-rate-input" type="number" min="1" step="1"
+                          aria-label={`${s} parcel rate for ${r.name}, KES`}
                           value={edits[r.id]?.[s] ?? r[s] ?? ''}
                           onChange={(e) => edit(r.id, s, e.target.value)} />
                       </td>
@@ -89,7 +90,7 @@ export function ManagerParcels() {
       <div className="svc-card">
         <div className="svc-head">
           <h3>Parcels on your trips</h3>
-          <select className="input" style={{ width: 200 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select className="input" style={{ width: 200 }} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter by status">
             <option value="">All statuses</option>
             {['pending_payment', 'paid', 'picked_up', 'delivered', 'cancelled'].map((s) => (
               <option key={s} value={s}>{label(s)}</option>
@@ -217,7 +218,7 @@ export function ManagerCharters() {
     <div className="svc-page">
       <div className="svc-head">
         <div>
-          <span className="glass-eyebrow">BUS HIRE</span>
+          <span className="glass-eyebrow">Bus hire</span>
           <h1>Bus hire requests</h1>
           <p>Passengers ask to hire a whole bus. You send a price and a driver, they accept and pay in the app, and the booking is confirmed. A bus cannot be double-booked.</p>
         </div>
@@ -238,7 +239,7 @@ export function ManagerCharters() {
 
       <div className="svc-head">
         <h3 style={{ margin: 0 }}>Requests</h3>
-        <select className="input" style={{ width: 200 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
+        <select className="input" style={{ width: 200 }} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter by status">
           <option value="">All statuses</option>
           {['requested', 'quoted', 'confirmed', 'completed', 'declined', 'cancelled'].map((s) => (
             <option key={s} value={s}>{label(s)}</option>

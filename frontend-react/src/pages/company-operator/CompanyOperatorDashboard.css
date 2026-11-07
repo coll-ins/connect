@@ -69,9 +69,8 @@
 .operator-company-card small {
   display: block;
   color: #718096;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: .12em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .operator-company-card strong {
@@ -96,9 +95,9 @@
 .operator-nav-label {
   padding: 0 11px 9px;
   color: #526176;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-nav-item {
@@ -180,7 +179,7 @@
 .operator-user-card span {
   margin-top: 2px;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-logout {
@@ -239,9 +238,9 @@
 
 .operator-topbar-title span {
   color: #526176;
-  font-size: 9px;
-  letter-spacing: .15em;
-  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 
 .operator-topbar-title strong {
@@ -296,7 +295,7 @@
 
 .operator-topbar-user span {
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 2px;
 }
 
@@ -309,9 +308,9 @@
 .operator-eyebrow {
   display: block;
   color: #34d399;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .16em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-hero,
@@ -454,7 +453,7 @@
 
 .operator-stat-copy small {
   color: #59697d;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -562,7 +561,7 @@
   gap: 12px;
   margin-top: 8px;
   color: #65758a;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-booking-meta span {
@@ -666,7 +665,7 @@
 .operator-health div:nth-child(2) span {
   color: #66768a;
   margin-top: 3px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-health-list {
@@ -687,7 +686,7 @@
 
 .operator-health-list span {
   color: #65758a;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-health-list strong {
@@ -748,7 +747,7 @@
   border-radius: 999px;
   background: rgba(255,255,255,.05);
   color: #9aa9bb;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -806,15 +805,15 @@
 
 .operator-trip-details span {
   color: #56677c;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-trip-details strong {
   margin-top: 5px;
   color: #d9e2eb;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -829,7 +828,7 @@
 
 .operator-trip-actions label {
   color: #65758a;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-trip-actions select,
@@ -877,9 +876,9 @@
 .operator-booking-driver span {
   display: block;
   color: #536379;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-booking-id strong {
@@ -907,14 +906,14 @@
 
 .operator-booking-route-cell span {
   color: #607087;
-  font-size: 9px;
+  font-size: 11px;
   margin-top: 4px;
 }
 
 .operator-booking-driver strong {
   display: block;
   margin-top: 5px;
-  font-size: 10px;
+  font-size: 11px;
   color: #ccd7e2;
 }
 
@@ -925,7 +924,7 @@
   color: #a7f3d0;
   background: rgba(16,185,129,.09);
   border: 1px solid rgba(52,211,153,.13);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -952,8 +951,8 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  font-size: 9px;
-  letter-spacing: .08em;
+  font-size: 11px;
+  letter-spacing: 0;
   color: #8fa3b8;
 }
 
@@ -964,7 +963,7 @@
   background: rgba(255,255,255,.04);
   border: 1px solid rgba(255,255,255,.10);
   color: #e5edf5;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -978,7 +977,7 @@
   border-radius: 999px;
   color: #fcd34d;
   background: rgba(245,158,11,.08);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -1017,9 +1016,9 @@
 
 .operator-driver-info span {
   color: #526176;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-driver-info h3 {
@@ -1035,7 +1034,7 @@
   display: block;
   margin-top: 4px;
   color: #66768a;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .operator-driver-activity {
@@ -1049,7 +1048,7 @@
 
 .operator-driver-activity span {
   color: #617187;
-  font-size: 8px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -1108,7 +1107,7 @@
   display: flex;
   justify-content: space-between;
   color: #59697d;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .operator-alert-grid {
@@ -1151,9 +1150,9 @@
 
 .operator-alert-card span {
   color: #68788c;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: .1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-alert-card strong {
@@ -1165,7 +1164,7 @@
 .operator-alert-card p {
   margin: 5px 0 0;
   color: #5f6f83;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1189,7 +1188,7 @@
 
 .operator-operation-grid span {
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-operation-grid strong {
@@ -1245,7 +1244,7 @@
   gap: 15px;
   padding: 20px 3px 4px;
   color: #45546a;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .operator-modal-backdrop {
@@ -1309,9 +1308,9 @@
 
 .operator-modal-booking span {
   color: #34d399;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: .12em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .operator-modal-booking strong {
@@ -1323,14 +1322,14 @@
 .operator-modal-booking small {
   margin-top: 5px;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-modal-label {
   display: block;
   margin-bottom: 7px;
   color: #8998aa;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .operator-driver-select {
@@ -1341,7 +1340,7 @@
 .operator-modal-note {
   margin: 12px 0 0;
   color: #5f6f83;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -1535,7 +1534,7 @@
   }
 
   .operator-topbar-title span {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .operator-topbar-title strong {

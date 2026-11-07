@@ -38,9 +38,9 @@
 .record-detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .record-detail-header h2 { margin: 6px 0 0; font-size: 22px; overflow-wrap: anywhere; }
 .record-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); }
-.record-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #9fb1c7; }
+.record-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 12px; letter-spacing: 0; color: #9fb1c7; }
 .record-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
-.record-info-grid span { display: flex; flex-direction: column; gap: 4px; color: #71889d; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.record-info-grid span { display: flex; flex-direction: column; gap: 4px; color: #71889d; font-size: 11px; letter-spacing: 0; }
 .record-info-grid strong { color: #e8eef7; font-size: 13px; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
 .record-section.record-issue { padding: 14px; border: 1px solid rgba(251,191,36,.30); border-radius: 14px; background: rgba(251,191,36,.07); }
 .record-issue p { margin: 0 0 12px; color: #e8eef7; }

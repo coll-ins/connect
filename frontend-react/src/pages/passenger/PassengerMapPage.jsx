@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { MapPin } from 'lucide-react';
+import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import PassengerLiveMap from './PassengerLiveMap';
 import { apiRequest } from '../../api';
@@ -190,79 +192,42 @@ export default function PassengerMapPage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: '100dvh',
-          display: 'grid',
-          placeItems: 'center',
-          background: '#f1f5f9',
-          color: '#475569',
-          fontWeight: 700,
-        }}
-      >
-        Loading your trip…
-      </div>
+      <AppShell>
+        <div className="passenger-page">
+          <div className="glass-empty" role="status">Loading your trip…</div>
+        </div>
+      </AppShell>
     );
   }
 
   if (!booking) {
     return (
-      <div
-        style={{
-          minHeight: '100dvh',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 24,
-          background: '#f1f5f9',
-        }}
-      >
-        <NoticeStack>
-          {loadFailed && error && (
-            <Notice title="We couldn't load your trip">
-              {error}{' '}
-              <button type="button" onClick={loadBooking}>
-                Try again
-              </button>
-            </Notice>
-          )}
-        </NoticeStack>
-        <div
-          style={{
-            width: 'min(420px, 100%)',
-            padding: 28,
-            borderRadius: 24,
-            background: '#fff',
-            boxShadow: '0 20px 50px rgba(15,23,42,.12)',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: 42, marginBottom: 12 }}>🚌</div>
-
-          <h2 style={{ margin: '0 0 8px', color: '#0f172a' }}>
-            No trip to track
-          </h2>
-
-          <p style={{ margin: '0 0 20px', color: '#64748b' }}>
-            {error || 'Book a trip first to see its live location.'}
-          </p>
-
-          <button
-            type="button"
-            onClick={() => navigate('/passenger')}
-            style={{
-              border: 0,
-              borderRadius: 12,
-              padding: '11px 18px',
-              background: '#111827',
-              color: '#fff',
-              fontWeight: 800,
-              cursor: 'pointer',
-            }}
-          >
-            Go back
-          </button>
+      <AppShell>
+        <div className="passenger-page">
+          <NoticeStack>
+            {loadFailed && error && (
+              <Notice title="We couldn't load your trip">
+                {error}{' '}
+                <button type="button" onClick={loadBooking}>
+                  Try again
+                </button>
+              </Notice>
+            )}
+          </NoticeStack>
+          <div className="glass-empty">
+            <MapPin size={28} aria-hidden="true" />
+            <strong>No trip to track</strong>
+            <span>
+              {loadFailed
+                ? 'Check your connection and try again.'
+                : 'Live tracking starts once a trip you booked is boarding or on the road.'}
+            </span>
+            <Link to="/passenger/bookings" className="glass-empty-action">
+              My bookings
+            </Link>
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 

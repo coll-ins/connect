@@ -65,7 +65,7 @@ export default function WeeklyReports() {
     <div className="weekly-reports-page">
       <header className="weekly-reports-heading">
         <div>
-          <span>OPERATIONS SUMMARY</span>
+          <span>Operations summary</span>
           <h2>Weekly reports</h2>
           <p>
             Review the previous week before auto-renewal, or the day before a
@@ -96,8 +96,8 @@ export default function WeeklyReports() {
               <div>
                 <span className="weekly-report-kicker">
                   {report.report_type === 'manual_renewal'
-                    ? 'MANUAL RENEWAL REMINDER'
-                    : 'WEEKLY OPERATIONS'}
+                    ? 'Manual renewal reminder'
+                    : 'Weekly operations'}
                 </span>
                 <h3>{dateLabel(report.period_start)} – {dateLabel(report.period_end)}</h3>
                 {report.renewal_date && (

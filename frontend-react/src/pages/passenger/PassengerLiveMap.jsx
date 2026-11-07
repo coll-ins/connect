@@ -1415,7 +1415,7 @@ export default function PassengerLiveMap({
           aria-live="polite"
         >
           <span />
-          {tripIsLive ? 'LIVE' : 'OFFLINE'}
+          {tripIsLive ? 'Live' : 'Offline'}
         </div>
       </header>
 
@@ -1449,7 +1449,7 @@ export default function PassengerLiveMap({
         <div className="passenger-live-map__status-row">
           <div>
             <span className="passenger-live-map__eyebrow">
-              YOUR TRIP
+              Your trip
             </span>
             <h1>{routeName}</h1>
           </div>
@@ -1603,14 +1603,14 @@ export default function PassengerLiveMap({
             aria-live="polite"
           >
             <span />
-            {tripIsLive ? 'LIVE' : 'OFFLINE'}
+            {tripIsLive ? 'Live' : 'Offline'}
           </div>
         </div>
 
         {geometry.length > 1 && (
           <div className="passenger-live-map__route-progress">
             <div className="passenger-live-map__route-progress-heading">
-              <strong>TRIP ROUTE PROGRESS</strong>
+              <strong>Trip route progress</strong>
               <span>
                 {routeProgressPercent == null
                   ? busStatus
@@ -1677,7 +1677,7 @@ export default function PassengerLiveMap({
         <div className="passenger-live-map__pickup">
           <div className="passenger-live-map__pickup-dot" />
           <div>
-            <span>YOUR PICKUP</span>
+            <span>Your pickup</span>
             <strong>{pickup}</strong>
             <span>
               {pickupPosition

@@ -22,7 +22,7 @@ export default function Signup() {
     }
   };
   return <div className="auth-page"><div className="auth-card">
-    <div className="brand-mark">C</div><p className="eyebrow">JOIN CONNECT</p><h1>Create your account</h1><p className="muted">Book rides quickly and keep every trip in one place.</p>
+    <div className="brand-mark">C</div><p className="eyebrow">Join CONNECT</p><h1>Create your account</h1><p className="muted">Book rides quickly and keep every trip in one place.</p>
     {error && <div className="error">{error}</div>}
     <form onSubmit={submit} className="form-stack">
       <label>First and last name<input className="input" value={form.name} onChange={update('name')} placeholder="e.g. Collins Otieno" autoComplete="name" maxLength="150" pattern=" *[A-Za-z\u00C0-\u024F'’\-]{2,}( +[A-Za-z\u00C0-\u024F'’\-]{2,})+ *" title="Enter your first and last name, e.g. Collins Otieno" required /></label>

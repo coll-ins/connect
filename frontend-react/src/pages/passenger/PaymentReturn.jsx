@@ -94,7 +94,7 @@ export default function PaymentReturn() {
               ? '…'
               : '⌛'}
         </div>
-        <p className="eyebrow">CONNECT PAYMENT</p>
+        <p className="eyebrow">CONNECT payment</p>
         <h1>
           {status === 'map-error'
             ? 'Payment confirmed'

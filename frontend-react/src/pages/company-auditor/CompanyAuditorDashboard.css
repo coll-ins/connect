@@ -53,7 +53,7 @@
 
 .audit-logo span {
   color: #657b91;
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 2px;
 }
 
@@ -68,8 +68,8 @@
 .audit-company-box span {
   display: block;
   color: #587087;
-  font-size: 9px;
-  letter-spacing: .13em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .audit-company-box strong {
@@ -82,7 +82,7 @@
   display: block;
   margin-top: 4px;
   color: #5ee6ad;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-nav {
@@ -94,9 +94,9 @@
 .audit-nav-label {
   padding: 0 11px 7px;
   color: #526a81;
-  font-size: 9px;
-  letter-spacing: .15em;
-  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 
 .audit-nav-label-secondary {
@@ -179,7 +179,7 @@
 
 .audit-logo span {
   color: #657b91;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-company-box {
@@ -193,8 +193,8 @@
 .audit-company-box span {
   display: block;
   color: #587087;
-  font-size: 9px;
-  letter-spacing: .13em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .audit-company-box strong {
@@ -207,7 +207,7 @@
   display: block;
   margin-top: 4px;
   color: #5ee6ad;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-nav {
@@ -219,9 +219,9 @@
 .audit-nav-label {
   padding: 0 11px 7px;
   color: #526a81;
-  font-size: 9px;
-  letter-spacing: .15em;
-  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 
 .audit-nav-label-secondary {
@@ -282,9 +282,9 @@
 
 .audit-eyebrow {
   color: #56dca6;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .16em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
   margin-bottom: 7px;
 }
 
@@ -336,7 +336,7 @@
 .audit-report span {
   display: block;
   color: #71869b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-kpi strong,
@@ -351,7 +351,7 @@
   display: block;
   margin-top: 5px;
   color: #50677d;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .danger-kpi strong {
@@ -403,17 +403,26 @@
 .audit-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .audit-table th {
-  padding: 12px 18px;
+  padding: 12px 16px;
   text-align: left;
-  color: #526a81;
-  font-size: 9px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  font-weight: 800;
+  color: #6f879b;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.audit-table-empty {
+  margin: 0;
+  padding: 24px 16px;
+  border-top: 1px solid rgba(255,255,255,.045);
+  color: #8aa0b2;
+  font-size: 13px;
+  text-align: center;
 }
 
 .audit-table td {
@@ -438,7 +447,7 @@
   display: inline-flex;
   padding: 4px 8px;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 12px;
   border: 1px solid rgba(255,255,255,.08);
   text-transform: capitalize;
 }
@@ -569,7 +578,7 @@
 
 .audit-search-list span {
   color: #5f7589;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-investigation {
@@ -588,9 +597,8 @@
 .audit-profile span {
   display: block;
   color: #50677d;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: .08em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .audit-investigation-grid strong,
@@ -638,7 +646,7 @@
   display: block;
   margin-top: 3px;
   color: #60768a;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-event p {

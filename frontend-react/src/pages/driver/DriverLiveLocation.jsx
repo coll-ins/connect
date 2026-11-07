@@ -579,12 +579,12 @@ export default function DriverLiveLocation() {
             }
           />
           {gpsStatus === 'LIVE'
-            ? simMode ? 'SIMULATED GPS LIVE' : 'GPS LIVE'
+            ? simMode ? 'Simulated GPS live' : 'GPS live'
             : gpsStatus === 'DELAYED'
-              ? `GPS DELAYED · ${Math.round(gpsAgeSec)}s`
+              ? `GPS delayed · ${Math.round(gpsAgeSec)}s`
               : gpsStatus === 'LOST'
-                ? `GPS LOST · last seen ${gpsAgeSec >= 60 ? Math.round(gpsAgeSec / 60) + ' min' : Math.round(gpsAgeSec) + ' s'} ago`
-                : 'WAITING FOR GPS'}
+                ? `GPS lost · last seen ${gpsAgeSec >= 60 ? Math.round(gpsAgeSec / 60) + ' min' : Math.round(gpsAgeSec) + ' s'} ago`
+                : 'Waiting for GPS'}
         </div>
       </div>
 
@@ -618,7 +618,7 @@ export default function DriverLiveLocation() {
             onClick={() => setSheetMin((minimized) => !minimized)}
             style={{ cursor: 'pointer' }}
           >
-            <span>LIVE TRIP</span>
+            <span>Live trip</span>
 
             <h1>
               {activeTrip?.route_name || 'No assigned trip'}
@@ -674,7 +674,7 @@ export default function DriverLiveLocation() {
 
               <div>
                 <Crosshair size={18} />
-                <strong>{location ? 'ON' : 'OFF'}</strong>
+                <strong>{location ? 'On' : 'Off'}</strong>
                 <span>GPS</span>
               </div>
             </div>
@@ -757,7 +757,7 @@ export default function DriverLiveLocation() {
             )}
 
             <div className="driver-live-trip-card">
-              <label>ASSIGNED TRIP</label>
+              <label>Assigned trip</label>
 
               <div className="driver-live-trip-info">
                 <strong>{activeTrip.route_name}</strong>
@@ -784,7 +784,7 @@ export default function DriverLiveLocation() {
 
             {activeTrip.bookings?.length > 0 ? (
               <div className="driver-live-passenger-section">
-                <label>PASSENGERS ON THIS TRIP</label>
+                <label>Passengers on this trip</label>
 
                 {activeTrip.bookings.map((booking) => (
                   <div
@@ -814,14 +814,14 @@ export default function DriverLiveLocation() {
 
                     <div className="driver-live-passenger-meta">
                       <div className="driver-live-receipt">
-                        <small>RECEIPT</small>
+                        <small>Receipt</small>
                         <strong>
                           {booking.booking_number || booking.booking_id}
                         </strong>
                       </div>
 
                       <div>
-                        <small>PICKUP</small>
+                        <small>Pickup</small>
                         <strong>
                           {booking.pickup_stage_name ||
                             booking.pickup_location ||
@@ -830,7 +830,7 @@ export default function DriverLiveLocation() {
                       </div>
 
                       <div>
-                        <small>SEATS</small>
+                        <small>Seats</small>
                         <strong>{booking.seats || 1}</strong>
                       </div>
 
@@ -849,7 +849,7 @@ export default function DriverLiveLocation() {
               </div>
             ) : (
               <div className="driver-live-bookings">
-                <label>PASSENGERS</label>
+                <label>Passengers</label>
                 <div>
                   <strong>No passengers assigned yet</strong>
                   <span>
@@ -864,7 +864,7 @@ export default function DriverLiveLocation() {
               className="driver-live-bookings"
               style={{ marginTop: 14 }}
             >
-              <label>PICKUP STAGES</label>
+              <label>Pickup stages</label>
 
               <div className="driver-live-stage-list">
                 {stages.map((stage) => (

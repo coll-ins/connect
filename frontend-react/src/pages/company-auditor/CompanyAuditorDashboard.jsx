@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   UserRound,
   WalletCards,
+  Menu,
 } from 'lucide-react';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -82,7 +83,7 @@ function Layout({ user, logout, children }) {
         onClick={() => setMobileOpen(true)}
         aria-label="Open navigation"
       >
-        ☰
+        <Menu size={20} aria-hidden="true" />
       </button>
 
       {mobileOpen && (
@@ -104,13 +105,13 @@ function Layout({ user, logout, children }) {
         </div>
 
         <div className="audit-company-box">
-          <span>COMPANY</span>
+          <span>Company</span>
           <strong>{user?.company_name || 'Company'}</strong>
           <small>Read-only auditor</small>
         </div>
 
         <nav className="audit-nav">
-          <div className="audit-nav-label">AUDIT</div>
+          <div className="audit-nav-label">Audit</div>
 
           {sidebar.map(({ label, path, icon: Icon }) => (
             <NavLink
@@ -129,7 +130,7 @@ function Layout({ user, logout, children }) {
           ))}
 
           <div className="audit-nav-label audit-nav-label-secondary">
-            TOOLS
+            Tools
           </div>
 
           <NavLink
@@ -192,10 +193,11 @@ function SectionHeader({ eyebrow, title, description, icon: Icon }) {
   );
 }
 
-function DataTable({ children }) {
+function DataTable({ children, empty }) {
   return (
     <div className="audit-table-wrap">
       <table className="audit-table">{children}</table>
+      {empty && <p className="audit-table-empty">{empty}</p>}
     </div>
   );
 }
@@ -220,7 +222,7 @@ function Overview({ analytics, trips, bookings }) {
   return (
     <>
       <SectionHeader
-        eyebrow="AUDITOR OVERVIEW"
+        eyebrow="Auditor overview"
         title="Audit control center"
         description="Company-wide read-only visibility across trips, bookings, payments, receipts and recorded incidents."
         icon={ShieldCheck}
@@ -352,7 +354,7 @@ function Trips({ trips }) {
   return (
     <>
       <SectionHeader
-        eyebrow="TRIP AUDIT"
+        eyebrow="Trip audit"
         title="Trips"
         description="Review historical and scheduled company trips without operational controls."
         icon={Bus}
@@ -432,7 +434,7 @@ function Payments({ bookings }) {
   return (
     <>
       <SectionHeader
-        eyebrow="PAYMENT AUDIT"
+        eyebrow="Payment audit"
         title="Payments"
         description="Review payment states, references and financial outcomes recorded against company bookings."
         icon={CreditCard}
@@ -447,7 +449,7 @@ function Payments({ bookings }) {
           <WalletCards size={19} />
         </div>
 
-        <DataTable>
+        <DataTable empty={payments.length === 0 && 'No payments recorded yet. They appear here once a passenger pays for a booking.'}>
           <thead>
             <tr>
               <th>Booking</th>
@@ -481,7 +483,7 @@ function Transactions({ bookings }) {
   return (
     <>
       <SectionHeader
-        eyebrow="TRANSACTION AUDIT"
+        eyebrow="Transaction audit"
         title="Transactions"
         description="Trace booking-linked financial references and transaction outcomes."
         icon={Activity}
@@ -496,7 +498,7 @@ function Transactions({ bookings }) {
           <Activity size={19} />
         </div>
 
-        <DataTable>
+        <DataTable empty={bookings.length === 0 && 'No transactions recorded yet.'}>
           <thead>
             <tr>
               <th>Booking</th>
@@ -530,7 +532,7 @@ function Bookings({ bookings }) {
   return (
     <>
       <SectionHeader
-        eyebrow="BOOKING AUDIT"
+        eyebrow="Booking audit"
         title="Bookings"
         description="Inspect booking lifecycle, passengers, routes and payment relationships."
         icon={BookOpen}
@@ -545,7 +547,7 @@ function Bookings({ bookings }) {
           <BookOpen size={19} />
         </div>
 
-        <DataTable>
+        <DataTable empty={bookings.length === 0 && 'No bookings recorded yet.'}>
           <thead>
             <tr>
               <th>Booking</th>
@@ -605,7 +607,7 @@ function Passengers({ bookings }) {
   return (
     <>
       <SectionHeader
-        eyebrow="PASSENGER AUDIT"
+        eyebrow="Passenger audit"
         title="Passengers"
         description="Review passenger activity through company booking and payment records."
         icon={UserRound}
@@ -620,7 +622,7 @@ function Passengers({ bookings }) {
           <UserRound size={19} />
         </div>
 
-        <DataTable>
+        <DataTable empty={passengers.length === 0 && 'No passengers have booked with this company yet.'}>
           <thead>
             <tr>
               <th>Passenger</th>
@@ -652,7 +654,7 @@ function Receipts({ onSearch }) {
   return (
     <>
       <SectionHeader
-        eyebrow="RECEIPT AUDIT"
+        eyebrow="Receipt audit"
         title="Receipts"
         description="Investigate individual receipts and trace their complete recorded transaction history."
         icon={Receipt}
@@ -714,7 +716,7 @@ function SearchPage() {
   return (
     <>
       <SectionHeader
-        eyebrow="INVESTIGATION"
+        eyebrow="Investigation"
         title="Search"
         description="Search the company's audit records from one place."
         icon={Search}
@@ -825,7 +827,7 @@ function Reports({ analytics, bookings, trips }) {
   return (
     <>
       <SectionHeader
-        eyebrow="AUDIT REPORTS"
+        eyebrow="Audit reports"
         title="Reports"
         description="Read-only company audit summaries generated from the available records."
         icon={FileText}
@@ -835,7 +837,7 @@ function Reports({ analytics, bookings, trips }) {
         <div className="audit-report">
           <span>Trip records</span>
           <strong>{analytics?.total_trips ?? trips.length}</strong>
-          <small>Trips currently returned by the company API.</small>
+          <small>All trips recorded for this company.</small>
         </div>
 
         <div className="audit-report">
@@ -861,26 +863,65 @@ function Reports({ analytics, bookings, trips }) {
 }
 
 function Incidents() {
+  const [incidents, setIncidents] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    apiRequest('/bookings/incidents/')
+      .then((data) => setIncidents(Array.isArray(data) ? data : []))
+      .catch((err) => setError(err.message || 'Incidents could not be loaded.'));
+  }, []);
+
   return (
     <>
       <SectionHeader
-        eyebrow="INCIDENT AUDIT"
+        eyebrow="Incident audit"
         title="Incidents"
-        description="Review recorded company incidents and their resolutions. Operational actions remain unavailable."
+        description="Breakdowns, accidents and road issues reported on company trips, with their current status."
         icon={AlertTriangle}
       />
 
-      <section className="audit-panel audit-placeholder">
-        <AlertTriangle size={28} />
-        <h2>Incident register</h2>
-        <p>
-          The current frontend has no dedicated company incident-list endpoint.
-          Incident information is still available inside individual receipt
-          investigations where it is attached to a booking.
-        </p>
-        <NavLink to="/company-auditor/search">
-          Investigate a record
-        </NavLink>
+      <section className="audit-panel">
+        <div className="audit-panel-head">
+          <div>
+            <h2>Incident register</h2>
+            <p>
+              {incidents
+                ? `${incidents.length} incident${incidents.length === 1 ? '' : 's'} on record.`
+                : 'Loading incidents…'}
+            </p>
+          </div>
+          <AlertTriangle size={19} />
+        </div>
+
+        {error ? (
+          <p className="audit-table-empty">{error}</p>
+        ) : (
+          <DataTable empty={incidents?.length === 0 && 'No incidents reported. Drivers report breakdowns and road issues from their live trip screen.'}>
+            <thead>
+              <tr>
+                <th>Reported</th>
+                <th>Route</th>
+                <th>Type</th>
+                <th>Details</th>
+                <th>Reported by</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(incidents || []).map((incident) => (
+                <tr key={incident.id}>
+                  <td>{date(incident.reported_at)}</td>
+                  <td><strong>{incident.trip_route || `Trip #${incident.trip}`}</strong></td>
+                  <td>{String(incident.incident_type || '').replace(/_/g, ' ')}</td>
+                  <td>{incident.description || '—'}</td>
+                  <td>{incident.reported_by_name || '—'}</td>
+                  <td><Status value={incident.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
       </section>
     </>
   );
@@ -890,7 +931,7 @@ function Profile({ user }) {
   return (
     <>
       <SectionHeader
-        eyebrow="AUDITOR PROFILE"
+        eyebrow="Auditor profile"
         title="Profile"
         description="Your CONNECT audit identity and access scope."
         icon={UserRound}

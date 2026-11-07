@@ -24,6 +24,7 @@ import {
   UserRound,
   Users,
   X,
+  Menu,
 } from 'lucide-react';
 import { MapContainer, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -31,6 +32,7 @@ import {
   NavLink,
   useLocation,
   useNavigate,
+  Navigate,
 } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -274,9 +276,9 @@ function PlatformShell({ logout, children }) {
         .pa-nav-label {
           margin: 15px 8px 5px;
           color: #5e7187;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: .12em;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0;
         }
 
         .pa-link {
@@ -411,14 +413,48 @@ function PlatformShell({ logout, children }) {
         .pa-overline,
         .pa-card-eyebrow {
           color: #5ee7b7;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: .13em;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0;
         }
 
-        .pa-topbar h2 {
-          margin: 4px 0 0;
+        .pa-topbar-title {
+          margin: 0;
           font-size: 20px;
+          font-weight: 600;
+          line-height: 1.2;
+        }
+
+        .pa-page-head {
+          justify-content: flex-end !important;
+          margin-bottom: 16px !important;
+        }
+
+        @media (max-width: 640px) {
+          .pa-user > div,
+          .pa-system-status > svg {
+            display: none;
+          }
+
+          .pa-system-status > span:not(.pa-status-dot) {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+          }
+
+          .pa-topbar {
+            padding-top: 12px;
+            padding-bottom: 12px;
+            padding-right: 16px;
+            gap: 12px;
+          }
+
+          .pa-topbar-title {
+            font-size: 18px;
+          }
         }
 
         .pa-user {
@@ -661,7 +697,7 @@ function PlatformShell({ logout, children }) {
           background: #2563eb;
           box-shadow: 0 2px 9px rgba(0,0,0,.4);
           color: white;
-          font-size: 9px;
+          font-size: 11px;
           font-weight: 900;
         }
 
@@ -798,7 +834,7 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           padding: 4px 8px;
           border-radius: 999px;
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 800;
           background: rgba(16,185,129,.1);
           color: #6ee7b7;
@@ -1103,9 +1139,8 @@ function PlatformShell({ logout, children }) {
         .pa-test-status {
           padding: 4px 8px;
           border-radius: 999px;
-          font-size: 9px !important;
-          text-transform: uppercase;
-          font-weight: 800;
+          font-size: 11px !important;
+          font-weight: 600;
           background: rgba(255,255,255,.05);
         }
 
@@ -1186,7 +1221,7 @@ function PlatformShell({ logout, children }) {
         onClick={() => setMobileOpen(true)}
         aria-label="Open navigation"
       >
-        ☰
+        <Menu size={20} aria-hidden="true" />
       </button>
 
       {mobileOpen && (
@@ -1218,7 +1253,7 @@ function PlatformShell({ logout, children }) {
         </div>
 
         <nav className="pa-nav">
-          <p className="pa-nav-label">CONTROL</p>
+          <p className="pa-nav-label">Control</p>
 
           <SideLink to="/platform-admin" icon={LayoutDashboard} end onClick={closeMobile}>
             Overview
@@ -1248,7 +1283,7 @@ function PlatformShell({ logout, children }) {
             Bookings
           </SideLink>
 
-          <p className="pa-nav-label">INSIGHTS</p>
+          <p className="pa-nav-label">Insights</p>
 
           <SideLink to="/platform-admin/users" onClick={closeMobile} icon={UserRound}>
             Users
@@ -1262,7 +1297,7 @@ function PlatformShell({ logout, children }) {
             Revenue
           </SideLink>
 
-          <p className="pa-nav-label">SYSTEM</p>
+          <p className="pa-nav-label">System</p>
 
           <SideLink to="/platform-admin/issues" onClick={closeMobile} icon={AlertTriangle}>
             Issues
@@ -1761,7 +1796,7 @@ export default function PlatformAdminDashboard() {
       )
   );
 
-  const pageTitle = {
+  const pageTitles = {
     overview: 'Global overview',
     companies: 'Companies',
     routes: 'Routes',
@@ -1775,7 +1810,8 @@ export default function PlatformAdminDashboard() {
     issues: 'System issues',
     'system-tests': 'System tests',
     settings: 'Platform settings',
-  }[section] || 'Global overview';
+  };
+  const pageTitle = pageTitles[section] || 'Global overview';
 
   const refresh = async () => {
     await load();
@@ -2141,18 +2177,15 @@ export default function PlatformAdminDashboard() {
         String(route.id) === String(id)
     )?.name || `Route ${id || '—'}`;
 
+  if (!pageTitles[section]) return <Navigate to="/platform-admin" replace />;
+
   return (
     <PlatformShell
       user={user}
       logout={logout}
     >
       <header className="pa-topbar">
-        <div>
-          <span className="pa-overline">
-            GLOBAL OPERATIONS
-          </span>
-          <h2>{pageTitle}</h2>
-        </div>
+        <h1 className="pa-topbar-title">{pageTitle}</h1>
 
         <div className="pa-page-actions">
           <button
@@ -2214,19 +2247,6 @@ export default function PlatformAdminDashboard() {
         )}
 
         <div className="pa-page-head">
-          <div>
-            <span className="pa-card-eyebrow">
-              CONNECT PLATFORM
-            </span>
-
-            <h1>{pageTitle}</h1>
-
-            <p>
-              Global administration across every
-              transport company and operational area.
-            </p>
-          </div>
-
           <button
             type="button"
             className="pa-secondary-button"
@@ -2250,7 +2270,7 @@ export default function PlatformAdminDashboard() {
                 <div className="pa-command-card-head">
                   <div>
                     <span className="pa-card-eyebrow">
-                      SYSTEM HEALTH
+                      System health
                     </span>
 
                     <h3>
@@ -2307,7 +2327,7 @@ export default function PlatformAdminDashboard() {
                 <div className="pa-command-card-head">
                   <div>
                     <span className="pa-card-eyebrow">
-                      DIAGNOSTICS
+                      Diagnostics
                     </span>
 
                     <h3>
@@ -2621,7 +2641,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  GLOBAL DIRECTORY
+                  Global directory
                 </span>
 
                 <h3>
@@ -2752,7 +2772,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  NETWORK
+                  Network
                 </span>
 
                 <h3>Routes</h3>
@@ -2861,7 +2881,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  FLEET
+                  Fleet
                 </span>
 
                 <h3>Drivers</h3>
@@ -2967,7 +2987,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  OPERATIONS
+                  Operations
                 </span>
 
                 <h3>Trips</h3>
@@ -3206,6 +3226,7 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <select
+                              aria-label={`Status for trip ${trip.id}`}
                               value={
                                 trip.status || ''
                               }
@@ -3257,7 +3278,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  COMPANY ACCESS
+                  Company access
                 </span>
 
                 <h3>Operators</h3>
@@ -3347,7 +3368,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  BOOKINGS
+                  Bookings
                 </span>
 
                 <h3>Global bookings</h3>
@@ -3466,7 +3487,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  PLATFORM DIRECTORY
+                  Platform directory
                 </span>
 
                 <h3>Users</h3>
@@ -3620,7 +3641,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  PLATFORM INSIGHTS
+                  Platform insights
                 </span>
 
                 <h3>
@@ -3758,7 +3779,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  FINANCIAL OVERVIEW
+                  Financial overview
                 </span>
 
                 <h3>Revenue</h3>
@@ -3880,7 +3901,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  OPERATIONS
+                  Operations
                 </span>
 
                 <h3>
@@ -4041,7 +4062,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  SYSTEM
+                  System
                 </span>
 
                 <h3>
@@ -4202,7 +4223,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  SYSTEM CONFIGURATION
+                  System configuration
                 </span>
 
                 <h3>

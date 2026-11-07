@@ -94,9 +94,9 @@
 
   background: #ecfdf3;
   color: #15803d;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .06em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .passenger-live-map__live span,
@@ -171,9 +171,9 @@
 
 .passenger-live-map__eyebrow {
   color: #64748b;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: .12em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .passenger-live-map__status-row h1 {
@@ -201,7 +201,7 @@
 .passenger-live-map__distance span {
   grid-column: 2;
   color: #94a3b8;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -242,7 +242,7 @@
   display: block;
   margin-top: 2px;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .passenger-live-map__vehicle-live {
@@ -250,7 +250,7 @@
   align-items: center;
   gap: 6px;
   color: #15803d;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 900;
 }
 
@@ -273,9 +273,9 @@
 .passenger-live-map__pickup span {
   display: block;
   color: #94a3b8;
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: .1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .passenger-live-map__pickup strong {
@@ -298,12 +298,12 @@
   justify-content: space-between;
   gap: 8px;
   color: #334155;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .passenger-live-map__route-progress-heading strong {
-  font-size: 9px;
-  letter-spacing: .06em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .passenger-live-map__route-progress-heading span {
@@ -354,7 +354,7 @@
   justify-content: space-between;
   gap: 8px;
   color: #64748b;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -372,7 +372,7 @@
   gap: 8px;
   margin-top: 9px;
   color: #64748b;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .passenger-live-map__route-progress-legend span {
@@ -404,12 +404,12 @@
   border-radius: 12px;
   background: #eff6ff;
   color: #1e3a8a;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
 .passenger-live-map__traffic-note strong {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .passenger-live-map__gps-note {
@@ -418,7 +418,7 @@
   border-radius: 12px;
   background: #fff7ed;
   color: #9a3412;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -456,7 +456,7 @@
   padding: 6px 9px;
   background: white;
   color: #7f1d1d;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -830,7 +830,7 @@
 .passenger-live-map__arrival p {
   margin: 5px 0 0;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -856,9 +856,8 @@
 .passenger-live-map__distance-card span {
   grid-column: 2;
   color: #94a3b8;
-  font-size: 8px;
-  font-weight: 800;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .passenger-live-map__progress-line {
@@ -906,9 +905,9 @@
   gap: 10px;
 
   color: #94a3b8;
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: .08em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .passenger-live-map__route-labels strong {
@@ -918,7 +917,7 @@
   white-space: nowrap;
 
   color: #334155;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0;
 }
 

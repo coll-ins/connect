@@ -75,9 +75,8 @@
 .driver-company-card small {
   display: block;
   color: #718096;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: .12em;
+  font-size: 11px;
+  letter-spacing: 0;
 }
 
 .driver-company-card strong {
@@ -102,9 +101,9 @@
 .driver-nav-label {
   padding: 0 11px 9px;
   color: #526176;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-nav-item {
@@ -204,7 +203,7 @@
 .driver-user-card span {
   margin-top: 2px;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .driver-logout {
@@ -272,9 +271,9 @@
 
 .driver-topbar-title span {
   color: #526176;
-  font-size: 9px;
-  letter-spacing: .15em;
-  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 
 .driver-topbar-title strong {
@@ -538,10 +537,9 @@
   align-items: center;
   gap: 7px;
   color: #55d99a;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.35px;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 /* Error */
@@ -654,8 +652,7 @@
   color: #8498ad;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.55px;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .driver-stat-copy strong {
@@ -744,10 +741,9 @@
 
 .driver-detail span {
   color: #70859b;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .driver-detail strong {

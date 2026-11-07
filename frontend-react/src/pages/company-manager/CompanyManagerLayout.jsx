@@ -81,7 +81,7 @@ export default function CompanyManagerLayout() {
           </div>
         </div>
 
-        <div className="company-nav-label">MANAGEMENT</div>
+        <div className="company-nav-label">Management</div>
 
         <div className="company-sidebar-links">
           {management.map(({ label, path, icon: Icon, end }) => (
@@ -100,7 +100,7 @@ export default function CompanyManagerLayout() {
           ))}
         </div>
 
-        <div className="company-nav-label">OPERATIONS</div>
+        <div className="company-nav-label">Operations</div>
 
         <div className="company-sidebar-links">
           {operations.map(({ label, path, icon: Icon }) => (
@@ -118,7 +118,7 @@ export default function CompanyManagerLayout() {
           ))}
         </div>
 
-        <div className="company-nav-label">SYSTEM</div>
+        <div className="company-nav-label">System</div>
 
         <NavLink
           to={settings.path}
@@ -166,7 +166,7 @@ export default function CompanyManagerLayout() {
           </button>
 
           <div>
-            <p className="company-eyebrow">COMPANY MANAGER</p>
+            <p className="company-eyebrow">Company manager</p>
             <h1>{user?.company_name || 'My Company'}</h1>
           </div>
 
