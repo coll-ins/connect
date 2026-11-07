@@ -1,0 +1,48 @@
+name: scheduled-jobs
+# Production housekeeping. Render has no cron, so GitHub calls the app's
+# protected cron endpoint. Needs repository variable CONNECT_API_URL and
+# secret CRON_SECRET (the same value as CRON_SECRET on Render).
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # bookings, payments, trips
+    - cron: '20 * * * *'     # generate trips from weekly service templates
+    - cron: '0 3 * * *'      # weekly operations reports (the command decides the day)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-jobs
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call production jobs
+        env:
+          CONNECT_API_URL: ${{ vars.CONNECT_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [[ -z "$CONNECT_API_URL" || -z "$CRON_SECRET" ]]; then
+            echo "::warning::Set CONNECT_API_URL (variable) and CRON_SECRET (secret) to enable scheduled jobs."
+            exit 0
+          fi
+          case "$SCHEDULE" in
+            '20 * * * *') jobs="generate-trips" ;;
+            '0 3 * * *')  jobs="weekly-operations-reports" ;;
+            '')           jobs="expire-pending process-unapplied process-noshows close-stale-trips reconcile-refunds generate-trips" ;;
+            *)            jobs="expire-pending process-unapplied process-noshows close-stale-trips reconcile-refunds" ;;
+          esac
+          failed=0
+          for job in $jobs; do
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST --max-time 120 \
+              --retry 3 --retry-delay 20 --retry-all-errors \
+              -H "X-Cron-Secret: $CRON_SECRET" "${CONNECT_API_URL%/}/api/internal/cron/$job/") || code=000
+            echo "$job -> $code"
+            if [[ "$code" != 200 && "$code" != 202 ]]; then failed=1; fi
+          done
+          exit $failed
