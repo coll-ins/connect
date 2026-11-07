@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Check, Package } from 'lucide-react';
 
 import { apiRequest } from '../../api';
 import AppShell from '../../components/layout/AppShell';
@@ -110,7 +110,7 @@ export function DeliveryNew() {
         {options === null ? (
           <div className="glass-empty">Loading…</div>
         ) : !options.length ? (
-          <div className="glass-empty"><strong>No company is carrying parcels right now.</strong></div>
+          <div className="glass-empty"><Package size={28} /><strong>No company is carrying parcels right now.</strong><span>Parcels open on a route once a company sets its parcel rates.</span><Link to="/passenger/delivery" className="glass-empty-action">Back to parcels</Link></div>
         ) : (
           <div className="svc-card">
             {step === 0 && (

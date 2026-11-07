@@ -439,7 +439,7 @@ export default function RoutePlanner() {
 
       <div className="svc-head">
         <div>
-          <span className="glass-eyebrow">ROUTES</span>
+          <span className="glass-eyebrow">Routes</span>
           <h1>Route planner</h1>
           <p>Set where a route starts and ends, place its stages, and show the road the bus follows. Nothing changes for passengers until you save.</p>
         </div>

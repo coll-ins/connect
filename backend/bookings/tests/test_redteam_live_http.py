@@ -84,3 +84,19 @@ class RedTeamLiveHttpTests(APITestCase):
             for label, u in (("owner", self.owner), ("driver", self.drv1)):
                 with self.subTest(booking_status=st, viewer=label):
                     self.assertGreaterEqual(self._get(u).status_code, 400)
+
+
+class RouteScopedOperatorLiveTests(RedTeamLiveHttpTests):
+    """An operator limited to some routes must not watch live GPS on the others."""
+
+    def test_route_scoped_operator_refused_on_other_routes(self):
+        other_route = Route.objects.create(
+            company=self.co, name="R2", start_point="C", end_point="D",
+            price=Decimal("100.00"))
+        op = User.objects.create_user(
+            username="op", password="x", phone_number="0711000009",
+            company=self.co, role="company_operator", all_routes=False)
+        op.assigned_routes.add(other_route)
+        self.assertEqual(self._get(op).status_code, 403)
+        op.assigned_routes.add(self.route)
+        self.assertEqual(self._get(op).status_code, 200)

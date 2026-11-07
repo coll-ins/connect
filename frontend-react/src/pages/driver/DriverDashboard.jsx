@@ -109,7 +109,7 @@ function DriverShell({ user, driver, logout, children }) {
             </button>
 
             <div className="driver-topbar-title">
-              <span>DRIVER PORTAL</span>
+              <span>Driver portal</span>
               <strong>Today's operations</strong>
             </div>
           </div>
@@ -297,8 +297,6 @@ export default function DriverDashboard() {
   const sendDriverLocation = useCallback(
     async (position) => {
       if (!driver) return;
-      // Simulator mode: never post the laptop's fixed GPS.
-      if (window.location.search.includes('sim=1') || window.localStorage.getItem('sim') === '1') return;
 
       try {
         setError('');
@@ -428,7 +426,7 @@ export default function DriverDashboard() {
       <div className="driver-content">
         <section className="driver-welcome" id="overview">
           <div>
-            <span className="driver-eyebrow">GOOD TO SEE YOU</span>
+            <span className="driver-eyebrow">Good to see you</span>
             <h1>
               Welcome, {driver?.name || user?.name || 'Driver'}
             </h1>
@@ -492,7 +490,7 @@ export default function DriverDashboard() {
           <article className="driver-panel driver-location-panel" id="location">
             <div className="driver-panel-heading">
               <div>
-                <span className="driver-panel-kicker">LIVE OPERATIONS</span>
+                <span className="driver-panel-kicker">Live operations</span>
                 <h2>Live location</h2>
               </div>
 
@@ -577,7 +575,7 @@ export default function DriverDashboard() {
 
             <div className="driver-map-passenger">
               <div>
-                <span className="driver-panel-kicker">TRACK PASSENGER</span>
+                <span className="driver-panel-kicker">Track passenger</span>
                 <strong>
                   {selectedMapBooking
                     ? selectedMapBooking.passenger || 'Passenger'
@@ -643,7 +641,7 @@ export default function DriverDashboard() {
           <article className="driver-panel driver-profile-panel" id="profile">
             <div className="driver-panel-heading">
               <div>
-                <span className="driver-panel-kicker">DRIVER PROFILE</span>
+                <span className="driver-panel-kicker">Driver profile</span>
                 <h2>Your details</h2>
               </div>
               <UserRound size={20} />
@@ -676,7 +674,7 @@ export default function DriverDashboard() {
         <section className="driver-bookings-section" id="passengers">
           <div className="driver-section-heading">
             <div>
-              <span className="driver-panel-kicker">PASSENGER OPERATIONS</span>
+              <span className="driver-panel-kicker">Passenger operations</span>
               <h2>Assigned passengers</h2>
               <p>Verify boarding when passengers arrive for their trip.</p>
             </div>
@@ -746,7 +744,7 @@ export default function DriverDashboard() {
 
             <div className="driver-boarding-modal-header">
               <div>
-                <span>PASSENGER OPERATIONS</span>
+                <span>Passenger operations</span>
                 <h2 id="boarding-modal-title">Verify boarding</h2>
               </div>
 

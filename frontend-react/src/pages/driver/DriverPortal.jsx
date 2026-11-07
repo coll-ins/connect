@@ -25,18 +25,28 @@ const nav = [
   ["/driver", "Overview", LayoutDashboard],
   ["/driver/trips", "My timetable", CalendarDays],
   ["/driver/passengers", "Passengers", Users],
-  ["/driver/location", "Live Location", MapPin],
-  ["/driver/boarding", "Pickup Manifest", CheckCircle2],
-  ["/driver/jobs", "Parcels & Hires", Package],
+  ["/driver/location", "Live location", MapPin],
+  ["/driver/boarding", "Pickup manifest", CheckCircle2],
+  ["/driver/jobs", "Parcels & hires", Package],
   ["/driver/profile", "Profile", User],
 ];
+
+const PAGE_DESCRIPTIONS = {
+  Overview: "Your next departure and today's numbers at a glance.",
+  "My timetable": "Trips assigned to you for the next seven days, in Nairobi time.",
+  Passengers: "Everyone booked on your trips and where they board.",
+  "Live location": "Share your position so passengers can see the bus coming.",
+  "Pickup manifest": "Passengers still to collect on the current trip, in stage order.",
+  "Parcels & hires": "Parcels to carry and whole-bus hires assigned to you.",
+  Profile: "Your account and the company you drive for.",
+};
 
 function pageTitle(path) {
   if (path.startsWith("/driver/trips")) return "My timetable";
   if (path.startsWith("/driver/passengers")) return "Passengers";
-  if (path.startsWith("/driver/location")) return "Live Location";
-  if (path.startsWith("/driver/boarding")) return "Pickup Manifest";
-  if (path.startsWith("/driver/jobs")) return "Parcels & Hires";
+  if (path.startsWith("/driver/location")) return "Live location";
+  if (path.startsWith("/driver/boarding")) return "Pickup manifest";
+  if (path.startsWith("/driver/jobs")) return "Parcels & hires";
   if (path.startsWith("/driver/profile")) return "Profile";
   return "Overview";
 }
@@ -383,7 +393,7 @@ export default function DriverPortal() {
         </div>
 
         <div className="driver-company-card">
-          <span>COMPANY</span>
+          <span>Company</span>
           <strong>{companyName}</strong>
           <small>Driver workspace</small>
         </div>
@@ -393,7 +403,7 @@ export default function DriverPortal() {
           aria-label="Driver navigation"
         >
           <span className="driver-nav-label">
-            WORKSPACE
+            Workspace
           </span>
 
           {nav.map(([path, label, Icon]) => {
@@ -471,7 +481,7 @@ export default function DriverPortal() {
           </button>
 
           <div className="driver-topbar-title">
-            <span>DRIVER OPERATIONS</span>
+            <span>Driver operations</span>
             <strong>{title}</strong>
           </div>
 
@@ -502,15 +512,12 @@ export default function DriverPortal() {
           <div className="driver-page-heading">
             <div>
               <span className="driver-eyebrow">
-                DRIVER OPERATIONS
+                Driver operations
               </span>
 
               <h1>{title}</h1>
 
-              <p>
-                Manage your trips, passengers and
-                boarding operations.
-              </p>
+              <p>{PAGE_DESCRIPTIONS[title]}</p>
             </div>
           </div>
 
@@ -524,7 +531,7 @@ export default function DriverPortal() {
             <section className="driver-panel">
               <div className="driver-panel-heading">
                 <div>
-                  <span className="driver-eyebrow">YOUR SCHEDULE</span>
+                  <span className="driver-eyebrow">Your schedule</span>
                   <h2>Today's timetable</h2>
                 </div>
                 <Link className="driver-timetable-link" to="/driver/trips">
@@ -661,10 +668,10 @@ export default function DriverPortal() {
                 <div className="driver-panel-heading">
                   <div>
                     <span className="driver-eyebrow">
-                      DRIVER PROFILE
+                      Driver profile
                     </span>
 
-                    <h2>Driver Overview</h2>
+                    <h2>Your details</h2>
                   </div>
                 </div>
 
@@ -694,8 +701,8 @@ export default function DriverPortal() {
 
               <div className="driver-panel-heading">
                 <div>
-                  <span className="driver-eyebrow">ASSIGNED DEPARTURES</span>
-                  <h2>My timetable</h2>
+                  <span className="driver-eyebrow">Assigned departures</span>
+                  <h2>Next 7 days</h2>
                   <p className="driver-timetable-caption">
                     Your assigned trips for the next seven days, in Nairobi time.
                   </p>
@@ -748,10 +755,10 @@ export default function DriverPortal() {
               <div className="driver-panel-heading">
                 <div>
                   <span className="driver-eyebrow">
-                    PASSENGER MANIFEST
+                    Passenger manifest
                   </span>
 
-                  <h2>Passengers</h2>
+                  <h2>Booked passengers</h2>
                 </div>
               </div>
 
@@ -823,10 +830,10 @@ export default function DriverPortal() {
               <div className="driver-panel-heading">
                 <div>
                   <span className="driver-eyebrow">
-                    VEHICLE TRACKING
+                    Vehicle tracking
                   </span>
 
-                  <h2>Live Location</h2>
+                  <h2>Live location</h2>
                 </div>
               </div>
 
@@ -845,10 +852,10 @@ export default function DriverPortal() {
               <div className="driver-panel-heading">
                 <div>
                   <span className="driver-eyebrow">
-                    TRIP OPERATIONS
+                    Trip operations
                   </span>
 
-                  <h2>Pickup Manifest</h2>
+                  <h2>Still to pick up</h2>
                 </div>
               </div>
 
@@ -954,10 +961,10 @@ export default function DriverPortal() {
               <div className="driver-panel-heading">
                 <div>
                   <span className="driver-eyebrow">
-                    ACCOUNT
+                    Account
                   </span>
 
-                  <h2>Driver Profile</h2>
+                  <h2>Account details</h2>
                 </div>
               </div>
 

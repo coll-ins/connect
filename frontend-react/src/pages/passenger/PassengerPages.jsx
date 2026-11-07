@@ -2,9 +2,10 @@ import AppShell from '../../components/layout/AppShell';
 import './PassengerRecords.css';
 import { useAuth } from '../../context/AuthContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import {
+  Armchair,
   CreditCard,
   MapPin,
   ShieldCheck,
@@ -96,7 +97,7 @@ export function PassengerRecords({ mode = 'receipts' }) {
 
   return (
     <PassengerPage
-      eyebrow={mode === 'history' ? 'ACTIVITY / HISTORY' : 'RECEIPTS'}
+      eyebrow={mode === 'history' ? 'Activity' : 'Receipts'}
       title={mode === 'history' ? 'Your activity history' : 'Your receipts'}
       description={
         mode === 'history'
@@ -116,6 +117,7 @@ export function PassengerRecords({ mode = 'receipts' }) {
             }
           }}
           placeholder="Search booking number or payment reference..."
+          aria-label="Search booking number or payment reference"
         />
         <button
           className="btn btn-primary"
@@ -216,7 +218,7 @@ export function PassengerRecords({ mode = 'receipts' }) {
               <div className="record-detail-header">
                 <div>
                   <span className="glass-eyebrow">
-                    UNIQUE TRIP REFERENCE
+                    Unique trip reference
                   </span>
                   <h2>{selected.booking_number}</h2>
                 </div>
@@ -323,7 +325,7 @@ export function PassengerRecords({ mode = 'receipts' }) {
 export function PassengerSeats() {
   return (
     <PassengerPage
-      eyebrow="SEATS"
+      eyebrow="Seats"
       title="Your reserved seats"
       description="See the seats attached to your active CONNECT bookings."
     >
@@ -335,7 +337,7 @@ export function PassengerSeats() {
 export function PassengerHelp() {
   return (
     <PassengerPage
-      eyebrow="HELP & ISSUES"
+      eyebrow="Help & issues"
       title="Need help with a journey?"
       description="Use your unique booking reference when reporting a payment, booking or trip issue."
     >
@@ -445,7 +447,8 @@ function BookingsBody({ activeOnly = false }) {
       ) : !visible.length ? (
         <div className="glass-empty">
           <strong>No bookings yet.</strong>
-          <span>Book a seat from Find a Trip to see your journeys here.</span>
+          <span>Trips you book show up here, with live tracking once the bus is on the road.</span>
+          <Link to="/passenger/schedules" className="glass-empty-action">Find a trip</Link>
         </div>
       ) : (
         <div className="passenger-data-grid">
@@ -453,7 +456,7 @@ function BookingsBody({ activeOnly = false }) {
             <article className="passenger-data-card" key={booking.booking_id}>
               <div className="data-card-top">
                 <div>
-                  <span className="data-card-label">BOOKING</span>
+                  <span className="data-card-label">Booking</span>
                   <strong>{booking.booking_number}</strong>
                 </div>
 
@@ -465,9 +468,9 @@ function BookingsBody({ activeOnly = false }) {
               <h2>{booking.route_name || 'CONNECT Journey'}</h2>
 
               <div className="data-card-details">
-                <span>💺 {booking.seats} seat(s)</span>
-                <span>📍 {booking.pickup_location}</span>
-                <span>💳 {booking.payment_status}</span>
+                <span><Armchair size={14} aria-hidden="true" /> {booking.seats} seat{booking.seats === 1 ? '' : 's'}</span>
+                <span><MapPin size={14} aria-hidden="true" /> {booking.pickup_location}</span>
+                <span><CreditCard size={14} aria-hidden="true" /> {booking.payment_status}</span>
               </div>
 
               {booking.verification_pin && (
@@ -524,7 +527,7 @@ function BookingsBody({ activeOnly = false }) {
 export function PassengerBookings() {
   return (
     <PassengerPage
-      eyebrow="MY BOOKINGS"
+      eyebrow="My bookings"
       title="Your journeys"
       description="View your upcoming, completed and cancelled CONNECT bookings."
     >
@@ -545,7 +548,7 @@ export function PassengerWallet() {
 
   return (
     <PassengerPage
-      eyebrow="WALLET"
+      eyebrow="Wallet"
       title="Your CONNECT wallet"
       description="Manage the balance used for your protected journey payments."
     >
@@ -554,14 +557,14 @@ export function PassengerWallet() {
       <div className="wallet-overview-grid">
         <div className="wallet-glass-card wallet-main">
           <WalletCards size={26} />
-          <span>AVAILABLE BALANCE</span>
+          <span>Available balance</span>
           <strong>{money(wallet?.available_balance)}</strong>
           <p>Available for new bookings.</p>
         </div>
 
         <div className="wallet-glass-card">
           <ShieldCheck size={24} />
-          <span>HELD BALANCE</span>
+          <span>Held balance</span>
           <strong>{money(wallet?.held_balance)}</strong>
           <p>Protected while a booking is awaiting boarding.</p>
         </div>
@@ -600,7 +603,7 @@ export function PassengerPayments() {
 
   return (
     <PassengerPage
-      eyebrow="PAYMENTS"
+      eyebrow="Payments"
       title="Payment history"
       description="Review the payment status attached to your CONNECT journeys."
     >
@@ -658,7 +661,7 @@ export function PassengerProfile() {
 
   return (
     <PassengerPage
-      eyebrow="PROFILE"
+      eyebrow="Profile"
       title="Your passenger profile"
       description="Your CONNECT account information and passenger identity."
     >
@@ -668,7 +671,7 @@ export function PassengerProfile() {
         </div>
 
         <div className="profile-main">
-          <span className="glass-eyebrow">PASSENGER ACCOUNT</span>
+          <span className="glass-eyebrow">Passenger account</span>
           <h2>{displayName}</h2>
           <p>{phoneText || 'Phone number not available'}</p>
         </div>

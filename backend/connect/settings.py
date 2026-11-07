@@ -13,13 +13,6 @@ APP_ENVIRONMENT = os.getenv(
     'APP_ENVIRONMENT',
     'development' if DEBUG else 'production',
 ).strip().lower()
-DEMO_SIMULATION_ENABLED = (
-    APP_ENVIRONMENT in {'development', 'test', 'staging'}
-    and os.getenv(
-        'DEMO_SIMULATION_ENABLED',
-        'True' if APP_ENVIRONMENT == 'development' else 'False',
-    ).lower() == 'true'
-)
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
@@ -316,13 +309,17 @@ if not DEBUG:
     for _required in ('ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL', 'NUM_PROXIES'):
         if not os.getenv(_required):
             raise ValueError(f'CRITICAL: {_required} must be set in production.')
+    if REST_FRAMEWORK['NUM_PROXIES'] < 1:
+        raise ValueError(
+            'CRITICAL: NUM_PROXIES must be 1 or more in production '
+            '(the app always runs behind a proxy or load balancer).'
+        )
     if not ADMIN_ALERT_PHONE_NUMBERS:
         raise ValueError(
             'CRITICAL: ADMIN_ALERT_PHONE_NUMBERS must be set in production '
             '(unapplied payments are reported there).'
         )
 
-REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '10/hour'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login_ip'] = '60/minute'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 

@@ -99,7 +99,7 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/passenger');
 
-  await page.getByRole('button', { name: /Book a Seat/ }).click();
+  await page.getByRole('button', { name: /Book a seat/ }).click();
   await page.getByRole('button', { name: /Express Line/ }).click();
   await page.getByRole('button', { name: /Nairobi.*Mombasa/ }).click();
   await page.getByRole('button', { name: /Westlands/ }).click();
@@ -113,7 +113,7 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
   expect(modalBounds.y).toBeGreaterThanOrEqual(0);
   expect(modalBounds.y + modalBounds.height).toBeLessThanOrEqual(844);
 
-  await page.getByRole('button', { name: 'Confirm booking & continue →' }).click();
+  await page.getByRole('button', { name: 'Confirm booking' }).click();
   await page.getByRole('button', { name: /Pay with cash/ }).click();
 
   await expect(page).toHaveURL(/\/passenger\/map\?booking=42$/);
@@ -209,12 +209,12 @@ test('confirmed M-PESA payment enters the selected trip map automatically', asyn
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/passenger');
 
-  await page.getByRole('button', { name: /Book a Seat/ }).click();
+  await page.getByRole('button', { name: /Book a seat/ }).click();
   await page.getByRole('button', { name: /Express Line/ }).click();
   await page.getByRole('button', { name: /Nairobi.*Mombasa/ }).click();
   await page.getByRole('button', { name: /Westlands/ }).click();
   await page.getByRole('button', { name: /Select trip/ }).click();
-  await page.getByRole('button', { name: 'Confirm booking & continue →' }).click();
+  await page.getByRole('button', { name: 'Confirm booking' }).click();
   await page.getByRole('button', { name: /Pay online/ }).click();
   await page.getByRole('button', { name: 'M-PESA' }).click();
   await page.getByRole('button', { name: 'Pay with my number' }).click();

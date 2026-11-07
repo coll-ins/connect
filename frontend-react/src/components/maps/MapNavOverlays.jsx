@@ -116,9 +116,7 @@ export function NextStageBanner({ next, style }) {
       <div
         style={{
           fontSize: 11,
-          letterSpacing: 1,
           opacity: 0.7,
-          textTransform: 'uppercase',
         }}
       >
         Next stage

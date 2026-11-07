@@ -5,8 +5,8 @@ const ROLES = {
   passenger: ['+254799000001', ['/passenger', '/passenger/schedules', '/passenger/map', '/passenger/bookings', '/passenger/wallet', '/passenger/payments', '/passenger/receipts', '/passenger/history', '/passenger/seats', '/passenger/help', '/passenger/profile', '/passenger/delivery', '/passenger/delivery/new', '/passenger/charter', '/passenger/charter/new']],
   driver: ['+254799000010', ['/driver', '/driver/trips', '/driver/passengers', '/driver/location', '/driver/boarding', '/driver/jobs', '/driver/profile']],
   operator: ['+254799000002', ['/company-operator', '/company-operator/bookings', '/company-operator/trips', '/company-operator/drivers', '/company-operator/capacity', '/company-operator/operations']],
-  manager: ['+254799000003', ['/company-manager', '/company-manager/bookings', '/company-manager/charters', '/company-manager/drivers', '/company-manager/parcels', '/company-manager/revenue', '/company-manager/routes', '/company-manager/settings', '/company-manager/trips']],
-  auditor: ['+254799000004', ['/company-auditor', '/company-auditor/audit', '/company-auditor/bookings', '/company-auditor/revenue', '/company-auditor/trips']],
+  manager: ['+254799000003', ['/company-manager', '/company-manager/bookings', '/company-manager/charters', '/company-manager/drivers', '/company-manager/parcels', '/company-manager/revenue', '/company-manager/routes', '/company-manager/settings', '/company-manager/trips', '/company-manager/companies', '/company-manager/route-planner', '/company-manager/services', '/company-manager/reports', '/company-manager/operators', '/company-manager/capacity', '/company-manager/pricing']],
+  auditor: ['+254799000004', ['/company-auditor', '/company-auditor/trips', '/company-auditor/payments', '/company-auditor/transactions', '/company-auditor/receipts', '/company-auditor/bookings', '/company-auditor/passengers', '/company-auditor/incidents', '/company-auditor/reports']],
   admin: ['+254799000005', ['/platform-admin', '/platform-admin/bookings', '/platform-admin/companies', '/platform-admin/drivers', '/platform-admin/reports', '/platform-admin/settings', '/platform-admin/trips', '/platform-admin/users']],
 };
 
@@ -40,7 +40,7 @@ for (const [role, [phone, paths]] of Object.entries(ROLES)) {
 
     if (role === 'admin') {
       await page.goto('/platform-admin/users');
-      await expect(page.getByText('demo_passenger')).toBeVisible();
+      await expect(page.getByText('wanjiku.k')).toBeVisible();
     }
 
     expect(problems).toEqual([]);

@@ -199,7 +199,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
     <div className="svc-page">
       <section className="svc-head">
         <div>
-          <span className="glass-eyebrow">WEEKLY SERVICE</span>
+          <span className="glass-eyebrow">Weekly service</span>
           <h1>Service templates</h1>
           <p>
             Set regular departures for a route. Choose manual weekly renewal,
@@ -218,7 +218,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
       <section className="svc-card">
         <div className="service-template-heading">
           <div>
-            <span className="glass-eyebrow">{editingId ? 'EDIT SERVICE' : 'NEW SERVICE'}</span>
+            <span className="glass-eyebrow">{editingId ? 'Edit service' : 'New service'}</span>
             <h2>{editingId ? 'Update weekly template' : 'Create weekly template'}</h2>
           </div>
         </div>
@@ -320,7 +320,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
       <section className="svc-card">
         <div className="service-template-heading">
           <div>
-            <span className="glass-eyebrow">MANAGE SERVICES</span>
+            <span className="glass-eyebrow">Manage services</span>
             <h2>{templates.length} service templates</h2>
           </div>
         </div>

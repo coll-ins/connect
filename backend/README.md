@@ -115,15 +115,10 @@ non-zero command result for operational monitoring.
 
 ## Platform-admin demo trip
 
-The Platform Admin **Trips** page can run an isolated client-demo simulation.
-It animates a demo bus along saved route map geometry and has explicit stop and
-expiry behavior. It stores a short-lived demo session only; it does not create
-or update real trips, drivers, passenger bookings, GPS records, payments, or
-notifications. Only authenticated Django superusers can access its API.
-
-The feature is enabled by default only for local `development` when `DEBUG` is
-true. Staging demonstrations require `APP_ENVIRONMENT=staging` and
-`DEMO_SIMULATION_ENABLED=True`. It is forcibly disabled in `production`, even
-if the flag is mistakenly enabled. Routes without at least two valid map points
-cannot be simulated. The demo endpoint is not a load test and does not send
-simulated coordinates to passenger tracking.
+The Platform Admin **Trips** page has a Simulate button (superusers only). It
+moves the trip's bus along the route map line through the same code path as a
+real driver's GPS post, so passengers booked on the trip see it live and
+auto-depart applies. The admin's open tab drives it (one point every 2 seconds);
+closing the tab stops the bus. Only one simulation runs at a time, it expires
+after 30 minutes, and a real GPS post from that driver stops it. Routes without
+a map line cannot be simulated.

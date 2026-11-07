@@ -58,9 +58,9 @@ test.describe('CONNECT role screen interactions', () => {
       page.getByRole('heading', { name: /Where are you going today/i }),
     ).toBeVisible();
 
-    await expect(page.getByRole('button', { name: /Book a Seat/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Order Delivery/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Book a Bus/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Book a seat/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Send a parcel/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Hire a bus/i })).toBeVisible();
 
     expect(pageErrors).toEqual([]);
   });
@@ -68,7 +68,7 @@ test.describe('CONNECT role screen interactions', () => {
   test('Book a Seat moves the passenger into company selection', async ({ page }) => {
     await openRolePage(page, 'passenger', '/passenger');
 
-    await page.getByRole('button', { name: /Book a Seat/i }).click();
+    await page.getByRole('button', { name: /Book a seat/i }).click();
 
     await expect(
       page.getByRole('heading', { name: /Choose your transport company/i }),
@@ -78,7 +78,7 @@ test.describe('CONNECT role screen interactions', () => {
   test('Order Delivery opens the passenger delivery screen', async ({ page }) => {
     await openRolePage(page, 'passenger', '/passenger');
 
-    await page.getByRole('button', { name: /Order Delivery/i }).click();
+    await page.getByRole('button', { name: /Send a parcel/i }).click();
 
     await expect(page).toHaveURL(/\/passenger\/delivery$/);
     await expect(page.locator('h1').first()).toBeVisible();
@@ -123,7 +123,7 @@ test.describe('CONNECT role screen interactions', () => {
     await openRolePage(page, 'company_operator', '/company-operator/not-a-real-page');
 
     await expect(page).toHaveURL(/\/company-operator$/);
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Good to see you');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText("Today's operations");
   });
 
   test('driver portal exposes operational navigation and opens trips', async ({ page }) => {
@@ -131,8 +131,8 @@ test.describe('CONNECT role screen interactions', () => {
 
     await expect(page.getByRole('link', { name: 'My timetable' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Passengers' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Live Location' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Pickup Manifest' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Live location' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Pickup manifest' })).toBeVisible();
 
     await page.getByRole('link', { name: 'My timetable' }).click();
 
@@ -264,13 +264,13 @@ test('driver live-location screen shows its route, styles the panel, and sends G
   const sheetBackground = await page
     .locator('.driver-live-sheet')
     .evaluate((element) => getComputedStyle(element).backgroundColor);
-  expect(sheetBackground).toBe('rgba(15, 23, 42, 0.96)');
+  expect(sheetBackground).toBe('rgb(16, 25, 29)');
 
   await expect.poll(() => capturedGpsPayload, { timeout: 10000 })
     .toEqual(simulatedLocation);
   expect(gpsPostCount).toBeGreaterThan(0);
 
-  await expect(page.getByText('GPS LIVE', { exact: true })).toBeVisible();
+  await expect(page.getByText('GPS live', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Locate me' })).toBeVisible();
 

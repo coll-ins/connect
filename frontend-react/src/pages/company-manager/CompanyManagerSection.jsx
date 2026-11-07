@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Bus,
   CalendarDays,
@@ -16,6 +17,16 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+
+const EMPTY_COPY = {
+  routes: ['No routes yet', 'Create a route to start selling seats on it.'],
+  pricing: ['No routes to price', 'Fares are set per route. Create a route first.'],
+  trips: ['No trips scheduled', 'Create a trip, or set up a service template to schedule trips every week.'],
+  drivers: ['No drivers yet', 'Add a driver so trips can be assigned a bus.'],
+  operators: ['No operators yet', 'Add an operator to manage boarding and departures.'],
+  bookings: ['No bookings yet', 'Bookings appear here as soon as passengers reserve seats on your trips.'],
+  capacity: ['No upcoming trips', 'Seat capacity shows for scheduled and boarding trips.'],
+};
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -159,6 +170,7 @@ function OperatorRouteAssignments() {
               <strong>{op.username}</strong>
               <span>{op.phone_number}</span>
               <select
+                aria-label={`Routes for ${op.username}`}
                 value={d.all ? 'all' : 'selected'}
                 onChange={(e) => setDraft(op, { all: e.target.value === 'all' })}
               >
@@ -740,7 +752,7 @@ export default function CompanyManagerSection({ section }) {
         </div>
 
         <div>
-          <p className="company-eyebrow">YOUR COMPANY</p>
+          <p className="company-eyebrow">Your company</p>
           <h1>{config.title}</h1>
           <p>{config.description}</p>
         </div>
@@ -841,7 +853,7 @@ export default function CompanyManagerSection({ section }) {
                 <div className="company-profile-grid">
                   <div className="company-panel company-profile-main">
                     <span className="company-panel-kicker">
-                      COMPANY PROFILE
+                      Company profile
                     </span>
                     <h2>{company.name}</h2>
                     <p>{company.description || 'No description provided.'}</p>
@@ -861,7 +873,7 @@ export default function CompanyManagerSection({ section }) {
 
                   <div className="company-panel">
                     <span className="company-panel-kicker">
-                      COMPANY SUMMARY
+                      Company summary
                     </span>
 
                     <div className="company-mini-stat">
@@ -1230,34 +1242,39 @@ export default function CompanyManagerSection({ section }) {
               {section === 'revenue' && (
                 <div className="company-revenue-dashboard">
                   <div className="company-revenue-main">
-                    <span>SETTLED REVENUE</span>
+                    <span>Settled revenue</span>
                     <strong>
                       {money(analytics?.total_revenue_settled)}
                     </strong>
                     <p>
-                      Revenue settled for your company according to the
-                      existing company analytics service.
+                      Fares released to your company as passengers board.
+                      Payments still held for passengers who have not
+                      boarded are not included.
                     </p>
                   </div>
 
                   <div className="company-revenue-side">
                     <WalletCards size={30} />
-                    <span>Company financials</span>
-                    <strong>Company-scoped</strong>
+                    <span>Active bookings</span>
+                    <strong>{analytics?.active_bookings ?? 0}</strong>
                   </div>
                 </div>
               )}
 
               {['settings'].includes(section) && (
-                <div className="company-panel">
-                  <span className="company-panel-kicker">
-                    SETTINGS
-                  </span>
-                  <h2>Company management settings</h2>
-                  <p>
-                    Your company settings and permissions are controlled
-                    through the authenticated company account.
-                  </p>
+                <div className="company-settings-list">
+                  {[
+                    ['/company-manager/companies', 'Company profile', 'Name, contact phone and the areas you serve.'],
+                    ['/company-manager/charters', 'Bus hire', 'Turn bus hire requests on or off and answer quotes.'],
+                    ['/company-manager/parcels', 'Parcel rates', 'Set what you charge per parcel size on each route.'],
+                    ['/company-manager/operators', 'Operators', 'Add staff and choose which routes each operator runs.'],
+                    ['/company-manager/pricing', 'Fares', 'Seat prices for every route.'],
+                  ].map(([to, title, text]) => (
+                    <Link key={to} to={to} className="company-settings-link">
+                      <strong>{title}</strong>
+                      <span>{text}</span>
+                    </Link>
+                  ))}
                 </div>
               )}
 
@@ -1265,10 +1282,8 @@ export default function CompanyManagerSection({ section }) {
                 ['routes', 'pricing', 'trips', 'drivers', 'operators', 'bookings', 'capacity'].includes(section) && (
                   <div className="company-empty">
                     <Icon size={30} />
-                    <strong>No records yet</strong>
-                    <span>
-                      Use the action button above to add your first record.
-                    </span>
+                    <strong>{EMPTY_COPY[section][0]}</strong>
+                    <span>{EMPTY_COPY[section][1]}</span>
                   </div>
                 )}
             </>
@@ -1438,9 +1453,7 @@ export default function CompanyManagerSection({ section }) {
               <div
                 style={{
                   fontSize: '11px',
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
+                  fontWeight: 600,
                   opacity: 0.65,
                   marginBottom: '4px',
                 }}

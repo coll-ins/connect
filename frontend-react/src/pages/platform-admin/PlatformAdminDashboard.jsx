@@ -14,29 +14,24 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
-  Play,
   RefreshCw,
   Route as RouteIcon,
   Settings,
   ShieldCheck,
-  Square,
   Trash2,
   UserRound,
   Users,
   X,
+  Menu,
 } from 'lucide-react';
-import { MapContainer, Polyline, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   NavLink,
   useLocation,
   useNavigate,
+  Navigate,
 } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import BaseTileLayer from '../../components/maps/BaseTileLayer';
-import BusMarker from '../../components/maps/BusMarker';
-import { buildRoute } from '../../components/maps/route';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -98,69 +93,46 @@ const emptyOperator = {
   password: '',
 };
 
-// Follow: street-level camera that glides with the bus (what a client
-// watches). Otherwise: the whole route in view.
-function DemoCamera({ path, position, follow }) {
-  const map = useMap();
+const SIMULATABLE_STATUSES = ['scheduled', 'boarding', 'departed'];
 
-  useEffect(() => {
-    if (!follow && path.length > 1) map.fitBounds(path, { padding: [24, 24] });
-  }, [map, path, follow]);
-
-  useEffect(() => {
-    if (!follow) return;
-    if (map.getZoom() < 15) {
-      map.setView(position, 15, { animate: false });
-    } else {
-      map.panTo(position, { animate: true, duration: 1.5, easeLinearity: 1 });
-    }
-  }, [map, position, follow]);
-
-  return null;
-}
-
-function DemoTripMap({ simulation }) {
-  const path = simulation.path;
-  const progressPath = path.slice(0, simulation.position_index + 1);
-  // Same road-following, heading-aware bus as the passenger live map: it
-  // glides along the road between ticks instead of jumping point to point.
-  const road = useMemo(
-    () => buildRoute({ coordinates: path.map(([lat, lng]) => [lng, lat]) }),
-    [path],
-  );
-
-  const [follow, setFollow] = useState(true);
-
+function TripSimulateControl({ trip, sim, busy, onStart, onStop }) {
+  const running = sim?.status === 'running';
+  if (running && sim.trip_id === trip.id) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span
+          aria-hidden="true"
+          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)' }}
+        />
+        <span role="status" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          Moving · {sim.progress}%
+        </span>
+        <button
+          type="button"
+          className="pa-danger-button"
+          onClick={onStop}
+          disabled={busy}
+        >
+          Stop
+        </button>
+      </span>
+    );
+  }
+  let reason = '';
+  if (running) reason = 'Another trip is being simulated. Stop it first.';
+  else if (!SIMULATABLE_STATUSES.includes(trip.status)) {
+    reason = 'Only scheduled, boarding or departed trips can be simulated.';
+  } else if (!(trip.driver || trip.driver_name)) reason = 'Assign a driver first.';
   return (
-    <div style={{ position: 'relative' }}>
     <button
       type="button"
-      onClick={() => setFollow((v) => !v)}
-      style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 500, minHeight: 40,
-        padding: '8px 16px', borderRadius: 8, border: 0,
-        background: 'rgba(11, 18, 32, 0.9)', color: '#fff', fontWeight: 600,
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)', cursor: 'pointer',
-      }}
+      className="pa-secondary-button"
+      onClick={() => onStart(trip)}
+      disabled={Boolean(reason) || busy}
+      title={reason || undefined}
     >
-      {follow ? 'Show whole route' : 'Follow bus'}
+      Simulate
     </button>
-    <MapContainer
-      key={simulation.id}
-      center={simulation.position}
-      zoom={15}
-      scrollWheelZoom={false}
-      style={{ height: 'min(60vh, 460px)', width: '100%', borderRadius: 12 }}
-    >
-      <BaseTileLayer />
-      <DemoCamera path={path} position={simulation.position} follow={follow} />
-      <Polyline positions={path} pathOptions={{ color: '#10b981', weight: 5, opacity: 0.6 }} />
-      {progressPath.length > 1 && (
-        <Polyline positions={progressPath} pathOptions={{ color: '#2563eb', weight: 6 }} />
-      )}
-      <BusMarker route={road} lat={simulation.position[0]} lng={simulation.position[1]} />
-    </MapContainer>
-    </div>
   );
 }
 
@@ -191,10 +163,8 @@ function PlatformShell({ logout, children }) {
           min-height: 100vh;
           display: flex;
           background:
-            radial-gradient(circle at 10% 10%, rgba(16,185,129,.10), transparent 30%),
-            radial-gradient(circle at 90% 90%, rgba(59,130,246,.08), transparent 35%),
-            #07111f;
-          color: #e8f0f7;
+            var(--surface);
+          color: var(--text);
         }
 
         .pa-sidebar {
@@ -207,9 +177,8 @@ function PlatformShell({ logout, children }) {
           padding: 22px 16px;
           display: flex;
           flex-direction: column;
-          background: rgba(5,15,27,.88);
+          background: var(--bg);
           border-right: 1px solid rgba(255,255,255,.08);
-          backdrop-filter: blur(22px);
           z-index: 20;
         }
 
@@ -223,13 +192,13 @@ function PlatformShell({ logout, children }) {
         .pa-brand-mark {
           width: 40px;
           height: 40px;
-          border-radius: 12px;
+          border-radius: 14px;
           display: grid;
           place-items: center;
-          font-weight: 900;
-          background: linear-gradient(135deg,#10b981,#059669);
-          color: white;
-          box-shadow: 0 8px 25px rgba(16,185,129,.22);
+          font-weight: 700;
+          background: var(--accent);
+          color: var(--accent-ink);
+          box-shadow: none;
         }
 
         .pa-brand strong,
@@ -239,7 +208,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-brand small,
         .pa-admin-card span {
-          color: #8292a5;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -260,8 +229,8 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           border-radius: 10px;
-          color: #6ee7b7;
-          background: rgba(16,185,129,.12);
+          color: var(--accent-text);
+          background: rgb(var(--accent-rgb) / 0.12);
         }
 
         .pa-nav {
@@ -273,10 +242,10 @@ function PlatformShell({ logout, children }) {
 
         .pa-nav-label {
           margin: 15px 8px 5px;
-          color: #5e7187;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: .12em;
+          color: var(--text-3);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0;
         }
 
         .pa-link {
@@ -285,29 +254,29 @@ function PlatformShell({ logout, children }) {
           gap: 11px;
           padding: 10px 11px;
           border-radius: 10px;
-          color: #91a1b3;
+          color: var(--text-2);
           text-decoration: none;
           font-size: 13px;
           transition: .18s ease;
         }
 
         .pa-link:hover {
-          color: #fff;
+          color: var(--text);
           background: rgba(255,255,255,.045);
         }
 
         .pa-link.active {
-          color: #fff;
-          background: rgba(16,185,129,.13);
-          box-shadow: inset 3px 0 0 #10b981;
+          color: var(--text);
+          background: rgb(var(--accent-rgb) / 0.13);
+          box-shadow: none;
         }
 
         .pa-logout {
           margin-top: auto;
           border: 1px solid rgba(255,255,255,.08);
-          border-radius: 11px;
+          border-radius: 10px;
           background: rgba(255,255,255,.035);
-          color: #a7b4c2;
+          color: var(--text-2);
           padding: 11px;
           display: flex;
           gap: 10px;
@@ -337,9 +306,9 @@ function PlatformShell({ logout, children }) {
             height: 44px;
             z-index: 100;
             border: 1px solid rgba(255,255,255,.10);
-            border-radius: 13px;
-            background: rgba(7,17,31,.90);
-            color: #e8f1f7;
+            border-radius: 14px;
+            background: var(--bg);
+            color: var(--text);
             font-size: 22px;
             line-height: 1;
             cursor: pointer;
@@ -374,7 +343,6 @@ function PlatformShell({ logout, children }) {
             width: 100% !important;
             margin-left: 0 !important;
             min-height: 100vh;
-            padding-top: 62px;
           }
 
           .pa-topbar {
@@ -403,22 +371,55 @@ function PlatformShell({ logout, children }) {
           justify-content: space-between;
           align-items: center;
           padding: 19px 30px;
-          background: rgba(7,17,31,.78);
+          background: var(--bg);
           border-bottom: 1px solid rgba(255,255,255,.07);
           backdrop-filter: blur(18px);
         }
 
         .pa-overline,
         .pa-card-eyebrow {
-          color: #5ee7b7;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: .13em;
+          color: var(--accent-text);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0;
         }
 
-        .pa-topbar h2 {
-          margin: 4px 0 0;
+        .pa-topbar-title {
+          margin: 0;
           font-size: 20px;
+          font-weight: 600;
+          line-height: 1.2;
+        }
+
+        .pa-page-head {
+          justify-content: flex-end !important;
+          margin-bottom: 16px !important;
+        }
+
+        @media (max-width: 800px) {
+          .pa-user > div:not(.pa-avatar),
+          .pa-system-status > svg {
+            display: none;
+          }
+
+          .pa-system-status > span:not(.pa-status-dot) {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+          }
+
+          .pa-topbar {
+            min-height: 68px;
+            padding: 12px 16px 12px 68px;
+            gap: 12px;
+          }
+
+          .pa-topbar-title {
+            font-size: 18px;
+          }
         }
 
         .pa-user {
@@ -433,7 +434,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-user span {
-          color: #77899c;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -443,9 +444,9 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           border-radius: 50%;
-          background: rgba(16,185,129,.16);
-          color: #6ee7b7;
-          font-weight: 800;
+          background: rgb(var(--accent-rgb) / 0.16);
+          color: var(--accent-text);
+          font-weight: 700;
         }
 
         .pa-content {
@@ -457,7 +458,7 @@ function PlatformShell({ logout, children }) {
         .pa-system-status {
           border: 1px solid rgba(255,255,255,.09);
           background: rgba(255,255,255,.04);
-          color: #b7c3d0;
+          color: var(--text-2);
           border-radius: 10px;
           padding: 8px 11px;
           display: inline-flex;
@@ -467,15 +468,15 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-system-status.healthy {
-          color: #6ee7b7;
+          color: var(--accent-text);
         }
 
         .pa-system-status.warning {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-system-status.critical {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-status-dot {
@@ -504,7 +505,7 @@ function PlatformShell({ logout, children }) {
         .pa-page-head p,
         .pa-section-heading p {
           margin: 0;
-          color: #7f91a5;
+          color: var(--text-3);
           font-size: 13px;
         }
 
@@ -530,24 +531,24 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-primary-button {
-          background: #10b981;
+          background: var(--accent);
           color: #04150f;
         }
 
         .pa-primary-button:hover {
-          background: #34d399;
+          background: var(--accent);
         }
 
         .pa-secondary-button {
-          color: #d3dde7;
+          color: var(--text);
           background: rgba(255,255,255,.045);
           border-color: rgba(255,255,255,.08);
         }
 
         .pa-danger-button {
-          color: #fecaca;
-          background: rgba(239,68,68,.09);
-          border-color: rgba(239,68,68,.2);
+          color: var(--text);
+          background: rgb(var(--danger-rgb) / 0.09);
+          border-color: rgb(var(--danger-rgb) / 0.2);
         }
 
         button:disabled {
@@ -569,8 +570,7 @@ function PlatformShell({ logout, children }) {
         .pa-issue-summary-card {
           border: 1px solid rgba(255,255,255,.08);
           background: rgba(255,255,255,.035);
-          border-radius: 15px;
-          backdrop-filter: blur(14px);
+          border-radius: 14px;
         }
 
         .pa-stat-card {
@@ -579,7 +579,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-stat-card span {
           display: block;
-          color: #7f91a5;
+          color: var(--text-3);
           font-size: 11px;
           margin-bottom: 7px;
         }
@@ -611,7 +611,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-command-card p {
-          color: #8192a5;
+          color: var(--text-3);
           line-height: 1.6;
           font-size: 13px;
         }
@@ -619,28 +619,28 @@ function PlatformShell({ logout, children }) {
         .pa-command-icon {
           width: 40px;
           height: 40px;
-          border-radius: 11px;
+          border-radius: 10px;
           display: grid;
           place-items: center;
-          background: rgba(16,185,129,.11);
-          color: #6ee7b7;
+          background: rgb(var(--accent-rgb) / 0.11);
+          color: var(--accent-text);
         }
 
         .pa-command-icon.warning {
-          color: #fbbf24;
-          background: rgba(251,191,36,.10);
+          color: var(--warn);
+          background: rgb(var(--warn-rgb) / 0.1);
         }
 
         .pa-command-icon.critical {
-          color: #f87171;
-          background: rgba(248,113,113,.10);
+          color: var(--danger-text);
+          background: rgb(var(--danger-rgb) / 0.1);
         }
 
         .pa-command-message {
           padding: 11px 14px;
-          border: 1px solid rgba(16,185,129,.2);
-          background: rgba(16,185,129,.07);
-          color: #9be8c9;
+          border: 1px solid rgb(var(--accent-rgb) / 0.2);
+          background: rgb(var(--accent-rgb) / 0.07);
+          color: var(--accent-text);
           border-radius: 10px;
           margin-bottom: 16px;
           font-size: 12px;
@@ -650,7 +650,7 @@ function PlatformShell({ logout, children }) {
           overflow: hidden;
           margin-top: 16px;
           border: 1px solid rgba(255,255,255,.08);
-          border-radius: 12px;
+          border-radius: 14px;
         }
 
         .pa-demo-bus-icon {
@@ -658,11 +658,11 @@ function PlatformShell({ logout, children }) {
           place-items: center;
           border: 2px solid white;
           border-radius: 999px;
-          background: #2563eb;
+          background: var(--accent);
           box-shadow: 0 2px 9px rgba(0,0,0,.4);
-          color: white;
-          font-size: 9px;
-          font-weight: 900;
+          color: var(--accent-ink);
+          font-size: 11px;
+          font-weight: 700;
         }
 
         .pa-demo-meta {
@@ -670,7 +670,7 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           flex-wrap: wrap;
           gap: 8px 18px;
-          color: #b7c3d0;
+          color: var(--text-2);
           font-size: 12px;
         }
 
@@ -699,7 +699,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-panel-header p {
           margin: 4px 0 0;
-          color: #718399;
+          color: var(--text-3);
           font-size: 12px;
         }
 
@@ -739,7 +739,7 @@ function PlatformShell({ logout, children }) {
         .pa-report-row span,
         .pa-setting-row span,
         .pa-test-row span {
-          color: #74869a;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -755,7 +755,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-table th {
           text-align: left;
-          color: #718399;
+          color: var(--text-3);
           font-weight: 700;
           padding: 11px 10px;
           border-bottom: 1px solid rgba(255,255,255,.08);
@@ -764,11 +764,11 @@ function PlatformShell({ logout, children }) {
         .pa-table td {
           padding: 12px 10px;
           border-bottom: 1px solid rgba(255,255,255,.055);
-          color: #cbd5df;
+          color: var(--text);
         }
 
         .pa-table td strong {
-          color: #f1f5f9;
+          color: var(--text);
         }
 
         .pa-actions {
@@ -782,15 +782,15 @@ function PlatformShell({ logout, children }) {
           height: 31px;
           border: 1px solid rgba(255,255,255,.08);
           background: rgba(255,255,255,.035);
-          color: #aab8c7;
-          border-radius: 8px;
+          color: var(--text-2);
+          border-radius: 10px;
           display: grid;
           place-items: center;
           cursor: pointer;
         }
 
         .pa-icon-button.danger {
-          color: #fca5a5;
+          color: var(--danger-text);
         }
 
         .pa-badge {
@@ -798,25 +798,25 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           padding: 4px 8px;
           border-radius: 999px;
-          font-size: 10px;
-          font-weight: 800;
-          background: rgba(16,185,129,.1);
-          color: #6ee7b7;
+          font-size: 11px;
+          font-weight: 700;
+          background: rgb(var(--accent-rgb) / 0.1);
+          color: var(--accent-text);
         }
 
         .pa-badge.warning {
-          background: rgba(251,191,36,.1);
-          color: #fbbf24;
+          background: rgb(var(--warn-rgb) / 0.1);
+          color: var(--warn);
         }
 
         .pa-badge.danger {
-          background: rgba(239,68,68,.1);
-          color: #fca5a5;
+          background: rgb(var(--danger-rgb) / 0.1);
+          color: var(--danger-text);
         }
 
         .pa-badge.muted {
           background: rgba(148,163,184,.1);
-          color: #94a3b8;
+          color: var(--text-2);
         }
 
         .pa-empty-state {
@@ -826,7 +826,7 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           justify-content: center;
           gap: 8px;
-          color: #8192a5;
+          color: var(--text-3);
           text-align: center;
           border: 1px dashed rgba(255,255,255,.1);
           border-radius: 14px;
@@ -834,7 +834,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-empty-state strong {
-          color: #e5edf5;
+          color: var(--text);
         }
 
         .pa-form {
@@ -859,7 +859,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-field label {
-          color: #91a1b3;
+          color: var(--text-2);
           font-size: 11px;
           font-weight: 700;
         }
@@ -870,9 +870,9 @@ function PlatformShell({ logout, children }) {
           width: 100%;
           box-sizing: border-box;
           border: 1px solid rgba(255,255,255,.09);
-          border-radius: 9px;
+          border-radius: 10px;
           background: rgba(0,0,0,.18);
-          color: #edf4fa;
+          color: var(--text);
           padding: 10px 11px;
           outline: none;
           font: inherit;
@@ -887,14 +887,14 @@ function PlatformShell({ logout, children }) {
         .pa-field input:focus,
         .pa-field select:focus,
         .pa-field textarea:focus {
-          border-color: rgba(16,185,129,.5);
+          border-color: rgb(var(--accent-rgb) / 0.5);
         }
 
         .pa-modal-backdrop {
           position: fixed;
           inset: 0;
           z-index: 100;
-          background: rgba(0,0,0,.62);
+          background: var(--bg);
           display: grid;
           place-items: center;
           padding: 20px;
@@ -904,9 +904,9 @@ function PlatformShell({ logout, children }) {
           width: min(700px,100%);
           max-height: 90vh;
           overflow-y: auto;
-          background: #0b1726;
+          background: var(--surface);
           border: 1px solid rgba(255,255,255,.1);
-          border-radius: 17px;
+          border-radius: 16px;
           box-shadow: 0 25px 80px rgba(0,0,0,.5);
           padding: 22px;
         }
@@ -924,7 +924,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-modal-head p {
           margin: 5px 0 0;
-          color: #718399;
+          color: var(--text-3);
           font-size: 12px;
         }
 
@@ -939,9 +939,9 @@ function PlatformShell({ logout, children }) {
           padding: 11px 13px;
           margin-bottom: 15px;
           border-radius: 10px;
-          color: #fecaca;
-          background: rgba(239,68,68,.08);
-          border: 1px solid rgba(239,68,68,.18);
+          color: var(--text);
+          background: rgb(var(--danger-rgb) / 0.08);
+          border: 1px solid rgb(var(--danger-rgb) / 0.18);
           font-size: 12px;
         }
 
@@ -960,15 +960,15 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-summary-card.critical {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-issue-summary-card.warning {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-issue-summary-card.healthy {
-          color: #6ee7b7;
+          color: var(--accent-text);
         }
 
         .pa-issue-summary-card strong,
@@ -982,7 +982,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-summary-card span {
-          color: #718399;
+          color: var(--text-3);
           font-size: 11px;
         }
 
@@ -999,7 +999,7 @@ function PlatformShell({ logout, children }) {
           gap: 12px;
           text-align: left;
           padding: 13px;
-          border-radius: 11px;
+          border-radius: 10px;
           border: 1px solid rgba(255,255,255,.06);
           background: rgba(255,255,255,.025);
           color: inherit;
@@ -1007,11 +1007,11 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-row.critical {
-          border-color: rgba(239,68,68,.18);
+          border-color: rgb(var(--danger-rgb) / 0.18);
         }
 
         .pa-issue-row.warning {
-          border-color: rgba(251,191,36,.15);
+          border-color: rgb(var(--warn-rgb) / 0.15);
         }
 
         .pa-issue-icon {
@@ -1019,11 +1019,11 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-row.critical .pa-issue-icon {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-issue-row.warning .pa-issue-icon {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-issue-content {
@@ -1040,7 +1040,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-content span {
-          color: #77899c;
+          color: var(--text-3);
           font-size: 11px;
           margin-top: 3px;
         }
@@ -1066,7 +1066,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-test-summary span {
-          color: #718399;
+          color: var(--text-3);
           font-size: 11px;
           margin-top: 4px;
         }
@@ -1080,20 +1080,20 @@ function PlatformShell({ logout, children }) {
           height: 32px;
           display: grid;
           place-items: center;
-          border-radius: 8px;
+          border-radius: 10px;
           background: rgba(255,255,255,.04);
         }
 
         .pa-test-row.passed .pa-test-icon {
-          color: #6ee7b7;
+          color: var(--accent-text);
         }
 
         .pa-test-row.warning .pa-test-icon {
-          color: #fbbf24;
+          color: var(--warn);
         }
 
         .pa-test-row.failed .pa-test-icon {
-          color: #f87171;
+          color: var(--danger-text);
         }
 
         .pa-test-row > div:nth-child(2) {
@@ -1103,9 +1103,8 @@ function PlatformShell({ logout, children }) {
         .pa-test-status {
           padding: 4px 8px;
           border-radius: 999px;
-          font-size: 9px !important;
-          text-transform: uppercase;
-          font-weight: 800;
+          font-size: 11px !important;
+          font-weight: 600;
           background: rgba(255,255,255,.05);
         }
 
@@ -1124,7 +1123,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-setting-value {
-          color: #6ee7b7 !important;
+          color: var(--accent-text) !important;
         }
 
         .pa-spin {
@@ -1186,7 +1185,7 @@ function PlatformShell({ logout, children }) {
         onClick={() => setMobileOpen(true)}
         aria-label="Open navigation"
       >
-        ☰
+        <Menu size={20} aria-hidden="true" />
       </button>
 
       {mobileOpen && (
@@ -1218,7 +1217,7 @@ function PlatformShell({ logout, children }) {
         </div>
 
         <nav className="pa-nav">
-          <p className="pa-nav-label">CONTROL</p>
+          <p className="pa-nav-label">Control</p>
 
           <SideLink to="/platform-admin" icon={LayoutDashboard} end onClick={closeMobile}>
             Overview
@@ -1248,7 +1247,7 @@ function PlatformShell({ logout, children }) {
             Bookings
           </SideLink>
 
-          <p className="pa-nav-label">INSIGHTS</p>
+          <p className="pa-nav-label">Insights</p>
 
           <SideLink to="/platform-admin/users" onClick={closeMobile} icon={UserRound}>
             Users
@@ -1262,7 +1261,7 @@ function PlatformShell({ logout, children }) {
             Revenue
           </SideLink>
 
-          <p className="pa-nav-label">SYSTEM</p>
+          <p className="pa-nav-label">System</p>
 
           <SideLink to="/platform-admin/issues" onClick={closeMobile} icon={AlertTriangle}>
             Issues
@@ -1323,13 +1322,9 @@ export default function PlatformAdminDashboard() {
 
   const [systemChecks, setSystemChecks] = useState(null);
   const [systemTestLoading, setSystemTestLoading] = useState(false);
-  const [demoSimulation, setDemoSimulation] = useState(null);
-  const [demoRoutes, setDemoRoutes] = useState([]);
-  const [demoRouteId, setDemoRouteId] = useState('');
-  const [demoEnabled, setDemoEnabled] = useState(null);
-  const [demoBusy, setDemoBusy] = useState(false);
-  const [demoError, setDemoError] = useState('');
-  const [demoMessage, setDemoMessage] = useState('');
+  const [sim, setSim] = useState(null);
+  const [simBusy, setSimBusy] = useState(false);
+  const [simError, setSimError] = useState('');
 
   const [companyModal, setCompanyModal] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
@@ -1441,96 +1436,78 @@ export default function PlatformAdminDashboard() {
   useEffect(() => {
     if (section !== 'trips') return undefined;
     let mounted = true;
-    apiRequest('/system/demo-simulation/')
+    apiRequest('/system/trip-simulations/active/')
       .then((result) => {
-        if (!mounted) return;
-        setDemoEnabled(true);
-        setDemoSimulation(result?.simulation || null);
-        setDemoRoutes(
-          Array.isArray(result?.available_routes)
-            ? result.available_routes
-            : [],
-        );
-        setDemoError('');
+        if (mounted) setSim(result?.simulation || null);
       })
-      .catch((err) => {
-        if (!mounted) return;
-        setDemoEnabled(false);
-        setDemoError(err.message || 'Demo simulation is unavailable.');
-      });
+      .catch(() => {});
     return () => {
       mounted = false;
     };
   }, [section]);
 
+  const simId = sim?.id;
+  const simRunning = sim?.status === 'running';
   useEffect(() => {
-    if (!demoSimulation || demoSimulation.status !== 'running') return undefined;
+    if (!simRunning) return undefined;
     let mounted = true;
-    let timer;
-    const advance = async () => {
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const result = await apiRequest(
-          `/system/demo-simulation/${demoSimulation.id}/advance/`,
+          `/system/trip-simulations/${simId}/advance/`,
           { method: 'POST', body: {} },
         );
         if (!mounted) return;
-        setDemoSimulation(result.simulation);
-        setDemoError('');
-        if (result.simulation.status === 'completed') {
-          setDemoMessage('Demo trip completed. No operational trip data was changed.');
-          return;
-        }
+        setSim(result.simulation);
+        if (result.simulation.status !== 'running') load();
       } catch (err) {
         if (!mounted) return;
-        setDemoError(err.message || 'Unable to advance the demo trip.');
-        return;
+        setSimError(err.message || 'The simulation stopped.');
+        setSim(null);
+      } finally {
+        inFlight = false;
       }
-      if (mounted) {
-        timer = window.setTimeout(advance, 1500);
-      }
-    };
-    timer = window.setTimeout(advance, 1500);
+    }, 2000);
     return () => {
       mounted = false;
-      window.clearTimeout(timer);
+      window.clearInterval(timer);
     };
-  }, [demoSimulation]);
+  }, [simId, simRunning, load]);
 
-  const startDemoSimulation = async () => {
-    if (!demoRouteId || demoBusy) return;
-    setDemoBusy(true);
-    setDemoError('');
-    setDemoMessage('');
+  const startSimulation = async (trip) => {
+    if (simBusy) return;
+    setSimBusy(true);
+    setSimError('');
     try {
-      const result = await apiRequest('/system/demo-simulation/', {
+      const result = await apiRequest(`/system/trips/${trip.id}/simulate/`, {
         method: 'POST',
-        body: { route_id: Number(demoRouteId) },
+        body: {},
       });
-      setDemoSimulation(result.simulation);
-      setDemoEnabled(true);
-      setDemoMessage('Demo simulation started. This is isolated from live operations.');
+      setSim(result.simulation);
     } catch (err) {
-      setDemoError(err.message || 'Unable to start the demo trip.');
+      setSimError(err.message || 'Unable to start the simulation.');
     } finally {
-      setDemoBusy(false);
+      setSimBusy(false);
     }
   };
 
-  const stopDemoSimulation = async () => {
-    if (!demoSimulation || demoBusy) return;
-    setDemoBusy(true);
-    setDemoError('');
+  const stopSimulation = async () => {
+    if (!sim || simBusy) return;
+    setSimBusy(true);
+    setSimError('');
     try {
-      const result = await apiRequest(
-        `/system/demo-simulation/${demoSimulation.id}/stop/`,
-        { method: 'POST', body: {} },
-      );
-      setDemoSimulation(result.simulation);
-      setDemoMessage('Demo simulation stopped. No operational trip data was changed.');
+      await apiRequest(`/system/trip-simulations/${sim.id}/stop/`, {
+        method: 'POST',
+        body: {},
+      });
+      setSim(null);
     } catch (err) {
-      setDemoError(err.message || 'Unable to stop the demo trip.');
+      setSimError(err.message || 'Unable to stop the simulation.');
     } finally {
-      setDemoBusy(false);
+      setSimBusy(false);
     }
   };
 
@@ -1761,7 +1738,7 @@ export default function PlatformAdminDashboard() {
       )
   );
 
-  const pageTitle = {
+  const pageTitles = {
     overview: 'Global overview',
     companies: 'Companies',
     routes: 'Routes',
@@ -1775,7 +1752,8 @@ export default function PlatformAdminDashboard() {
     issues: 'System issues',
     'system-tests': 'System tests',
     settings: 'Platform settings',
-  }[section] || 'Global overview';
+  };
+  const pageTitle = pageTitles[section] || 'Global overview';
 
   const refresh = async () => {
     await load();
@@ -2141,18 +2119,15 @@ export default function PlatformAdminDashboard() {
         String(route.id) === String(id)
     )?.name || `Route ${id || '—'}`;
 
+  if (!pageTitles[section]) return <Navigate to="/platform-admin" replace />;
+
   return (
     <PlatformShell
       user={user}
       logout={logout}
     >
       <header className="pa-topbar">
-        <div>
-          <span className="pa-overline">
-            GLOBAL OPERATIONS
-          </span>
-          <h2>{pageTitle}</h2>
-        </div>
+        <h1 className="pa-topbar-title">{pageTitle}</h1>
 
         <div className="pa-page-actions">
           <button
@@ -2214,19 +2189,6 @@ export default function PlatformAdminDashboard() {
         )}
 
         <div className="pa-page-head">
-          <div>
-            <span className="pa-card-eyebrow">
-              CONNECT PLATFORM
-            </span>
-
-            <h1>{pageTitle}</h1>
-
-            <p>
-              Global administration across every
-              transport company and operational area.
-            </p>
-          </div>
-
           <button
             type="button"
             className="pa-secondary-button"
@@ -2250,7 +2212,7 @@ export default function PlatformAdminDashboard() {
                 <div className="pa-command-card-head">
                   <div>
                     <span className="pa-card-eyebrow">
-                      SYSTEM HEALTH
+                      System health
                     </span>
 
                     <h3>
@@ -2307,7 +2269,7 @@ export default function PlatformAdminDashboard() {
                 <div className="pa-command-card-head">
                   <div>
                     <span className="pa-card-eyebrow">
-                      DIAGNOSTICS
+                      Diagnostics
                     </span>
 
                     <h3>
@@ -2621,7 +2583,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  GLOBAL DIRECTORY
+                  Global directory
                 </span>
 
                 <h3>
@@ -2752,7 +2714,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  NETWORK
+                  Network
                 </span>
 
                 <h3>Routes</h3>
@@ -2861,7 +2823,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  FLEET
+                  Fleet
                 </span>
 
                 <h3>Drivers</h3>
@@ -2967,7 +2929,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  OPERATIONS
+                  Operations
                 </span>
 
                 <h3>Trips</h3>
@@ -2986,139 +2948,6 @@ export default function PlatformAdminDashboard() {
                 <Plus size={16} />
                 Create Trip
               </button>
-            </div>
-
-            <div className="pa-panel" data-testid="demo-simulation-panel">
-              <div className="pa-panel-header">
-                <div>
-                  <h3>Client demo simulator</h3>
-                  <p>
-                    Preview a bus moving along a route without creating or changing
-                    real trips, drivers, bookings, GPS records, or sending notifications.
-                  </p>
-                </div>
-                <span className={`pa-badge ${
-                  demoEnabled === false ? 'warning' : demoSimulation?.status === 'running' ? '' : 'muted'
-                }`}>
-                  {demoEnabled === null
-                    ? 'Checking availability'
-                    : demoEnabled === false
-                      ? 'Unavailable'
-                      : demoSimulation?.status === 'running'
-                        ? 'Running'
-                        : demoSimulation?.status || 'Ready'}
-                </span>
-              </div>
-
-              {demoEnabled ? (
-                <>
-                  {!demoSimulation && (
-                    <div className="pa-page-actions">
-                      <label className="pa-field" style={{ flex: 1, maxWidth: 420 }}>
-                        <span>Demo route</span>
-                        <select
-                          aria-label="Demo route"
-                          value={demoRouteId}
-                          onChange={(event) => setDemoRouteId(event.target.value)}
-                        >
-                          <option value="">
-                            {demoRoutes.length
-                              ? 'Choose a route with map data'
-                              : 'No routes with valid map data'}
-                          </option>
-                          {demoRoutes.map((route) => (
-                            <option key={route.id} value={route.id}>
-                              {route.name} · {route.company_name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        className="pa-primary-button"
-                        onClick={startDemoSimulation}
-                        disabled={!demoRouteId || demoBusy || !demoRoutes.length}
-                      >
-                        <Play size={15} />
-                        {demoBusy ? 'Starting…' : 'Start demo simulation'}
-                      </button>
-                    </div>
-                  )}
-
-                  {demoSimulation && (
-                    <>
-                      <div className="pa-demo-meta">
-                        <strong>{demoSimulation.route_name}</strong>
-                        <span>{demoSimulation.start_point} to {demoSimulation.end_point}</span>
-                        <span>{demoSimulation.bus_number}</span>
-                        <span>{demoSimulation.progress}% complete</span>
-                        {demoSimulation.status === 'running' && (
-                          <button
-                            type="button"
-                            className="pa-danger-button"
-                            onClick={stopDemoSimulation}
-                            disabled={demoBusy}
-                          >
-                            <Square size={14} />
-                            Stop simulation
-                          </button>
-                        )}
-                        {demoSimulation.status !== 'running' && (
-                          <button
-                            type="button"
-                            className="pa-secondary-button"
-                            onClick={() => {
-                              setDemoSimulation(null);
-                              setDemoMessage('');
-                            }}
-                          >
-                            <Play size={14} />
-                            Start another demo
-                          </button>
-                        )}
-                      </div>
-                      <div
-                        className="pa-demo-map"
-                        aria-label="Isolated demo bus map"
-                      >
-                        <DemoTripMap simulation={demoSimulation} />
-                      </div>
-                      <div
-                        role="progressbar"
-                        aria-label="Demo trip progress"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                        aria-valuenow={demoSimulation.progress}
-                        style={{
-                          height: 5,
-                          marginTop: 12,
-                          overflow: 'hidden',
-                          borderRadius: 999,
-                          background: 'rgba(255,255,255,.1)',
-                        }}
-                      >
-                        <div style={{
-                          width: `${demoSimulation.progress}%`,
-                          height: '100%',
-                          background: '#10b981',
-                          transition: 'width .6s ease',
-                        }} />
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <p role="status" className="pa-command-message">
-                  {demoError || 'Demo simulation is not enabled on this server.'}
-                </p>
-              )}
-
-              {demoError && demoEnabled && (
-                <p role="alert" className="pa-error">{demoError}</p>
-              )}
-              {demoMessage && (
-                <p role="status" className="pa-command-message">{demoMessage}</p>
-              )}
             </div>
 
             <div className="pa-panel">
@@ -3206,6 +3035,7 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <select
+                              aria-label={`Status for trip ${trip.id}`}
                               value={
                                 trip.status || ''
                               }
@@ -3242,6 +3072,17 @@ export default function PlatformAdminDashboard() {
                                 Cancelled
                               </option>
                             </select>
+                            {user?.is_superuser && (
+                              <div style={{ marginTop: 8 }}>
+                                <TripSimulateControl
+                                  trip={trip}
+                                  sim={sim}
+                                  busy={simBusy}
+                                  onStart={startSimulation}
+                                  onStop={stopSimulation}
+                                />
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -3249,6 +3090,15 @@ export default function PlatformAdminDashboard() {
                 </table>
               </div>
             </div>
+
+            {simError && (
+              <p role="alert" className="pa-error">{simError}</p>
+            )}
+            <p style={{ color: 'var(--text-2)', fontSize: 12, maxWidth: '72ch' }}>
+              Simulate moves this trip's bus along its route as if the driver were
+              driving. Passengers booked on it see it live. Keep this tab open;
+              closing it stops the bus.
+            </p>
           </section>
         )}
 
@@ -3257,7 +3107,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  COMPANY ACCESS
+                  Company access
                 </span>
 
                 <h3>Operators</h3>
@@ -3347,7 +3197,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  BOOKINGS
+                  Bookings
                 </span>
 
                 <h3>Global bookings</h3>
@@ -3466,7 +3316,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  PLATFORM DIRECTORY
+                  Platform directory
                 </span>
 
                 <h3>Users</h3>
@@ -3620,7 +3470,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  PLATFORM INSIGHTS
+                  Platform insights
                 </span>
 
                 <h3>
@@ -3758,7 +3608,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  FINANCIAL OVERVIEW
+                  Financial overview
                 </span>
 
                 <h3>Revenue</h3>
@@ -3880,7 +3730,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  OPERATIONS
+                  Operations
                 </span>
 
                 <h3>
@@ -4041,7 +3891,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  SYSTEM
+                  System
                 </span>
 
                 <h3>
@@ -4202,7 +4052,7 @@ export default function PlatformAdminDashboard() {
             <div className="pa-section-heading">
               <div>
                 <span className="pa-card-eyebrow">
-                  SYSTEM CONFIGURATION
+                  System configuration
                 </span>
 
                 <h3>

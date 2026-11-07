@@ -47,7 +47,7 @@ export default function Login() {
       <div className="auth-card">
         <div className="brand-mark">C</div>
 
-        <p className="eyebrow">CONNECT • SMART MATATU TRAVEL</p>
+        <p className="eyebrow">CONNECT matatu booking</p>
 
         <h1>Welcome back</h1>
 

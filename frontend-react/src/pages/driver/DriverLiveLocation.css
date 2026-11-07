@@ -6,9 +6,9 @@
   max-height: min(47dvh, 440px) !important;
   transform: none !important;
   border: 1px solid rgba(148, 163, 184, 0.28) !important;
-  border-radius: 22px !important;
-  background: rgba(15, 23, 42, 0.96) !important;
-  color: #f8fafc !important;
+  border-radius: 16px !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34) !important;
   backdrop-filter: blur(16px) saturate(140%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
@@ -27,7 +27,7 @@
 .driver-live-page .driver-live-sheet h2,
 .driver-live-page .driver-live-sheet h3,
 .driver-live-page .driver-live-sheet strong {
-  color: #f8fafc !important;
+  color: var(--text) !important;
 }
 
 .driver-live-page .driver-live-sheet-header {
@@ -36,7 +36,7 @@
 }
 
 .driver-live-page .driver-live-sheet-header > div > span {
-  color: #94a3b8 !important;
+  color: var(--text-2) !important;
 }
 
 .driver-live-page .driver-live-sheet-header h1 {
@@ -58,16 +58,16 @@
 }
 
 .driver-live-page .driver-live-route > svg {
-  color: #60a5fa !important;
+  color: var(--accent-text) !important;
 }
 
 .driver-live-page .driver-live-route strong {
-  color: #f8fafc !important;
+  color: var(--text) !important;
 }
 
 .driver-live-page .driver-live-route span,
 .driver-live-page .driver-live-trip-info span {
-  color: #cbd5e1 !important;
+  color: var(--text) !important;
 }
 
 .driver-live-page .driver-live-stats {
@@ -80,19 +80,19 @@
   min-width: 0;
   padding: 9px 7px !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 12px !important;
+  border-radius: 14px !important;
   background: rgba(255, 255, 255, 0.07) !important;
 }
 
 .driver-live-page .driver-live-stats svg {
-  color: #93c5fd !important;
+  color: var(--accent-text) !important;
 }
 
 .driver-live-page .driver-live-stats span,
 .driver-live-page .driver-live-bookings label,
 .driver-live-page .driver-live-trip-card > label,
 .driver-live-page .driver-live-passenger-section > label {
-  color: #aab8ca !important;
+  color: var(--text-2) !important;
 }
 
 .driver-live-page .driver-live-trip-card,
@@ -144,15 +144,15 @@
 }
 
 .driver-live-page .driver-live-passenger-phone {
-  color: #cbd5e1 !important;
+  color: var(--text) !important;
 }
 
 .driver-live-page .driver-live-passenger-status {
   flex-shrink: 0;
   padding: 4px 8px !important;
-  border: 1px solid rgba(74, 222, 128, 0.28) !important;
-  background: rgba(34, 197, 94, 0.16) !important;
-  color: #86efac !important;
+  border: 1px solid rgb(var(--accent-rgb) / 0.28) !important;
+  background: rgb(var(--accent-rgb) / 0.16) !important;
+  color: var(--accent-text) !important;
 }
 
 .driver-live-page .driver-live-passenger-meta {
@@ -171,15 +171,15 @@
 .driver-live-page .driver-live-passenger-meta small {
   display: block;
   margin-bottom: 3px;
-  color: #94a3b8 !important;
-  font-size: 8px;
-  font-weight: 800;
+  color: var(--text-2) !important;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .driver-live-page .driver-live-passenger-meta strong {
   display: block;
   overflow: hidden;
-  color: #e2e8f0 !important;
+  color: var(--text) !important;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -204,7 +204,7 @@
 }
 
 .driver-live-page .driver-live-stage-row > span {
-  color: #cbd5e1 !important;
+  color: var(--text) !important;
   font-size: 12px;
 }
 
@@ -214,23 +214,23 @@
   height: 26px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.12) !important;
-  color: #e2e8f0 !important;
+  color: var(--text) !important;
 }
 
 .driver-live-page .driver-live-stage-assigned {
-  border-color: rgba(74, 222, 128, 0.2) !important;
-  background: rgba(34, 197, 94, 0.1) !important;
+  border-color: rgb(var(--accent-rgb) / 0.2) !important;
+  background: rgb(var(--accent-rgb) / 0.1) !important;
 }
 
 .driver-live-page .driver-live-stage-assigned > span {
-  color: #bbf7d0 !important;
+  color: var(--text) !important;
 }
 
 .driver-live-page .driver-live-stage-assigned > strong {
-  background: #16a34a !important;
-  color: #fff !important;
+  background: var(--accent) !important;
+  color: var(--accent-ink) !important;
 }
 
 .driver-live-page .driver-live-bookings > div {
@@ -240,7 +240,7 @@
 }
 
 .driver-live-page .driver-live-bookings > div > span {
-  color: #cbd5e1 !important;
+  color: var(--text) !important;
   font-size: 12px;
 }
 
@@ -253,14 +253,14 @@
   width: calc(100% - 40px) !important;
   margin: 14px 20px 18px !important;
   border: 1px solid rgba(255, 255, 255, 0.16) !important;
-  border-radius: 12px !important;
-  background: #2563eb !important;
-  color: #fff !important;
-  font-weight: 800;
+  border-radius: 14px !important;
+  background: var(--accent) !important;
+  color: var(--accent-ink) !important;
+  font-weight: 700;
 }
 
 .driver-live-page .driver-live-update:hover {
-  background: #1d4ed8 !important;
+  background: var(--accent) !important;
 }
 
 .driver-live-page .driver-live-end-trip:disabled,

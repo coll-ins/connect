@@ -18,7 +18,17 @@ import { nextStageAhead, stagesAlongRoute } from './wazeNav';
 import RoadLayer from './RoadLayer';
 import { buildRoute, snapStages } from './route';
 import './Stage3D.css';
+import { Armchair, MapPin, Phone, Ticket, UserRound } from 'lucide-react';
 const DEFAULT_CENTER = [-1.286389, 36.817223];
+
+function PopupRow({ icon: Icon, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+      <Icon size={14} aria-hidden="true" />
+      <span>{children}</span>
+    </div>
+  );
+}
 
 const driverIcon = L.divIcon({
   className: 'passenger-vehicle-marker',
@@ -54,7 +64,7 @@ const passengerIcon = L.divIcon({
   className: 'connect-map-marker',
   html: `
     <div class="connect-map-marker-inner passenger-marker">
-      <span>👤</span>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
     </div>
   `,
   iconSize: [54, 54],
@@ -184,23 +194,16 @@ function PassengerPopup({ passenger, stage }) {
       </div>
 
       {passenger.passenger_phone && (
-        <div style={{ marginBottom: '4px' }}>
-          📞 {passenger.passenger_phone}
-        </div>
+        <PopupRow icon={Phone}>{passenger.passenger_phone}</PopupRow>
       )}
 
-      <div style={{ marginBottom: '4px' }}>
-        🎫 {passenger.booking_number || passenger.booking_id}
-      </div>
+      <PopupRow icon={Ticket}>{passenger.booking_number || passenger.booking_id}</PopupRow>
 
-      <div style={{ marginBottom: '4px' }}>
-        💺 {passenger.seats || 1} seat
-        {(passenger.seats || 1) !== 1 ? 's' : ''}
-      </div>
+      <PopupRow icon={Armchair}>
+        {passenger.seats || 1} seat{(passenger.seats || 1) !== 1 ? 's' : ''}
+      </PopupRow>
 
-      <div style={{ marginBottom: '4px' }}>
-        📍 {stage?.name || passenger.pickup_location || 'Pickup stage'}
-      </div>
+      <PopupRow icon={MapPin}>{stage?.name || passenger.pickup_location || 'Pickup stage'}</PopupRow>
 
       <div
         style={{
@@ -580,14 +583,14 @@ export default function ConnectMap({
                                 marginBottom: '4px',
                               }}
                             >
-                              👤{' '}
+                              <UserRound size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />{' '}
                               {assignedPassenger.passenger ||
                                 'Passenger'}
                             </div>
 
                             {assignedPassenger.passenger_phone && (
                               <div>
-                                📞{' '}
+                                <Phone size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />{' '}
                                 {
                                   assignedPassenger.passenger_phone
                                 }
@@ -595,13 +598,13 @@ export default function ConnectMap({
                             )}
 
                             <div>
-                              🎫{' '}
+                              <Ticket size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />{' '}
                               {assignedPassenger.booking_number ||
                                 assignedPassenger.booking_id}
                             </div>
 
                             <div>
-                              💺 Seats:{' '}
+                              <Armchair size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Seats:{' '}
                               {assignedPassenger.seats ||
                                 1}
                             </div>
