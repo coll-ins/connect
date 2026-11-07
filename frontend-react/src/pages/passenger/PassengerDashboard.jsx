@@ -238,6 +238,13 @@ const fromSearch = (search, initialStep) => {
   };
 };
 
+const dayLabel = (key) =>
+  new Date(`${key}T00:00:00`).toLocaleDateString('en-KE', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+
 export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -249,6 +256,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       .toISOString()
       .slice(0, 10);
   });
+  const [nextTripDate,setNextTripDate]=useState(null),[tripsLoading,setTripsLoading]=useState(false);
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
@@ -294,6 +302,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
     let active = true;
     setTrips([]);
+    setNextTripDate(null);
+    setTripsLoading(true);
     setError('');
 
     const params = new URLSearchParams();
@@ -301,11 +311,29 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if (selectedDate) params.set('date', selectedDate);
     const query = params.toString();
     apiRequest(`/companies/${company}/trips/${query ? `?${query}` : ''}`)
-      .then((data) => {
-        if (active) setTrips(Array.isArray(data) ? data : []);
+      .then(async (data) => {
+        const list = Array.isArray(data) ? data : [];
+        if (!active) return;
+        setTrips(list);
+        if (list.length || !route) return;
+        // Nothing on this date: find the route's next departure so the
+        // passenger has somewhere to go instead of a dead end.
+        const all = await apiRequest(`/companies/${company}/trips/?route_id=${route}`);
+        const now = Date.now();
+        const next = (Array.isArray(all) ? all : [])
+          .filter((t) => ['scheduled', 'boarding'].includes(String(t.status).toLowerCase())
+            && new Date(t.departure_at).getTime() > now)
+          .sort((a, b) => new Date(a.departure_at) - new Date(b.departure_at))[0];
+        if (active && next) {
+          const d = new Date(next.departure_at);
+          setNextTripDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+        }
       })
       .catch((error) => {
         if (active) setError(error.message);
+      })
+      .finally(() => {
+        if (active) setTripsLoading(false);
       });
 
     return () => {
@@ -1065,9 +1093,26 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
           </label>
 
           <div className="modern-trip-list">
-            {!trips.length ? (
+            {tripsLoading && !trips.length ? (
+              <div className="glass-empty" role="status">Loading departures…</div>
+            ) : !trips.length ? (
               <div className="glass-empty">
-                <span>No scheduled departures are available for this route.</span>
+                <strong>No departures on {dayLabel(selectedDate)}</strong>
+                {nextTripDate ? (
+                  <>
+                    <span>The next departure on this route is on {dayLabel(nextTripDate)}.</span>
+                    <button type="button" className="glass-empty-action" onClick={() => setSelectedDate(nextTripDate)}>
+                      Show {dayLabel(nextTripDate)}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>This route has no upcoming departures yet. Another route or company may have one.</span>
+                    <button type="button" className="glass-empty-action" onClick={() => setJourneyStep('routes')}>
+                      Choose another route
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
               trips.map((t) => (
