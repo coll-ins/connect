@@ -309,6 +309,11 @@ if not DEBUG:
     for _required in ('ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL', 'NUM_PROXIES'):
         if not os.getenv(_required):
             raise ValueError(f'CRITICAL: {_required} must be set in production.')
+    if REST_FRAMEWORK['NUM_PROXIES'] < 1:
+        raise ValueError(
+            'CRITICAL: NUM_PROXIES must be 1 or more in production '
+            '(the app always runs behind a proxy or load balancer).'
+        )
     if not ADMIN_ALERT_PHONE_NUMBERS:
         raise ValueError(
             'CRITICAL: ADMIN_ALERT_PHONE_NUMBERS must be set in production '

@@ -147,14 +147,31 @@ def advance_trip_simulation(request, simulation_id):
             sim.status = 'expired'
             sim.save(update_fields=['status', 'updated_at'])
             return _error('Simulation has expired.', status.HTTP_410_GONE)
+        trip = sim.trip
+        driver = trip.driver
+        if trip.status not in SIMULATABLE or driver is None:
+            sim.status = 'stopped'
+            sim.save(update_fields=['status', 'updated_at'])
+            return _error(
+                f'The trip is {trip.status}; the simulation stopped.',
+                status.HTTP_409_CONFLICT,
+            )
+        if driver.location_updated_at and driver.location_updated_at > sim.updated_at:
+            # The real driver sent GPS since our last tick: never overwrite it.
+            sim.status = 'stopped'
+            sim.save(update_fields=['status', 'updated_at'])
+            return _error(
+                'The real driver is sending GPS; the simulation stopped.',
+                status.HTTP_409_CONFLICT,
+            )
         last = len(sim.path) - 1
         sim.position_index = min(sim.position_index + 1, last)
         if sim.position_index >= last:
             sim.status = 'completed'
-        sim.save(update_fields=['position_index', 'status', 'updated_at'])
-        driver = sim.trip.driver
         lat, lng = sim.path[sim.position_index]
         record_driver_fix(driver, lat, lng)
+        # Saved after the fix so our own GPS write never counts as "newer".
+        sim.save(update_fields=['position_index', 'status', 'updated_at'])
     return Response({'simulation': _serialize(sim)}, status=status.HTTP_200_OK)
 
 

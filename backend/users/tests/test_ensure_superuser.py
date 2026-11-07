@@ -49,3 +49,29 @@ class EnsureSuperuserTests(TestCase):
         self.assertEqual(user.phone_number, '+254712345678')
         self.assertTrue(user.check_password('Str0ng-admin-pass'))
         self.assertFalse(login_blocked('+254712345678', '10.0.0.1'))
+
+
+class EnsureSuperuserSafetyTests(TestCase):
+    def test_taken_username_does_not_crash_start(self):
+        from django.contrib.auth import get_user_model
+        from django.core.management import call_command
+        from unittest import mock
+        get_user_model().objects.create_user(username='boss', password='x', phone_number='+254700000777')
+        env = {'ADMIN_PHONE': '+254711222333', 'ADMIN_PASSWORD': 'Str0ng-pass-91', 'ADMIN_USERNAME': 'boss'}
+        with mock.patch.dict('os.environ', env):
+            call_command('ensure_superuser')  # must not raise
+        self.assertFalse(get_user_model().objects.filter(phone_number='+254711222333').exists())
+
+    def test_company_account_is_not_promoted(self):
+        from django.contrib.auth import get_user_model
+        from django.core.management import call_command
+        from unittest import mock
+        from companies.models import Company
+        co = Company.objects.create(name='Metro', areas_served='Nairobi')
+        staff = get_user_model().objects.create_user(
+            username='mgr', password='x', phone_number='+254711222444', company=co, role='company_manager')
+        env = {'ADMIN_PHONE': '+254711222444', 'ADMIN_PASSWORD': 'Str0ng-pass-91'}
+        with mock.patch.dict('os.environ', env):
+            call_command('ensure_superuser')
+        staff.refresh_from_db()
+        self.assertFalse(staff.is_superuser)
