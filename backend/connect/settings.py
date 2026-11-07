@@ -321,6 +321,7 @@ if not DEBUG:
         )
 
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login_ip'] = '60/minute'
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['bus_reroute'] = '12/minute'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 
 from decimal import Decimal

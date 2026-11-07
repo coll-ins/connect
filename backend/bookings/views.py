@@ -76,6 +76,21 @@ class BoardingVerifyThrottle(SimpleRateThrottle):
         }
 
 
+class BusRerouteThrottle(SimpleRateThrottle):
+    """Limits calls to the outside road service from one passenger's map."""
+
+    scope = 'bus_reroute'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': request.user.pk,
+        }
+
+
+BUS_REROUTE_CACHE_SECONDS = 60
+
+
 # ============================================================
 # PAYSTACK PAYMENT INITIALIZATION
 # ============================================================
@@ -3460,10 +3475,105 @@ def booking_live_location(request, booking_id):
                     else None
                 ),
             },
+            'boarded': hasattr(booking, 'boarding_event'),
             **location_freshness_for_booking(booking_id),
         },
         status=status.HTTP_200_OK,
     )
+
+
+def _reroute_goal_point(booking, goal):
+    """(lat, lng) of the passenger's pickup stage or the route's end, or None."""
+    if goal == 'pickup':
+        stage = booking.pickup_stage
+        return (float(stage.latitude), float(stage.longitude)) if stage else None
+
+    route = booking.route
+    if route.end_latitude is not None and route.end_longitude is not None:
+        return (float(route.end_latitude), float(route.end_longitude))
+    last_stage = (
+        route.pickup_stages.filter(is_active=True).order_by('order', 'id').last()
+    )
+    if last_stage is None:
+        return None
+    return (float(last_stage.latitude), float(last_stage.longitude))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([BusRerouteThrottle])
+def booking_reroute(request, booking_id):
+    """Road from where the bus is now to the pickup stage or the route's end.
+
+    The passenger's map asks for this when the bus has left its planned route.
+    Both ends come from the server, so a caller cannot route arbitrary points
+    through the road service. Buses in the same 100 m or so share one answer.
+    """
+    from django.core.cache import cache
+    from companies.routing import RoutingError, road_line
+    from .live_signals import location_freshness, trip_is_live
+
+    booking = (
+        Booking.objects
+        .select_related('route', 'driver', 'trip', 'pickup_stage')
+        .filter(id=booking_id)
+        .first()
+    )
+    if not booking:
+        return Response(
+            {'error': 'Booking not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if booking.user_id != request.user.id and not request.user.is_superuser:
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    goal = request.query_params.get('goal')
+    if goal not in ('pickup', 'destination'):
+        return Response(
+            {'error': 'goal must be pickup or destination.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    driver = booking.driver
+    if (
+        booking.status != 'confirmed'
+        or driver is None
+        or not trip_is_live(booking.trip)
+        or location_freshness(driver)['is_stale']
+    ):
+        return Response(
+            {'error': 'This bus has no live location to route from.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    target = _reroute_goal_point(booking, goal)
+    if target is None:
+        return Response(
+            {'error': 'This trip has no location for that goal.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    bus = (float(driver.latitude), float(driver.longitude))
+    cache_key = (
+        f'bus-reroute:{target[0]:.5f},{target[1]:.5f}:'
+        f'{bus[0]:.3f},{bus[1]:.3f}'
+    )
+    payload = cache.get(cache_key)
+    if payload is None:
+        try:
+            geometry, distance_m = road_line([bus, target], timeout=8)
+        except RoutingError as exc:
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        payload = {'geometry': geometry, 'distance_m': round(distance_m)}
+        cache.set(cache_key, payload, BUS_REROUTE_CACHE_SECONDS)
+
+    return Response({**payload, 'goal': goal}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])

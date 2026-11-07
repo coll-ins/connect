@@ -161,3 +161,152 @@ export function parkedBusLabel({ tripStatus, departureAt, now, timeZone }) {
 
   return boarding ? `Boarding · departs ${when}` : `Departs ${when}`;
 }
+
+export const OFF_ROUTE_KM = 0.06;
+
+/* Shortest distance from a point to a [lat, lng] line, in km. */
+export function distanceFromLineKm(point, line) {
+  if (!point || !Array.isArray(line) || line.length === 0) return Infinity;
+
+  const kmPerLng = 111.32 * Math.cos((point[0] * Math.PI) / 180);
+  const kmPerLat = 110.574;
+  const toLocal = ([lat, lng]) => [
+    (lng - point[1]) * kmPerLng,
+    (lat - point[0]) * kmPerLat,
+  ];
+
+  if (line.length === 1) return Math.hypot(...toLocal(line[0]));
+
+  let best = Infinity;
+
+  for (let i = 0; i < line.length - 1; i += 1) {
+    const [ax, ay] = toLocal(line[i]);
+    const [bx, by] = toLocal(line[i + 1]);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared
+      ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSquared))
+      : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+
+  return best;
+}
+
+export function lineLengthKm(line) {
+  if (!Array.isArray(line)) return 0;
+
+  let total = 0;
+  for (let i = 0; i < line.length - 1; i += 1) {
+    total += haversineKm(line[i], line[i + 1]);
+  }
+  return total;
+}
+
+/* A GeoJSON LineString as [lat, lng] points. */
+export function geoJsonLinePositions(geometry) {
+  const coordinates = geometry?.coordinates;
+  if (!Array.isArray(coordinates)) return [];
+
+  return coordinates
+    .map((point) => [Number(point?.[1]), Number(point?.[0])])
+    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+}
+
+/* The part of a new road still ahead of the bus, starting at the bus. */
+export function lineAheadOfBus(busPosition, line) {
+  if (!busPosition || !Array.isArray(line) || line.length === 0) return [];
+  return [busPosition, ...line.slice(nearestIndex(busPosition, line) + 1)];
+}
+
+/*
+ * The one thing the passenger needs to know right now, and whether their
+ * boarding PIN belongs next to it.
+ */
+export function tripGuide({
+  bookingStatus,
+  tripIsLive,
+  parked,
+  boarding,
+  departureLabel,
+  boarded,
+  rerouted,
+  busPastPickup,
+  pickupKm,
+  etaText,
+  startName,
+  pickupName,
+  destinationName,
+  lastSeenText,
+}) {
+  if (String(bookingStatus || '').toLowerCase() === 'pending') {
+    return {
+      title: 'Payment needed to confirm your seat',
+      detail: 'Your boarding PIN appears once your payment is confirmed.',
+      showPin: false,
+    };
+  }
+
+  if (boarded) {
+    return {
+      title: "You're on board",
+      detail: rerouted
+        ? `The bus took another road. The new way to ${destinationName} is in blue.`
+        : `The blue line shows the way to ${destinationName}.`,
+      showPin: false,
+    };
+  }
+
+  if (parked) {
+    return {
+      title: boarding
+        ? `Your bus is boarding at ${startName}`
+        : `Your bus is waiting at ${startName}`,
+      detail: `${departureLabel}. Be at ${pickupName} early and keep your PIN ready.`,
+      showPin: true,
+    };
+  }
+
+  if (!tripIsLive) {
+    return {
+      title: "Waiting for your bus's location",
+      detail: lastSeenText
+        ? `Last seen ${lastSeenText} ago. The map updates when the driver's GPS is back.`
+        : "The map updates when the driver's GPS is back.",
+      showPin: true,
+    };
+  }
+
+  if (busPastPickup) {
+    return {
+      title: `Your bus has passed ${pickupName}`,
+      detail: 'If you were not picked up, call the driver.',
+      showPin: true,
+    };
+  }
+
+  if (rerouted) {
+    return {
+      title: 'Your bus took another road',
+      detail: `It is still coming to ${pickupName}. The new way is in blue.`,
+      showPin: true,
+    };
+  }
+
+  if (pickupKm != null && pickupKm <= 0.15) {
+    return {
+      title: `Your bus is at ${pickupName}`,
+      detail: 'Show the driver your PIN to board.',
+      showPin: true,
+    };
+  }
+
+  return {
+    title: 'Your bus is on the way',
+    detail: etaText
+      ? `Be at ${pickupName}. It is about ${etaText} away.`
+      : `Be at ${pickupName} and keep your PIN ready.`,
+    showPin: true,
+  };
+}
