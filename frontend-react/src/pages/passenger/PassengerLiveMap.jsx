@@ -927,7 +927,7 @@ export default function PassengerLiveMap({
 
   if (tripStatus === 'completed') {
     busStatus = 'Trip completed';
-  } else if (parkedBus) {
+  } else if (parkedBus && !(trackingAvailable && driverTarget)) {
     busStatus = `Parked at ${parkedStageName} · ${parkedLabel}`;
   } else if (!trackingAvailable) {
     busStatus = 'Live tracking starts once boarding begins and a driver is assigned';
