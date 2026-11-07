@@ -136,6 +136,44 @@ function TripSimulateControl({ trip, sim, busy, onStart, onStop }) {
   );
 }
 
+/*
+ * The rest of the journey, for testing it end to end: send the bus off its
+ * route, board passengers with their PIN, then end the trip.
+ */
+function TripJourneyControls({ trip, sim, bookings, busy, onDivert, onBoard, onEnd }) {
+  const tripStatus = String(trip.status || '').toLowerCase();
+  if (!['boarding', 'departed'].includes(tripStatus)) return null;
+
+  const waiting = bookings.filter(
+    (b) => String(b.trip_id) === String(trip.id) && b.status === 'confirmed',
+  );
+  const moving = sim?.status === 'running' && sim.trip_id === trip.id;
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+      {moving && (
+        <button type="button" className="pa-secondary-button" onClick={onDivert} disabled={busy}>
+          Divert bus
+        </button>
+      )}
+      {waiting.map((b) => (
+        <button
+          type="button"
+          className="pa-secondary-button"
+          key={b.booking_id}
+          onClick={() => onBoard(b)}
+          disabled={busy}
+        >
+          Board {b.booking_number}
+        </button>
+      ))}
+      <button type="button" className="pa-danger-button" onClick={() => onEnd(trip)} disabled={busy}>
+        End trip
+      </button>
+    </div>
+  );
+}
+
 function SideLink({ to, icon: Icon, children, end = false }) {
   return (
     <NavLink
@@ -1492,6 +1530,58 @@ export default function PlatformAdminDashboard() {
     } finally {
       setSimBusy(false);
     }
+  };
+
+  const runJourneyStep = async (fallbackError, step) => {
+    if (simBusy) return;
+    setSimBusy(true);
+    setSimError('');
+    try {
+      await step();
+    } catch (err) {
+      setSimError(err.message || fallbackError);
+    } finally {
+      setSimBusy(false);
+    }
+  };
+
+  const divertSimulation = () =>
+    runJourneyStep('Unable to divert the bus.', async () => {
+      const result = await apiRequest(`/system/trip-simulations/${sim.id}/divert/`, {
+        method: 'POST',
+        body: {},
+      });
+      setSim(result.simulation);
+      setCommandMessage('Bus diverted. The passenger map shows a new road in about 15 seconds.');
+    });
+
+  const boardPassenger = (booking) => {
+    const pin = window.prompt(`Boarding PIN for ${booking.booking_number}`);
+    if (!pin) return undefined;
+    return runJourneyStep('Unable to board this passenger.', async () => {
+      await apiRequest(`/bookings/${booking.booking_id}/verify-boarding/`, {
+        method: 'POST',
+        body: { boarding_pin: pin.trim() },
+      });
+      setCommandMessage(`${booking.booking_number} is on board.`);
+      await load();
+    });
+  };
+
+  const endSimulatedTrip = (trip) => {
+    const warning =
+      'End this trip? This is real: anyone who has not boarded becomes a ' +
+      'no-show and gets the 50% refund.';
+    if (!window.confirm(warning)) return undefined;
+    return runJourneyStep('Unable to end this trip.', async () => {
+      await apiRequest(`/system/trips/${trip.id}/finish/`, {
+        method: 'POST',
+        body: {},
+      });
+      setSim(null);
+      setCommandMessage(`Trip ${trip.id} ended.`);
+      await load();
+    });
   };
 
   const stopSimulation = async () => {
@@ -3081,6 +3171,15 @@ export default function PlatformAdminDashboard() {
                                   onStart={startSimulation}
                                   onStop={stopSimulation}
                                 />
+                                <TripJourneyControls
+                                  trip={trip}
+                                  sim={sim}
+                                  bookings={bookings}
+                                  busy={simBusy}
+                                  onDivert={divertSimulation}
+                                  onBoard={boardPassenger}
+                                  onEnd={endSimulatedTrip}
+                                />
                               </div>
                             )}
                           </td>
@@ -3097,7 +3196,9 @@ export default function PlatformAdminDashboard() {
             <p style={{ color: 'var(--text-2)', fontSize: 12, maxWidth: '72ch' }}>
               Simulate moves this trip's bus along its route as if the driver were
               driving. Passengers booked on it see it live. Keep this tab open;
-              closing it stops the bus.
+              closing it stops the bus. Divert bus sends it off the route to test
+              rerouting, Board enters a passenger's PIN, and End trip finishes the
+              journey. These change the real trip and booking.
             </p>
           </section>
         )}

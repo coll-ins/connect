@@ -8,6 +8,8 @@ from connect.system_checks import run_system_checks
 from companies.simulation import (
     active_trip_simulation,
     advance_trip_simulation,
+    divert_trip_simulation,
+    finish_simulated_trip,
     start_trip_simulation,
     stop_trip_simulation,
 )
@@ -47,6 +49,16 @@ urlpatterns = [
         'api/system/trips/<int:trip_id>/simulate/',
         start_trip_simulation,
         name='start-trip-simulation',
+    ),
+    path(
+        'api/system/trips/<int:trip_id>/finish/',
+        finish_simulated_trip,
+        name='finish-simulated-trip',
+    ),
+    path(
+        'api/system/trip-simulations/<int:simulation_id>/divert/',
+        divert_trip_simulation,
+        name='divert-trip-simulation',
     ),
     path(
         'api/system/trip-simulations/active/',

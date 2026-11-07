@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Armchair, ArrowUpRight, Banknote, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
 
 import { apiRequest } from '../../api';
+import { canOpenTripMap, isActiveBooking } from './liveMapUtils';
 import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
@@ -647,14 +648,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               </p>
             </div>
 
-            {!bookings.length ? (
+            {!bookings.some(isActiveBooking) ? (
               <div className="glass-empty">
                 <span>No upcoming trips. Choose Book a seat above to find one.</span>
               </div>
                 ) : (
                   <div className="modern-trip-list">
                 {bookings
-                  .filter((b) => !['cancelled', 'completed', 'no_show'].includes(String(b.status || '').toLowerCase()))
+                  .filter(isActiveBooking)
                   .slice(0, 5)
                   .map((b) => (
                     <article
@@ -707,13 +708,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                       <div className="trip-action">
                         <strong>{money(b.total_amount)}</strong>
 
-                        {(
-                          String(b.status || '').toLowerCase() === 'confirmed' &&
-                          ['boarding', 'departed'].includes(
-                            String(b.trip_status || '').toLowerCase()
-                          ) &&
-                          Boolean(b.driver_id)
-                        ) ? (
+                        {canOpenTripMap(b) ? (
                           <button
                             type="button"
                             className="glass-primary-button"
@@ -725,7 +720,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                               )
                             }
                           >
-                            Track trip
+                            Open map
                           </button>
                         ) : (
                           <span className="trip-status-label">
@@ -745,7 +740,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                                     cancelled: 'Trip cancelled',
                                   }[String(b.trip_status).toLowerCase()])
                                 : String(b.status || '').toLowerCase() !== 'confirmed'
-                                  ? 'Booking not confirmed'
+                                  ? 'Waiting for payment'
                                   : !b.trip_status
                                     ? 'Trip status unavailable'
                                     : ['boarding', 'departed'].includes(

@@ -3,6 +3,7 @@
 Each advance feeds one point through record_driver_fix, the same code a real
 driver's GPS post runs, so live maps, auto-depart and SMS behave as in production.
 """
+import math
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
@@ -17,6 +18,8 @@ from companies.models import Trip, TripSimulation
 from drivers.views import record_driver_fix
 
 STEP_METERS = 75
+DIVERT_POINTS = 40
+DIVERT_OFFSET_M = 300
 SESSION_TTL = timedelta(minutes=30)
 REAL_GPS_WINDOW = timedelta(seconds=60)
 SIMULATABLE = ('scheduled', 'boarding', 'departed')
@@ -195,6 +198,98 @@ def stop_trip_simulation(request, simulation_id):
     if not updated:
         return _error(f'Simulation is already {sim.status}.', status.HTTP_409_CONFLICT)
     return Response({'simulation': _serialize(sim)}, status=status.HTTP_200_OK)
+
+
+def diverted_path(path, index):
+    """The path with the next stretch bowed out sideways, as if on another road.
+
+    Starts and ends on the route so the bus leaves it and comes back.
+    """
+    end = min(index + DIVERT_POINTS, len(path) - 1)
+    if end - index < 4:
+        return None
+    (from_lat, from_lng), (to_lat, to_lng) = path[index], path[end]
+    metres_per_lng = 111320 * math.cos(math.radians(from_lat))
+    east = (to_lng - from_lng) * metres_per_lng
+    north = (to_lat - from_lat) * 110574
+    length = math.hypot(east, north)
+    if length < 1:
+        return None
+    side_east, side_north = -north / length, east / length
+
+    bent = [list(point) for point in path]
+    for i in range(index + 1, end):
+        bow = math.sin(math.pi * (i - index) / (end - index)) * DIVERT_OFFSET_M
+        bent[i] = [
+            round(path[i][0] + side_north * bow / 110574, 6),
+            round(path[i][1] + side_east * bow / metres_per_lng, 6),
+        ]
+    return bent
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def divert_trip_simulation(request, simulation_id):
+    """Send the simulated bus off its route, to test rerouting."""
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+    with transaction.atomic():
+        sim = (
+            TripSimulation.objects.select_for_update()
+            .filter(pk=simulation_id)
+            .first()
+        )
+        if sim is None:
+            return _error('Simulation not found.', status.HTTP_404_NOT_FOUND)
+        if sim.status != 'running':
+            return _error(f'Simulation is {sim.status}.', status.HTTP_409_CONFLICT)
+        bent = diverted_path(sim.path, sim.position_index)
+        if bent is None:
+            return _error(
+                'The bus is too close to the end of the route to divert.',
+                status.HTTP_409_CONFLICT,
+            )
+        sim.path = bent
+        sim.save(update_fields=['path', 'updated_at'])
+    return Response({'simulation': _serialize(sim)}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def finish_simulated_trip(request, trip_id):
+    """End a trip from the admin screen, by the same rule as the driver's End trip."""
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+    from bookings.services import run_refund_claims, settle_unboarded_no_shows
+
+    claims = []
+    with transaction.atomic():
+        trip = Trip.objects.select_for_update().filter(pk=trip_id).first()
+        if trip is None:
+            return _error('Trip not found.', status.HTTP_404_NOT_FOUND)
+        if trip.status not in ('boarding', 'departed'):
+            return _error(
+                'Only a boarding or departed trip can be ended.',
+                status.HTTP_409_CONFLICT,
+            )
+        TripSimulation.objects.filter(trip=trip, status='running').update(status='stopped')
+        settled, protected = settle_unboarded_no_shows(trip, claims=claims)
+        trip.status = 'completed'
+        trip.save(update_fields=['status'])
+
+    # Paystack is called only after the trip lock has been released.
+    run_refund_claims(claims)
+    return Response(
+        {
+            'trip_id': trip.id,
+            'status': trip.status,
+            'no_shows_settled': settled,
+            'incident_protected': protected,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(['GET'])

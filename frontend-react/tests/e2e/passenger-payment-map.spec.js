@@ -385,6 +385,58 @@ test('a bus that leaves its route gets a new blue road', async ({ page }) => {
   expect(rerouteRequests).toBe(1);
 });
 
+test('a passenger who just boarded keeps the map and does not see arrived', async ({ page }) => {
+  await setPassengerSession(page);
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json = (body) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+
+    if (path === '/api/users/profile/') return json({ user: passengerUser });
+    if (path === '/api/bookings/my/') {
+      return json([
+        { ...confirmedBooking, status: 'completed', trip_status: 'departed', boarded: true },
+      ]);
+    }
+    if (path === '/api/bookings/42/live-location/') {
+      return json({
+        trip_status: 'departed',
+        is_trip_live: true,
+        is_stale: false,
+        location_age_seconds: 1,
+        boarded: true,
+        route: { end_point: 'Airport' },
+        driver: {
+          latitude: -1.2864,
+          longitude: 36.8172,
+          location_updated_at: new Date().toISOString(),
+        },
+        pickup: { name: 'Westlands', latitude: -1.267, longitude: 36.81 },
+        stages: [],
+      });
+    }
+    return json({});
+  });
+
+  await page.goto('/passenger/map?booking=42');
+
+  const guide = page.locator('.passenger-live-map__guide');
+  await expect(guide).toContainText("You're on board");
+  await expect(guide).toContainText('Airport');
+  await expect(page.getByText('You have arrived')).toHaveCount(0);
+});
+
+test('a scheduled booking can get back to its map from My bookings', async ({ page }) => {
+  await setPassengerSession(page);
+  await stubPaymentReturnApi(page);
+
+  await page.goto('/passenger/bookings');
+  await page.getByRole('button', { name: 'Open map' }).first().click();
+
+  await expect(page).toHaveURL(/\/passenger\/map\?booking=42$/);
+  await expect(page.locator('.passenger-live-map__guide')).toBeVisible();
+});
+
 test('a trip that ended shows that you have arrived', async ({ page }) => {
   await setPassengerSession(page);
   await stubPaymentReturnApi(page);
