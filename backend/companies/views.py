@@ -736,6 +736,27 @@ def update_trip_status(request, trip_id, *args, **kwargs):
             )
 
         refund_claims = []
+        cancelled_bookings = []
+        if new_status == 'cancelled' and current_status != 'cancelled':
+            # A boarded passenger's fare has already been released to the
+            # company, so it cannot be refunded safely from here.
+            boarded = trip.bookings.filter(status='completed').count()
+            if boarded:
+                return Response(
+                    {
+                        'error': (
+                            f'{boarded} booking(s) have already boarded, so '
+                            'this trip cannot be cancelled. End the trip or '
+                            'report an incident instead.'
+                        ),
+                        'boarded_bookings': boarded,
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+
+            from bookings.services import cancel_trip_bookings
+            cancelled_bookings = cancel_trip_bookings(trip, refund_claims)
+
         if new_status == 'completed' and current_status != 'completed':
             # Same closing rule as the driver's End trip: nobody stays stuck
             # on a finished trip as pending or confirmed.
@@ -749,11 +770,30 @@ def update_trip_status(request, trip_id, *args, **kwargs):
     from bookings.services import run_refund_claims
     run_refund_claims(refund_claims)
 
-    return Response({
+    response_body = {
         'message': 'Trip status updated successfully.',
         'trip_id': trip.id,
         'status': trip.status
-    }, status=status.HTTP_200_OK)
+    }
+
+    if new_status == 'cancelled':
+        from notifications.sms import send_trip_cancelled_sms
+
+        for booking, was_paid in cancelled_bookings:
+            send_trip_cancelled_sms(
+                booking.user.phone_number,
+                booking.booking_number,
+                trip.route.name,
+                paid=was_paid,
+            )
+
+        paid_count = sum(1 for _, was_paid in cancelled_bookings if was_paid)
+        response_body['cancelled_bookings'] = len(cancelled_bookings)
+        response_body['refunds_started'] = len(refund_claims)
+        # Cash, or a refund that could not be reserved: someone must follow up.
+        response_body['refunds_to_follow_up'] = paid_count - len(refund_claims)
+
+    return Response(response_body, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

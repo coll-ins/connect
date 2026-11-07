@@ -74,3 +74,15 @@ def send_departure_sms(phone_number, booking_number, route_name):
         f"Booking {booking_number}. Open Live Map in the app to track it."
     )
     return _send(message, [phone_number], 'departure')
+
+
+def send_trip_cancelled_sms(phone_number, booking_number, route_name, paid):
+    next_step = (
+        'You will get a full refund.' if paid
+        else 'You have not been charged.'
+    )
+    message = (
+        f"Connect App: Your {route_name} trip has been cancelled. "
+        f"Booking {booking_number}. {next_step}"
+    )
+    return _send(message, [phone_number], 'trip cancelled')

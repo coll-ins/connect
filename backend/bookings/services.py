@@ -528,6 +528,49 @@ def refund_booking_hold(booking):
         return hold
 
 
+def cancel_trip_bookings(trip, claims):
+    """
+    Called when the company cancels a trip. It is the company's fault, so each
+    paid booking gets a 100% refund. Unpaid bookings are simply cancelled.
+
+    Must be called inside transaction.atomic(). Refunds are only reserved
+    here: the caller sends the claims with run_refund_claims() after commit.
+    A booking whose refund cannot be reserved is still cancelled and the admin
+    is alerted; the process_noshows sweep retries it.
+
+    Returns (booking, was_paid) for every booking that was cancelled.
+    """
+    affected = []
+
+    for booking in (
+        trip.bookings
+        .select_for_update()
+        .select_related('user')
+        .filter(status__in=('pending', 'confirmed'))
+    ):
+        was_paid = booking.status == 'confirmed'
+
+        if was_paid:
+            try:
+                _, claim = claim_booking_refund(booking, 'company')
+                if claim is not None:
+                    claims.append(claim)
+            except ValueError as exc:
+                logger.warning(
+                    'Refund failed for %s: %s', booking.booking_number, exc
+                )
+                _alert_admin(
+                    f'Trip {trip.pk} was cancelled but booking '
+                    f'{booking.booking_number} could not be refunded: {exc}'
+                )
+
+        booking.status = 'cancelled'
+        booking.save(update_fields=['status'])
+        affected.append((booking, was_paid))
+
+    return affected
+
+
 def settle_unboarded_no_shows(trip, claims=None):
     """
     Called when a trip ends. Confirmed bookings that never boarded become
