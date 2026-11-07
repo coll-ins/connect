@@ -123,6 +123,7 @@ export function DeliveryNew() {
                       onClick={() => pick({ company: String(c.id), route: '', trip: '', pickup: '', dropoff: '', size: '' }, 1)} />
                   ))}
                 </div>
+                {!options.length && <p className="muted">No company carries parcels right now. Check back later.</p>}
               </>
             )}
 
@@ -141,6 +142,7 @@ export function DeliveryNew() {
                     );
                   })}
                 </div>
+                {!company.routes.length && <p className="muted">This company has no parcel routes yet. Go back and pick another company.</p>}
               </>
             )}
 
@@ -154,6 +156,7 @@ export function DeliveryNew() {
                       onClick={() => pick({ trip: String(t.id) }, 3)} />
                   ))}
                 </div>
+                {!route.trips.length && <p className="muted">No bus is scheduled on this route yet. Go back and pick another route.</p>}
               </>
             )}
 

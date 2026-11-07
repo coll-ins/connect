@@ -33,6 +33,15 @@ class CustomUser(AbstractUser):
 
     REQUIRED_FIELDS = ['email', 'phone_number'] 
 
+    def save(self, *args, **kwargs):
+        # One source of truth: platform admin == superuser. Keep the stored
+        # role in step so role-based and superuser-based checks agree.
+        if self.is_superuser:
+            self.role = 'platform_admin'
+        elif self.role == 'platform_admin':
+            self.role = 'passenger'
+        super().save(*args, **kwargs)
+
 
     @property
     def display_name(self):

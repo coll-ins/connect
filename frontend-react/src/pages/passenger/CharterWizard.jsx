@@ -118,6 +118,7 @@ export function CharterNew() {
                     </button>
                   ))}
                 </div>
+                {!companies.length && <p className="muted">No company takes bus hire requests right now. Check back later.</p>}
               </>
             )}
 

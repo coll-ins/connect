@@ -1,7 +1,8 @@
 import AppShell from '../../components/layout/AppShell';
 import './PassengerRecords.css';
 import { useAuth } from '../../context/AuthContext';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import {
   CreditCard,
@@ -370,17 +371,57 @@ export function PassengerHelp() {
   );
 }
 
+const lower = (v) => String(v || '').toLowerCase();
+
+// What a passenger can still do with a booking. Mirrors the backend rules:
+// passengers may cancel only before boarding starts; a cash booking waits
+// for the driver to confirm payment.
+function bookingActions(b) {
+  const status = lower(b.status);
+  const trip = lower(b.trip_status);
+  const pay = lower(b.payment_status);
+  const live = ['pending', 'confirmed'].includes(status);
+  return {
+    pay: status === 'pending' && trip !== 'departed' && pay !== 'confirmed'
+      && !(lower(b.payment_method) === 'cash' && pay === 'pending'),
+    cancel: live && trip === 'scheduled',
+    track: status === 'confirmed' && ['boarding', 'departed'].includes(trip),
+  };
+}
+
 function BookingsBody({ activeOnly = false }) {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busyId, setBusyId] = useState(null);
 
-  useEffect(() => {
-    apiRequest('/bookings/my/')
-      .then((data) => setBookings(Array.isArray(data) ? data : []))
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(() => apiRequest('/bookings/my/')
+    .then((data) => setBookings(Array.isArray(data) ? data : []))
+    .catch((e) => setError(e.message))
+    .finally(() => setLoading(false)), []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const cancel = async (b) => {
+    const paid = lower(b.payment_status) === 'confirmed' && lower(b.payment_method) !== 'cash';
+    const warning = paid
+      ? 'Cancel this booking? You will be refunded 50% of the fare.'
+      : 'Cancel this booking? Nothing has been charged.';
+    if (!window.confirm(warning)) return;
+    setBusyId(b.booking_id);
+    setError('');
+    try {
+      const res = await apiRequest(`/bookings/${b.booking_id}/cancel/`, { method: 'POST', body: {} });
+      setNotice(res?.message || 'Booking cancelled.');
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const visible = activeOnly
     ? bookings.filter(
@@ -397,6 +438,7 @@ function BookingsBody({ activeOnly = false }) {
   return (
     <>
       {error && <div className="connect-alert connect-alert-error">{error}</div>}
+      {notice && <div className="connect-alert" role="status">{notice}</div>}
 
       {loading ? (
         <div className="glass-empty">Loading your bookings…</div>
@@ -443,6 +485,34 @@ function BookingsBody({ activeOnly = false }) {
                 <strong>{money(booking.total_amount)}</strong>
                 <span>{booking.payment_method || 'Payment pending'}</span>
               </div>
+
+              {(() => {
+                const can = bookingActions(booking);
+                if (!can.pay && !can.cancel && !can.track) return null;
+                const busy = busyId === booking.booking_id;
+                return (
+                  <div className="data-card-actions">
+                    {can.pay && (
+                      <button type="button" className="btn btn-primary"
+                        onClick={() => navigate(`/passenger?pay=${booking.booking_id}`)}>
+                        Pay now
+                      </button>
+                    )}
+                    {can.track && (
+                      <button type="button" className="btn btn-primary"
+                        onClick={() => navigate(`/passenger/map?booking=${booking.booking_id}`)}>
+                        Track bus
+                      </button>
+                    )}
+                    {can.cancel && (
+                      <button type="button" className="btn btn-ghost" disabled={busy}
+                        onClick={() => cancel(booking)}>
+                        {busy ? 'Cancelling…' : 'Cancel booking'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </article>
           ))}
         </div>

@@ -256,6 +256,7 @@ class BookingsAppTests(APITestCase):
             "data": {
                 "reference": "REF999999",
                 "amount": int(self.booking.total_amount * Decimal("100")),
+                "currency": "KES",
             },
         }
         body = json.dumps(payload).encode("utf-8")

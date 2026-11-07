@@ -1401,7 +1401,11 @@ export default function PassengerLiveMap({
           <strong>{routeName}</strong>
           <span>
             <Radio size={13} />
-            {trackingAvailable ? 'Live trip' : 'Trip confirmed'}
+            {trackingAvailable
+              ? 'Live trip'
+              : String(bookingDetails?.status || '').toLowerCase() === 'pending'
+                ? 'Seat reserved · awaiting payment'
+                : 'Trip confirmed'}
           </span>
         </div>
 

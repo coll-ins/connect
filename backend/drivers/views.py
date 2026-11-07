@@ -226,7 +226,10 @@ def driver_list(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    serializer = DriverSerializer(data=request.data)
+    # The company was decided above; the manager UI does not send it.
+    data = request.data.copy()
+    data['company'] = company.id
+    serializer = DriverSerializer(data=data)
 
     if not serializer.is_valid():
         return Response(

@@ -634,3 +634,81 @@ class CompanyStaffManagementTests(APITestCase):
             self.operator.company_id,
             self.company.id
         )
+
+
+class UserDirectoryTests(APITestCase):
+    def test_only_superusers_get_the_user_directory(self):
+        url = reverse("users:user-api-root")
+        passenger = User.objects.create_user(
+            username="p", password="pw-123456", phone_number="+254700000101",
+        )
+        admin = User.objects.create_superuser(
+            username="a", password="pw-123456", phone_number="+254700000102",
+            email="a@example.com",
+        )
+
+        self.assertIn("endpoints", self.client.get(url).data)
+        self.client.force_authenticate(passenger)
+        self.assertIn("endpoints", self.client.get(url).data)
+
+        self.client.force_authenticate(admin)
+        rows = self.client.get(url).data
+        self.assertEqual({r["username"] for r in rows}, {"p", "a"})
+        self.assertNotIn("password", rows[0])
+
+
+class StaffManagementGuardTests(APITestCase):
+    def setUp(self):
+        from companies.models import Company
+        self.company = Company.objects.create(name="C", areas_served="x")
+        self.manager = User.objects.create_user(
+            username="m", password="pw-123456", phone_number="+254700000201",
+            role="company_manager", company=self.company,
+        )
+        self.staff = User.objects.create_user(
+            username="s", password="pw-123456", phone_number="+254700000202",
+            role="company_operator", company=self.company,
+        )
+        self.client.force_authenticate(self.manager)
+
+    def _url(self, pk):
+        return reverse("users:company-staff-detail", kwargs={"staff_id": pk})
+
+    def test_staff_password_change_uses_password_validators(self):
+        r = self.client.patch(self._url(self.staff.id), {"password": "abcdef"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        r = self.client.patch(self._url(self.staff.id), {"password": "Matatu-Route-58"}, format="json")
+        self.assertEqual(r.status_code, 200)
+
+    def test_manager_cannot_delete_own_account(self):
+        r = self.client.delete(self._url(self.manager.id))
+        self.assertEqual(r.status_code, 400)
+        self.assertTrue(User.objects.filter(pk=self.manager.pk).exists())
+
+    def test_manager_cannot_change_own_role_or_deactivate_self(self):
+        for body in ({"role": "company_operator"}, {"is_active": False}):
+            r = self.client.patch(self._url(self.manager.id), body, format="json")
+            self.assertEqual(r.status_code, 400)
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.role, "company_manager")
+        self.assertTrue(self.manager.is_active)
+
+
+class PlatformAdminRightsTests(APITestCase):
+    def test_platform_admin_role_without_superuser_gets_no_admin_power(self):
+        fake = User.objects.create_user(
+            username="fake", password="pw-123456", phone_number="+254700000301",
+            role="platform_admin",
+        )
+        self.client.force_authenticate(fake)
+        self.assertEqual(self.client.get("/api/bookings/all/").status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse("users:profile")).data["role"], "passenger")
+
+    def test_superuser_role_is_always_platform_admin(self):
+        su = User.objects.create_superuser(
+            username="su", password="pw-123456", phone_number="+254700000302",
+            email="su@example.com", role="company_manager",
+        )
+        su.refresh_from_db()
+        self.assertEqual(su.role, "platform_admin")

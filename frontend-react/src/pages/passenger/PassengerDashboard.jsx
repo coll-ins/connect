@@ -331,7 +331,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
   const selectedRoute=useMemo(()=>routes.find(r=>String(r.id)===String(route)),[routes,route]);
   const firstStageId=(selectedRoute?.pickup_stages||[]).filter(st=>st.is_active!==false)[0]?.id;
-  const canBookTrip=(t)=>t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId));
+  const seatsLeft=(t)=>Math.max(0,(t.capacity||0)-(t.booked_seats||0));
+  const canBookTrip=(t)=>seatsLeft(t)>0&&(t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId)));
+  const tripButtonLabel=(t)=>{
+    if(seatsLeft(t)<=0) return 'Fully booked';
+    if(canBookTrip(t)) return 'Select trip →';
+    if(t.status==='boarding') return 'Boarding at first stage only';
+    return 'Unavailable';
+  };
   const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1);setPickup(user?.location||'Main Stage')};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
@@ -380,6 +387,18 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   };
 
   const [journeyStep, setJourneyStep] = useState(urlJourney.step);
+
+  // "Pay now" from My bookings lands here as ?pay=<booking id>. Read it once:
+  // the journey URL sync below rewrites the query string.
+  const payRequest = useRef(new URLSearchParams(location.search).get('pay'));
+  useEffect(() => {
+    const id = payRequest.current;
+    if (!id) return;
+    const b = bookings.find((x) => String(x.booking_id) === id);
+    if (!b) return;
+    payRequest.current = null;
+    setPaymentBooking({ ...b, booking_id: b.booking_id });
+  }, [bookings]);
   const [journeyMode, setJourneyMode] = useState(urlJourney.mode);
 
   const locationRef = useRef(location);
@@ -447,6 +466,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     setOtherPickup('');
     setJourneyStep('trips');
   };
+
+  // The pickup stage lives only in memory: after a reload on the trips step
+  // it is gone and booking would fail, so send the passenger to pick it again.
+  useEffect(() => {
+    if (journeyStep === 'trips' && route && !selectedStage && !otherPickup.trim()) {
+      setJourneyStep('stages');
+    }
+  }, [journeyStep, route, selectedStage, otherPickup]);
 
   const goBack = () => {
     setError('');
@@ -1098,7 +1125,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                       🚌 {t.driver_bus_number || 'Bus pending'}
                     </span>
                     <span>
-                      💺 {t.capacity || 0} seats
+                      💺 {seatsLeft(t)} of {t.capacity || 0} seats left
                     </span>
                     <span>
                       {t.status}
@@ -1114,9 +1141,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                       title={t.status === 'boarding' && !canBookTrip(t) ? 'Boarding has started: only the first stage can be booked' : undefined}
                       onClick={() => startBooking(t)}
                     >
-                      {t.status === 'scheduled'
-                        ? 'Select trip →'
-                        : 'Unavailable'}
+                      {tripButtonLabel(t)}
                     </button>
                   </div>
 
@@ -1176,13 +1201,13 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                   className="input"
                   type="number"
                   min="1"
-                  max="20"
+                  max={Math.min(20, seatsLeft(bookingTrip))}
                   value={seats}
                   onChange={(e) =>
                     setSeats(
                       Math.max(
                         1,
-                        Math.min(20, Number(e.target.value) || 1)
+                        Math.min(20, seatsLeft(bookingTrip), Number(e.target.value) || 1)
                       )
                     )
                   }

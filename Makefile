@@ -1,4 +1,4 @@
-.PHONY: setup migrate backend frontend test test-backend test-e2e lint build
+.PHONY: setup migrate backend frontend test test-backend test-e2e test-fullstack lint build
 
 setup:
 	python3 -m venv backend/.venv
@@ -9,7 +9,7 @@ setup:
 	@if [ ! -f backend/.env ]; then cp backend/.env.example backend/.env; fi
 
 migrate:
-	cd backend && .venv/bin/python manage.py migrate
+	cd backend && .venv/bin/python manage.py migrate && .venv/bin/python manage.py createcachetable
 
 backend:
 	cd backend && .venv/bin/python manage.py runserver 0.0.0.0:8000
@@ -17,13 +17,16 @@ backend:
 frontend:
 	cd frontend-react && npm run dev -- --host 0.0.0.0
 
-test: test-backend test-e2e
+test: test-backend test-e2e test-fullstack
 
 test-backend:
 	cd backend && .venv/bin/python manage.py test --keepdb --verbosity 1
 
 test-e2e:
 	cd frontend-react && npm run test:e2e
+
+test-fullstack:
+	cd frontend-react && npx playwright test -c playwright.fullstack.config.js
 
 lint:
 	cd backend && .venv/bin/pyflakes users/
