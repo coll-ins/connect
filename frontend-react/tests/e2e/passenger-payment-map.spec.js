@@ -283,6 +283,128 @@ test('a trip that has not started shows the bus parked at the first stage', asyn
   expect(liveLocationRequests()).toBe(0);
 });
 
+test('the map says what to do next and shows the boarding PIN', async ({ page }) => {
+  await setPassengerSession(page);
+  await stubPaymentReturnApi(page);
+
+  await page.route('**/api/bookings/my/', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          ...confirmedBooking,
+          verification_pin: '482913',
+          departure_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          route_start_point: 'CBD',
+        },
+      ]),
+    }),
+  );
+
+  await page.goto('/passenger/map?booking=42');
+
+  const guide = page.locator('.passenger-live-map__guide');
+  await expect(guide).toContainText('Your bus is waiting at CBD');
+  await expect(guide).toContainText('Be at Westlands');
+  await expect(guide).toContainText('482913');
+});
+
+test('a bus that leaves its route gets a new blue road', async ({ page }) => {
+  test.setTimeout(60000);
+  await setPassengerSession(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition() {},
+        watchPosition() {
+          return 1;
+        },
+        clearWatch() {},
+      },
+    });
+  });
+
+  const bookingsResponse = [{
+    ...confirmedBooking,
+    trip_status: 'departed',
+    verification_pin: '482913',
+  }];
+  let rerouteRequests = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    const json = (body) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+
+    if (url.pathname === '/api/users/profile/') return json({ user: passengerUser });
+    if (url.pathname === '/api/bookings/my/') return json(bookingsResponse);
+    if (url.pathname === '/api/bookings/42/reroute/') {
+      rerouteRequests += 1;
+      expect(url.searchParams.get('goal')).toBe('pickup');
+      return json({
+        goal: 'pickup',
+        distance_m: 3000,
+        geometry: {
+          type: 'LineString',
+          coordinates: [[36.84, -1.3], [36.82, -1.28], [36.81, -1.267]],
+        },
+      });
+    }
+    if (url.pathname === '/api/bookings/42/live-location/') {
+      return json({
+        route_name: 'Airport Express',
+        trip_status: 'departed',
+        is_trip_live: true,
+        is_stale: false,
+        location_age_seconds: 1,
+        boarded: false,
+        driver: {
+          latitude: -1.3,
+          longitude: 36.84,
+          location_updated_at: new Date().toISOString(),
+        },
+        pickup: { name: 'Westlands', latitude: -1.267, longitude: 36.81 },
+        stages: [],
+      });
+    }
+    return json({});
+  });
+
+  await page.goto('/passenger/map?booking=42');
+
+  const guide = page.locator('.passenger-live-map__guide');
+  await expect(guide).toContainText('Your bus took another road', { timeout: 30000 });
+  await expect(guide).toContainText('It is still coming to Westlands');
+  await expect(page.getByText(/new route shown in blue/).first()).toBeVisible();
+  expect(rerouteRequests).toBe(1);
+});
+
+test('a trip that ended shows that you have arrived', async ({ page }) => {
+  await setPassengerSession(page);
+  await stubPaymentReturnApi(page);
+
+  await page.route('**/api/bookings/my/', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { ...confirmedBooking, status: 'completed', trip_status: 'completed' },
+      ]),
+    }),
+  );
+
+  await page.goto('/passenger/map?booking=42');
+
+  await expect(page.getByText('You have arrived')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'My bookings' })).toBeVisible();
+});
+
 test('payment connection errors are explained in a top notice', async ({ page }) => {
   await setPassengerSession(page);
   await stubPaymentReturnApi(page, { failVerification: true });

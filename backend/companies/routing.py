@@ -9,14 +9,14 @@ class RoutingError(Exception):
     pass
 
 
-def road_line(points):
+def road_line(points, timeout=20):
     """points = [(lat, lng), ...]. Returns (GeoJSON LineString, distance in metres)."""
     base = getattr(settings, 'ROUTING_URL', 'https://router.project-osrm.org/route/v1/driving')
     coords = ';'.join(f'{lng:.6f},{lat:.6f}' for lat, lng in points)
     url = f'{base}/{coords}?overview=full&geometries=geojson&steps=false&continue_straight=true'
     req = urllib.request.Request(url, headers={'User-Agent': 'ConnectMatatuBooking/1.0'})
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode('utf-8'))
     except Exception as exc:
         raise RoutingError('The road service is not reachable right now. Try again in a moment.') from exc
