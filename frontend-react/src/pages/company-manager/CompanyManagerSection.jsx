@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { apiRequest } from '../../api';
+import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 
 const EMPTY_COPY = {
@@ -573,8 +574,10 @@ export default function CompanyManagerSection({ section }) {
   };
 
   const changeTripStatus = async (trip, status) => {
+    if (!confirmTripCancel(status)) return;
+
     try {
-      await apiRequest(
+      const result = await apiRequest(
         `/companies/trips/${trip.id}/status/`,
         {
           method: 'POST',
@@ -582,7 +585,11 @@ export default function CompanyManagerSection({ section }) {
         }
       );
 
-      setMessage('Trip status updated.');
+      setMessage(
+        status === 'cancelled'
+          ? tripCancelSummary(result)
+          : 'Trip status updated.'
+      );
       load();
     } catch (err) {
       setError(err.message);

@@ -31,6 +31,7 @@ import {
   Navigate,
 } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 
 const money = (value) =>
@@ -2143,8 +2144,10 @@ export default function PlatformAdminDashboard() {
   };
 
   const updateTripStatus = async (trip, status) => {
+    if (!confirmTripCancel(status)) return;
+
     try {
-      await apiRequest(
+      const result = await apiRequest(
         `/companies/trips/${trip.id}/status/`,
         {
           method: 'POST',
@@ -2153,7 +2156,9 @@ export default function PlatformAdminDashboard() {
       );
 
       setCommandMessage(
-        `Trip ${trip.id} changed to ${status}.`
+        status === 'cancelled'
+          ? tripCancelSummary(result)
+          : `Trip ${trip.id} changed to ${status}.`
       );
 
       await load();
