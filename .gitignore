@@ -39,3 +39,6 @@ routes_stages_backup.json
 *.bak
 node_modules/
 smoke.sqlite3
+
+# Nexus / editor tooling (installed per machine, never committed)
+.claude/
