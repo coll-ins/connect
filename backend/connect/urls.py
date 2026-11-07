@@ -15,7 +15,13 @@ from companies.simulation import (
 )
 
 def health_check(request):
-    return JsonResponse({'status': 'ok', 'service': 'CONNECT API'})
+    from connect import startup
+
+    return JsonResponse({
+        'status': 'ok',
+        'service': 'CONNECT API',
+        'admin_setup': startup.admin_setup,
+    })
 
 def system_diagnostics(request):
     if not request.user.is_authenticated:

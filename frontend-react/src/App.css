@@ -5429,7 +5429,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .booking-modal-rows {
   display: grid;
   gap: 10px;
-  margin: 12px 0;
+  margin: 10px 0;
 }
 
 .booking-seat-row {
@@ -5475,14 +5475,28 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   font-variant-numeric: tabular-nums;
 }
 
+/* The window never scrolls as a whole: only the trip details can, so the seat
+   buttons and Confirm stay on screen on any phone, whatever its browser bars. */
+.modal.modern-booking-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  max-height: calc(100dvh - 16px);
+  overflow: hidden;
+}
+
+.booking-modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .booking-modal-footer {
-  position: sticky;
-  bottom: -16px;
+  flex: none;
   display: grid;
   gap: 10px;
-  margin: 0 -4px -4px;
-  padding: 8px 4px 4px;
-  background: var(--surface);
+  padding-top: 10px;
+  border-top: 1px solid var(--border-strong);
 }
 
 .booking-modal-footer .booking-total-glass {

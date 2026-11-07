@@ -112,7 +112,7 @@ function PaymentModal({
   return createPortal(<div className="modal-backdrop"><div className="modal">
     <button className="btn btn-ghost modal-close" onClick={onClose}>Close</button>
     <p className="eyebrow">Booking {booking.booking_number}</p>
-    <h2>{money(booking.total_amount)}</h2><p className="muted">Choose how you want to complete this trip.</p>
+    <h2>{money(booking.total_amount)}</h2>{step!=='mpesa-number' && <p className="muted">Choose how you want to complete this trip.</p>}
     {error && (
       <NoticeStack>
         <Notice title="Payment issue" onClose={() => setError('')}>
@@ -129,7 +129,7 @@ function PaymentModal({
       <button className="pay-option" onClick={card} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Card</strong><span>Secure Paystack checkout. Card authentication stays with Paystack.</span></div></button>
       <button className="btn btn-ghost" onClick={()=>setStep('method')}>← Back</button>
     </div>}
-    {step==='mpesa-number' && <div style={{marginTop:18}}>
+    {step==='mpesa-number' && <div style={{marginTop:10}}>
       <button
         className="pay-option"
         onClick={()=>mpesa('')}
@@ -143,7 +143,7 @@ function PaymentModal({
         </div>
       </button>
 
-      <div style={{marginTop:16,padding:16,border:'1px solid #ddd',borderRadius:12}}>
+      <div style={{marginTop:10,padding:12,border:'1px solid #ddd',borderRadius:12}}>
         <strong>Pay with another number</strong>
         <p className="muted" style={{marginTop:6}}>
           Enter the M-PESA number you want to use.
@@ -1183,7 +1183,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       {bookingTrip && createPortal(
         <div className="modal-backdrop">
           <div className="modal modern-booking-modal">
-
+            <div className="booking-modal-scroll">
             <button
               type="button"
               className="btn btn-ghost modal-close"
@@ -1220,6 +1220,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
             <div className="booking-modal-rows">
               <div className="booking-seat-row">
+                <span>Boarding at</span>
+                <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
+              </div>
+            </div>
+            </div>
+
+            <div className="booking-modal-footer">
+              <div className="booking-seat-row">
                 <span>Seats</span>
                 <div className="booking-seat-stepper">
                   <button
@@ -1244,13 +1252,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 </div>
               </div>
 
-              <div className="booking-seat-row">
-                <span>Boarding at</span>
-                <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
-              </div>
-            </div>
-
-            <div className="booking-modal-footer">
               <div className="booking-total-glass">
                 <span>Total journey cost</span>
                 <strong>

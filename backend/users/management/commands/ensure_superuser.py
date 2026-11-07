@@ -15,6 +15,8 @@ from users.throttles import clear_login_failures
 
 class Command(BaseCommand):
     help = 'Ensure a platform superuser exists (ADMIN_PHONE, ADMIN_PASSWORD).'
+    # Outcome code for the health check. It never holds a credential.
+    outcome = 'not_configured'
 
     def handle(self, *args, **opts):
         phone = canonical_phone(os.environ.get('ADMIN_PHONE', ''))
@@ -27,6 +29,7 @@ class Command(BaseCommand):
         user = User.objects.filter(phone_number__in=phone_variants(phone)).first()
         if user is not None and user.company_id and not user.is_superuser:
             # Never turn a company staff account into a platform admin.
+            self.outcome = 'company_account'
             self.stderr.write('superuser not ensured: ADMIN_PHONE belongs to a company account')
             return
         if user is None:
@@ -42,7 +45,9 @@ class Command(BaseCommand):
                 user.save()
         except IntegrityError:
             # A taken ADMIN_USERNAME must not stop the server from starting.
+            self.outcome = 'username_taken'
             self.stderr.write('superuser not ensured: ADMIN_USERNAME is already taken')
             return
         clear_login_failures(phone)
+        self.outcome = 'ready'
         self.stdout.write('superuser ensured')
