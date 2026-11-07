@@ -81,7 +81,8 @@ export default function PassengerMapPage() {
         const tripStatus = String(item.trip_status || '').toLowerCase();
 
         return (
-          bookingStatus === 'confirmed' &&
+          (bookingStatus === 'confirmed' ||
+            (bookingStatus === 'completed' && item.boarded === true)) &&
           ['boarding', 'departed'].includes(tripStatus) &&
           Boolean(item.driver_id)
         );

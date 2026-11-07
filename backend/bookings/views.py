@@ -35,6 +35,7 @@ from wallets.models import Wallet, WalletTransaction
 from .models import Booking, BookingHold, Payment, BoardingEvent
 from .services import (
     settle_booking_fault,
+    cancel_dead_pending_bookings,
     trip_has_departed,
     create_booking_hold,
     release_booking_hold,
@@ -1685,6 +1686,10 @@ def get_my_bookings(request):
             status=status.HTTP_401_UNAUTHORIZED
         )
 
+    # Do not depend on the scheduled jobs: a passenger must never see a
+    # booking waiting for a payment that can no longer be accepted.
+    cancel_dead_pending_bookings(Booking.objects.filter(user=request.user))
+
     bookings = (
         Booking.objects
         .filter(user=request.user)
@@ -1693,6 +1698,7 @@ def get_my_bookings(request):
             'trip__driver',
             'pickup_stage',
             'payment',
+            'boarding_event',
         )
         .order_by('-created_at')
     )
@@ -1709,6 +1715,7 @@ def get_my_bookings(request):
             'booking_id': b.id,
             'booking_number': b.booking_number,
             'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
+            'boarded': hasattr(b, 'boarding_event'),
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
             'trip_status': trip.status if trip else None,
@@ -3268,6 +3275,21 @@ def verify_boarding(request, booking_id):
 # ============================================================
 
 
+def _passenger_can_track(booking):
+    """
+    Confirmed, or on board with the trip still running. Boarding marks a
+    booking 'completed' for settlement, but the passenger is still riding.
+    """
+    if booking.status == 'confirmed':
+        return True
+    return (
+        booking.status == 'completed'
+        and hasattr(booking, 'boarding_event')
+        and booking.trip is not None
+        and booking.trip.status in ('boarding', 'departed')
+    )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def booking_live_location(request, booking_id):
@@ -3333,7 +3355,11 @@ def booking_live_location(request, booking_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    if booking.status in ('cancelled', 'no_show', 'completed') and not is_platform_admin:
+    if (
+        booking.status in ('cancelled', 'no_show', 'completed')
+        and not is_platform_admin
+        and not _passenger_can_track(booking)
+    ):
         return Response(
             {'error': 'This booking is no longer active.'},
             status=status.HTTP_409_CONFLICT,
@@ -3348,7 +3374,7 @@ def booking_live_location(request, booking_id):
             if booking.trip else ''
         )
         if (
-            booking.status != 'confirmed'
+            not _passenger_can_track(booking)
             or trip_status not in ('boarding', 'departed')
             or booking.driver_id is None
         ):
@@ -3391,7 +3417,10 @@ def booking_live_location(request, booking_id):
 
     can_see_contacts = (
         ((is_passenger or is_assigned_driver)
-         and booking.status in ('pending', 'confirmed'))
+         and (
+             booking.status in ('pending', 'confirmed')
+             or _passenger_can_track(booking)
+         ))
         or is_company_staff
         or is_platform_admin
     )
@@ -3539,7 +3568,7 @@ def booking_reroute(request, booking_id):
 
     driver = booking.driver
     if (
-        booking.status != 'confirmed'
+        not _passenger_can_track(booking)
         or driver is None
         or not trip_is_live(booking.trip)
         or location_freshness(driver)['is_stale']
@@ -3601,7 +3630,7 @@ def update_passenger_location(request, booking_id):
         if booking.trip else ''
     )
     if (
-        booking.status != 'confirmed'
+        not _passenger_can_track(booking)
         or trip_status not in ('boarding', 'departed')
         or booking.driver_id is None
     ):
