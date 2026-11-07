@@ -28,6 +28,17 @@ def normalize_phone_number(phone_number):
     return f'+254{digits}' if digits else ''
 
 
+def session_role(user):
+    """Platform admin is is_superuser and nothing else: a stored
+    'platform_admin' role without superuser grants nothing, so it must not
+    open the admin screens either."""
+    if user.is_superuser:
+        return 'platform_admin'
+    if user.role == 'platform_admin':
+        return 'passenger'
+    return user.role
+
+
 def serialize_session_user(user):
     company = getattr(user, 'company', None)
     return {
@@ -38,7 +49,7 @@ def serialize_session_user(user):
         'phone': user.phone_number,
         'phone_number': user.phone_number,
         'location': user.location,
-        'role': 'platform_admin' if user.is_superuser else user.role,
+        'role': session_role(user),
         'company_id': user.company_id,
         'company_name': company.name if company else None,
         'is_staff': user.is_staff,
@@ -195,6 +206,22 @@ def user_profile(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def user_api_root(request):
+    # The platform-admin Users screen reads the directory from this URL.
+    if request.user.is_authenticated and request.user.is_superuser:
+        users = CustomUser.objects.select_related('company').order_by('id')
+        return Response([
+            {
+                'id': u.id,
+                'username': u.username,
+                'email': u.email,
+                'phone_number': u.phone_number,
+                'role': session_role(u),
+                'company': u.company_id,
+                'company_name': u.company.name if u.company else None,
+                'is_active': u.is_active,
+            }
+            for u in users
+        ])
     return Response(
         {
             'message': 'CONNECT Users API',
@@ -456,6 +483,11 @@ def company_staff_detail(request, staff_id):
             )
 
     if request.method == 'DELETE':
+        if staff_user.pk == user.pk:
+            return Response(
+                {'error': 'You cannot remove your own account.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         staff_user.delete()
 
         return Response(
@@ -477,6 +509,15 @@ def company_staff_detail(request, staff_id):
 
     requested_role = serializer.validated_data.get('role')
 
+    if staff_user.pk == user.pk and (
+        'role' in serializer.validated_data
+        or 'is_active' in serializer.validated_data
+    ):
+        return Response(
+            {'error': 'You cannot change your own role or active status.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     if requested_role is not None and requested_role not in COMPANY_STAFF_ROLES:
         return Response(
             {'error': 'Invalid company staff role.'},
@@ -492,9 +533,11 @@ def company_staff_detail(request, staff_id):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if len(password) < 6:
+        try:
+            validate_password(password, staff_user)
+        except DjangoValidationError as exc:
             return Response(
-                {'error': 'password must be at least 6 characters.'},
+                {'error': ' '.join(exc.messages)},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

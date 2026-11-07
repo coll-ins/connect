@@ -2642,8 +2642,14 @@
   padding: 13px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 13px;
   border-radius: 15px;
+}
+
+/* Keep the name readable when price + actions fill a narrow grid column. */
+.company-record-card .company-record-main {
+  flex: 1 1 140px;
 }
 
 .company-record-sub {

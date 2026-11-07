@@ -107,3 +107,14 @@
   transform: translateY(-2px); border-color: rgba(98,217,175,.30);
 }
 .records-list { gap: 12px; }
+
+.data-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.data-card-actions .btn {
+  min-height: 44px;
+}

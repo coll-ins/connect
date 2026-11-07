@@ -605,7 +605,14 @@ def initialize_mpesa_payment(request, booking_id):
 # PAYMENT STATUS / VERIFY
 # ============================================================
 
-def _mark_payment_confirmed(payment, paystack_amount):
+def _currency_ok(currency):
+    # Reject a currency Paystack reports as something other than KES. A
+    # missing field is not rejected: the amount check still applies and the
+    # payload shape is not verified against Paystack's docs.
+    return currency is None or str(currency).strip().upper() == 'KES'
+
+
+def _mark_payment_confirmed(payment, paystack_amount, currency):
     """
     Confirm a Paystack payment and create the internal financial hold.
 
@@ -621,7 +628,7 @@ def _mark_payment_confirmed(payment, paystack_amount):
 
     expected_amount = int(payment.amount * Decimal('100'))
 
-    if int(paystack_amount) != expected_amount:
+    if int(paystack_amount) != expected_amount or not _currency_ok(currency):
         payment.status = 'failed'
         payment.save(update_fields=['status'])
         return False
@@ -713,6 +720,7 @@ def payment_status(request, booking_id):
                 _mark_payment_confirmed(
                     payment,
                     data.get('amount', 0),
+                    data.get('currency'),
                 )
 
             if getattr(payment, '_needs_refund', False):
@@ -781,7 +789,7 @@ def verify_paystack_payment(request, booking_id):
     if data.get('status') == 'success':
         with transaction.atomic():
             payment = Payment.objects.select_for_update().select_related('booking').get(pk=payment.pk)
-            _mark_payment_confirmed(payment, data.get('amount', 0))
+            _mark_payment_confirmed(payment, data.get('amount', 0), data.get('currency'))
 
         if getattr(payment, '_needs_refund', False):
             try:
@@ -911,7 +919,7 @@ def paystack_webhook(request):
             # The amount must match what CONNECT expected.
             if (
                 paystack_amount != expected_amount
-                or data.get('currency', 'KES') != 'KES'
+                or not _currency_ok(data.get('currency'))
             ):
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
@@ -1791,9 +1799,14 @@ def get_all_bookings(request):
         )
 
     company_id = request.query_params.get('company_id')
+    if company_id and not str(company_id).isdigit():
+        return Response(
+            {'error': 'company_id must be a number.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     # Platform superuser can view bookings across all companies.
-    if request.user.is_superuser or request.user.role == 'platform_admin':
+    if request.user.is_superuser:
         bookings = Booking.objects.all()
 
         if company_id:
@@ -1908,6 +1921,7 @@ def get_booking_detail(request, booking_id):
             'company_operator',
         }
         and user.company_id == booking.route.company_id
+        and can_handle_route(user, booking.route_id)
     )
 
     if (
@@ -2346,6 +2360,7 @@ def cancel_booking(request, booking_id):
                             'company_operator',
                         }
                         and user.company_id == booking.route.company_id
+                        and can_handle_route(user, booking.route_id)
                     )
                 )
             ):
@@ -2437,6 +2452,7 @@ def cancel_booking(request, booking_id):
                         'company_operator',
                     }
                     and user.company_id == booking.route.company_id
+                    and can_handle_route(user, booking.route_id)
                 )
             ):
                 return Response(
@@ -2492,15 +2508,50 @@ def cancel_booking(request, booking_id):
             # Paystack definitely refunded nothing: undo the cancellation
             # and free the reservation so a retry starts clean.
             release_refund_claim(refund_claim)
+            seat_lost = False
             with transaction.atomic():
+                # Same lock order as the cancel above: trip, then booking.
+                # The seat may have been resold or the trip may have left
+                # while Paystack was being called.
+                locked_trip = (
+                    Trip.objects.select_for_update()
+                    .filter(pk=booking_ref.trip_id).first()
+                    if booking_ref.trip_id else None
+                )
                 restored = (
                     Booking.objects
                     .select_for_update()
                     .get(pk=booking_id)
                 )
                 if restored.status == 'cancelled':
-                    restored.status = previous_status
-                    restored.save(update_fields=['status'])
+                    seat_free = locked_trip is None or (
+                        not trip_has_departed(locked_trip)
+                        and sum(
+                            b.seats for b in locked_trip.bookings.exclude(
+                                status='cancelled'
+                            )
+                        ) + restored.seats <= locked_trip.capacity
+                    )
+                    if seat_free:
+                        restored.status = previous_status
+                        restored.save(update_fields=['status'])
+                    else:
+                        seat_lost = True
+            if seat_lost:
+                _alert_payment_problem(
+                    refund_claim.provider_reference,
+                    f'refund for booking {refund_claim.booking_number} was '
+                    f'rejected and its seat is gone; refund it manually',
+                )
+                return Response(
+                    {
+                        'error': (
+                            f'{exc} The booking stays cancelled and our '
+                            'team has been alerted to refund you.'
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
             return Response(
                 {'error': str(exc)},
                 status=status.HTTP_409_CONFLICT

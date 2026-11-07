@@ -225,3 +225,17 @@ class DemoSimulationApiTests(TestCase):
             DemoTripSimulation.objects.get(pk=simulation_id).status,
             'expired',
         )
+
+
+class DemoPathSpacingTests(TestCase):
+    def test_path_points_are_evenly_spaced_along_the_road(self):
+        from connect.demo_simulation import _meters, _resample_evenly
+        # A road whose map points are dense in one stretch and sparse in another.
+        road = [[-1.30, 36.80 + i * 0.0001] for i in range(50)]
+        road += [[-1.30, 36.805 + i * 0.01] for i in range(1, 4)]
+        path = _resample_evenly(road)
+        gaps = [_meters(a, b) for a, b in zip(path, path[1:])]
+        self.assertGreaterEqual(len(path), 60)
+        self.assertLess(max(gaps) / min(gaps), 1.01)
+        self.assertEqual(path[0], [-1.30, 36.80])
+        self.assertAlmostEqual(path[-1][1], 36.835, places=5)

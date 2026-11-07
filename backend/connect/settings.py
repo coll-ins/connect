@@ -311,7 +311,9 @@ REST_FRAMEWORK['NUM_PROXIES'] = int(os.getenv('NUM_PROXIES', '0'))
 if not DEBUG:
     # Private-network CORS is for local development only.
     CORS_ALLOWED_ORIGIN_REGEXES = []
-    for _required in ('ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL'):
+    # NUM_PROXIES must be explicit: left at 0 behind a proxy, every client
+    # shares the proxy's IP and per-IP login/anon throttles stop working.
+    for _required in ('ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL', 'NUM_PROXIES'):
         if not os.getenv(_required):
             raise ValueError(f'CRITICAL: {_required} must be set in production.')
     if not ADMIN_ALERT_PHONE_NUMBERS:

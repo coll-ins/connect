@@ -61,7 +61,7 @@ class LatePaymentOutsideTransactionTests(_Fixture, TransactionTestCase):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
             'status': True,
-            'data': {'status': 'success', 'amount': 80000},
+            'data': {'status': 'success', 'amount': 80000, 'currency': 'KES'},
         }
         seen, fake_post = self._spy()
         client = APIClient()
