@@ -32,7 +32,10 @@
     height: 20px;
   }
 
-  .journey-back,
+  .journey-back {
+    min-height: 44px;
+  }
+
   .driver-timetable-link,
   .company-panel-header a,
   .company-section-head a {

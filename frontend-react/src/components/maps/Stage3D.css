@@ -9,5 +9,5 @@
 .stage3d__shadow{position:absolute;left:9px;bottom:0;width:16px;height:6px;border-radius:50%;
   background:rgba(0,0,0,.35);filter:blur(2px)}
 .stage3d__badge{position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;
-  border-radius: 10px;background: var(--accent);color: var(--text);font:700 11px/18px system-ui;text-align:center;
+  border-radius: 10px;background: var(--accent);color: var(--accent-ink);font:700 11px/18px system-ui;text-align:center;
   border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.4)}

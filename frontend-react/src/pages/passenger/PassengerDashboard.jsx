@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Armchair, ArrowUpRight, Banknote, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
 
 import { apiRequest } from '../../api';
-import { useAuth } from '../../context/AuthContext';
 import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
@@ -243,7 +242,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const urlJourney = fromSearch(location.search, initialJourneyStep);
-  const { user } = useAuth();
   const [companies,setCompanies]=useState([]),[routes,setRoutes]=useState([]),[trips,setTrips]=useState([]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
@@ -254,7 +252,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
-  const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1),[pickup,setPickup]=useState(user?.location||'Main Stage');
+  const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1);
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
@@ -340,7 +338,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if(t.status==='boarding') return 'Boarding at first stage only';
     return 'Unavailable';
   };
-  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1);setPickup(user?.location||'Main Stage')};
+  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1)};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
 
@@ -1198,14 +1196,10 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 />
               </label>
 
-              <label className="field">
-                Pickup location
-                <input
-                  className="input"
-                  value={pickup}
-                  onChange={(e) => setPickup(e.target.value)}
-                />
-              </label>
+              <div className="field">
+                Boarding at
+                <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
+              </div>
 
               <div className="booking-total-glass">
                 <span>Total journey cost</span>

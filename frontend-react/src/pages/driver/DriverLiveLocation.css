@@ -230,7 +230,7 @@
 
 .driver-live-page .driver-live-stage-assigned > strong {
   background: var(--accent) !important;
-  color: var(--text) !important;
+  color: var(--accent-ink) !important;
 }
 
 .driver-live-page .driver-live-bookings > div {
@@ -255,7 +255,7 @@
   border: 1px solid rgba(255, 255, 255, 0.16) !important;
   border-radius: 14px !important;
   background: var(--accent) !important;
-  color: var(--text) !important;
+  color: var(--accent-ink) !important;
   font-weight: 700;
 }
 

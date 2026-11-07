@@ -1184,7 +1184,7 @@ def route_map_data(request, route_id):
                 passengers.append({
                     "booking_id": booking.id,
                     "booking_number": booking.booking_number,
-                    "passenger": booking.user.username,
+                    "passenger": booking.user.display_name,
                     "passenger_phone": booking.user.phone_number,
                     "seats": booking.seats,
                     "status": booking.status,

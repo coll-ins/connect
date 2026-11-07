@@ -1856,7 +1856,7 @@ def get_all_bookings(request):
     data = [{
         'booking_id': b.id,
         'booking_number': b.booking_number,
-        'user': b.user.username,
+        'user': b.user.display_name,
         'user_phone': b.user.phone_number,
         'company_id': b.route.company_id,
         'company_name': b.route.company.name,
@@ -1937,7 +1937,7 @@ def get_booking_detail(request, booking_id):
     data = {
         'booking_id': booking.id,
         'booking_number': booking.booking_number,
-        'user': booking.user.username,
+        'user': booking.user.display_name,
         'trip_id': booking.trip.id if booking.trip else None,
         'route_name': booking.route.name,
         'pickup_location': booking.pickup_location,
@@ -3435,7 +3435,7 @@ def booking_live_location(request, booking_id):
             'incident': _active_incident_payload(booking),
 
             'passenger': {
-                'name': passenger_user.username,
+                'name': passenger_user.display_name,
                 'phone': (
                     passenger_user.phone_number
                     if can_see_contacts else None
@@ -4081,7 +4081,7 @@ def get_driver_bookings(request, driver_id):
             "booking_number": booking.booking_number,
             "seats": booking.seats,
             "status": booking.status,
-            "passenger": booking.user.username,
+            "passenger": booking.user.display_name,
             "passenger_name": (
                 booking.user.get_full_name().strip()
                 or ((booking.user.phone_number or "")[:6] + "…" + (booking.user.phone_number or "")[-3:])

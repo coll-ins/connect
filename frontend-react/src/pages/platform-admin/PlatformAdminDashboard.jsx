@@ -197,7 +197,7 @@ function PlatformShell({ logout, children }) {
           place-items: center;
           font-weight: 700;
           background: var(--accent);
-          color: white;
+          color: var(--accent-ink);
           box-shadow: none;
         }
 
@@ -660,7 +660,7 @@ function PlatformShell({ logout, children }) {
           border-radius: 999px;
           background: var(--accent);
           box-shadow: 0 2px 9px rgba(0,0,0,.4);
-          color: white;
+          color: var(--accent-ink);
           font-size: 11px;
           font-weight: 700;
         }

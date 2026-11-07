@@ -1410,7 +1410,7 @@
   background: var(--accent);
   border: 2px solid #ffffff;
 
-  color: var(--text);
+  color: var(--accent-ink);
 
   font-family: var(--font);
   font-size: 11px;
@@ -1509,7 +1509,7 @@
   border-radius: 999px;
 
   background: rgba(255, 255, 255, 0.94);
-  color: var(--accent);
+  color: #0b6b45;
 
   font-size: 11px;
   font-weight: 600;
@@ -1813,7 +1813,7 @@
   border-radius: 14px;
 
   background: var(--accent);
-  color: var(--text);
+  color: var(--accent-ink);
 
   font-size: 13px;
   font-weight: 700;
@@ -1964,7 +1964,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--text);
+  color: var(--accent-ink);
   font-weight: 700;
 }
 
@@ -2012,7 +2012,7 @@
 }
 
 .driver-nav-item.active {
-  color: var(--text);
+  color: var(--accent-ink);
   background: var(--accent);
   box-shadow: none;
 }
@@ -2239,7 +2239,7 @@
 
 .driver-primary-button {
   background: var(--accent);
-  color: var(--text);
+  color: var(--accent-ink);
   box-shadow: none;
 }
 
@@ -2695,7 +2695,7 @@
   background: var(--accent);
   border: 3px solid #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
-  color: var(--text);
+  color: var(--accent-ink);
   font-size: 11px;
 }
 
@@ -2961,7 +2961,7 @@
   place-items: center;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--text);
+  color: var(--accent-ink);
   font-weight: 700;
 }
 
@@ -3009,7 +3009,7 @@
 }
 
 .driver-nav-item.active {
-  color: var(--text);
+  color: var(--accent-ink);
   background: var(--accent);
   box-shadow: none;
 }
@@ -3236,7 +3236,7 @@
 
 .driver-primary-button {
   background: var(--accent);
-  color: var(--text);
+  color: var(--accent-ink);
   box-shadow: none;
 }
 
@@ -3692,7 +3692,7 @@
   background: var(--accent);
   border: 3px solid #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,.25);
-  color: var(--text);
+  color: var(--accent-ink);
   font-size: 11px;
 }
 
@@ -4315,7 +4315,7 @@
 
 .driver-live-stage-assigned > strong {
   background: var(--accent);
-  color: var(--text);
+  color: var(--accent-ink);
 }
 
 /* Route summary */
@@ -4660,7 +4660,7 @@
 
 .driver-live-stage-assigned > strong {
   background: var(--accent) !important;
-  color: var(--text) !important;
+  color: var(--accent-ink) !important;
 }
 
 /* Update button */

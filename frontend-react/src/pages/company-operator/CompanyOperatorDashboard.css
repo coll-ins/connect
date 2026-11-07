@@ -571,7 +571,7 @@
   padding: 0 13px;
   border-radius: 10px;
   background: var(--accent);
-  color: white;
+  color: var(--accent-ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
