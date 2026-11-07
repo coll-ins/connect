@@ -6,6 +6,31 @@ import Notice, { NoticeStack } from '../../components/ui/Notice';
 import PassengerLiveMap from './PassengerLiveMap';
 import { apiRequest } from '../../api';
 
+function endOfTrip(bookingStatus, tripStatus) {
+  if (bookingStatus === 'no_show') {
+    return {
+      title: 'You missed this bus',
+      detail: 'This booking was marked as a no-show.',
+    };
+  }
+
+  if (bookingStatus === 'cancelled' || tripStatus === 'cancelled') {
+    return {
+      title: 'This trip was cancelled',
+      detail: 'Check My bookings for your refund or another trip.',
+    };
+  }
+
+  if (bookingStatus === 'completed' || tripStatus === 'completed') {
+    return {
+      title: 'You have arrived',
+      detail: 'Your trip is complete. Thanks for riding with CONNECT.',
+    };
+  }
+
+  return null;
+}
+
 export default function PassengerMapPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,6 +57,7 @@ export default function PassengerMapPage() {
   const [loading, setLoading] = useState(!hasInitialBooking);
   const [error, setError] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
+  const [ended, setEnded] = useState(null);
   const bookingLoadInProgress = useRef(false);
   const hasLoadedBooking = useRef(Boolean(hasInitialBooking));
   const updateBooking = useCallback((nextBooking) => {
@@ -115,6 +141,7 @@ export default function PassengerMapPage() {
             updateBooking(null);
             setBookingPending(false);
             setTrackingAvailable(false);
+            setEnded(endOfTrip(bookingStatus, tripStatus));
             setError(message);
             return;
           }
@@ -175,17 +202,13 @@ export default function PassengerMapPage() {
   }, [loadBooking]);
 
   useEffect(() => {
-    if (
-      !requestedBookingId ||
-      trackingAvailable ||
-      (!bookingPending && !booking)
-    ) {
+    if (!requestedBookingId || (!bookingPending && !booking)) {
       return undefined;
     }
 
     const timer = window.setInterval(() => {
       if (!document.hidden) loadBooking();
-    }, 5000);
+    }, trackingAvailable ? 15000 : 5000);
 
     return () => window.clearInterval(timer);
   }, [booking, bookingPending, loadBooking, requestedBookingId, trackingAvailable]);
@@ -216,11 +239,12 @@ export default function PassengerMapPage() {
           </NoticeStack>
           <div className="glass-empty">
             <MapPin size={28} aria-hidden="true" />
-            <strong>No trip to track</strong>
+            <strong>{ended?.title || 'No trip to track'}</strong>
             <span>
-              {loadFailed
-                ? 'Check your connection and try again.'
-                : 'Live tracking starts once a trip you booked is boarding or on the road.'}
+              {ended?.detail ||
+                (loadFailed
+                  ? 'Check your connection and try again.'
+                  : 'Live tracking starts once a trip you booked is boarding or on the road.')}
             </span>
             <Link to="/passenger/bookings" className="glass-empty-action">
               My bookings
@@ -248,6 +272,7 @@ export default function PassengerMapPage() {
       <PassengerLiveMap
         bookingId={booking.booking_id || booking.id}
         bookingDetails={booking}
+        onTripChange={loadBooking}
         trackingAvailable={trackingAvailable}
         routeGeometry={
           booking.route_geometry ||

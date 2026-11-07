@@ -110,7 +110,7 @@ export async function apiRequest(endpoint, options = {}) {
     const message = e?.name === 'AbortError'
       ? 'CONNECT is taking longer than expected. Check your connection and try again.'
       : "We couldn't reach CONNECT. Check your internet connection and try again.";
-    notifyRequestError(message);
+    if (!options.silent) notifyRequestError(message);
     throw new Error(message, { cause: e });
   } finally {
     clearTimeout(timer);
@@ -133,7 +133,7 @@ export async function apiRequest(endpoint, options = {}) {
 
   if (!response.ok) {
     const message = getErrorMessage(response.status, data);
-    notifyRequestError(message);
+    if (!options.silent) notifyRequestError(message);
     const error = new Error(message);
     error.status = response.status;
     error.data = data;

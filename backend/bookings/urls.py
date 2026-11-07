@@ -20,6 +20,7 @@ urlpatterns = [
     path('<int:booking_id>/verify-boarding/', views.verify_boarding, name='verify-boarding'),
     path('<int:booking_id>/location/', views.update_passenger_location, name='update-passenger-location'),
     path('<int:booking_id>/live-location/', views.booking_live_location, name='booking-live-location'),
+    path('<int:booking_id>/reroute/', views.booking_reroute, name='booking-reroute'),
     path('<int:booking_id>/stage-departure/', views.set_stage_departure, name='set-stage-departure'),
     path('driver/<int:driver_id>/', views.get_driver_bookings, name='get-driver-bookings'),
     path('driver/<int:driver_id>/end-trip/', views.driver_end_trip, name='driver-end-trip'),

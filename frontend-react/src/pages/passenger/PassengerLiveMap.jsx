@@ -17,6 +17,7 @@ import {
   NextStageBanner,
 } from '../../components/maps/MapNavOverlays';
 import RouteProgress from '../../components/maps/RouteProgress';
+import useBusReroute from '../../components/maps/useBusReroute';
 import useRouteMatch from '../../components/maps/useRouteMatch';
 import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPosition';
 import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
@@ -24,7 +25,12 @@ import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '.
 import { stopIcon } from '../../components/maps/StopMarker';
 import {
   estimateBusSpeedKmh,
+  OFF_ROUTE_KM,
+  distanceFromLineKm,
+  lineAheadOfBus,
+  lineLengthKm,
   parkedBusLabel,
+  tripGuide,
   planParkedBus,
   recordDriverPosition,
 } from './liveMapUtils';
@@ -409,6 +415,7 @@ export default function PassengerLiveMap({
   routeGeometry: bookingRouteGeometry = null,
   pickup: bookingPickup = null,
   onBack,
+  onTripChange,
 }) {
   const [live, setLive] = useState(null);
   const [loading, setLoading] = useState(trackingAvailable);
@@ -456,10 +463,13 @@ export default function PassengerLiveMap({
       setError('');
     } catch (err) {
       setError(err.message || 'Unable to load live trip location.');
+      // The server says this trip can no longer be tracked, usually because
+      // it just ended, so let the page find out what happened.
+      if (err.status === 409) onTripChange?.();
     } finally {
       setLoading(false);
     }
-  }, [bookingId, trackingAvailable]);
+  }, [bookingId, trackingAvailable, onTripChange]);
 
   /*
    * Merge one pushed location frame into the polled envelope.
@@ -923,6 +933,33 @@ export default function PassengerLiveMap({
   const parkedStageName = bookingDetails?.route_start_point || 'the first stage';
   const liveBadge = tripIsLive ? 'Live' : parkedBus ? 'Parked' : 'Offline';
 
+  const boarded = live?.boarded === true;
+  const busIsOffRoute = useMemo(
+    () =>
+      tripIsLive &&
+      geometry.length > 1 &&
+      distanceFromLineKm(driverTarget, geometry) > OFF_ROUTE_KM,
+    [tripIsLive, geometry, driverTarget],
+  );
+  const rerouteGoal =
+    !boarded &&
+    pickupPosition &&
+    driverRouteIndex <= pickupRouteIndex + 5
+      ? 'pickup'
+      : 'destination';
+  const reroute = useBusReroute({
+    bookingId,
+    offRoute: busIsOffRoute,
+    goal: rerouteGoal,
+    busPosition: driverTarget,
+  });
+  const rerouteLine = useMemo(
+    () => (reroute ? lineAheadOfBus(matchedDriverPosition, reroute.line) : null),
+    [reroute, matchedDriverPosition],
+  );
+  const rerouteToPickupKm =
+    rerouteLine && reroute.goal === 'pickup' ? lineLengthKm(rerouteLine) : null;
+
   let busStatus;
 
   if (tripStatus === 'completed') {
@@ -939,6 +976,8 @@ export default function PassengerLiveMap({
       : `Last seen ${ageText} ago`;
   } else if (!tripLifecycleLive) {
     busStatus = live ? 'Trip is not active' : 'Checking trip status';
+  } else if (reroute) {
+    busStatus = 'Bus took another road · new route shown in blue';
   } else if (busOffRoute) {
     busStatus = `Bus is ${formatDistance(busGapKm)} from the route`;
   } else if (busPastPickup) {
@@ -975,7 +1014,9 @@ export default function PassengerLiveMap({
 
   const blueRoute = parkedBus
     ? parkedBus.pickupLeg
-    : busUnreliable
+    : rerouteLine
+      ? rerouteLine
+      : busUnreliable
       ? []
       : remainingRoute;
 
@@ -1005,7 +1046,8 @@ export default function PassengerLiveMap({
 
 
   const remainingDistanceKm =
-    busUnreliable || busPastPickup ? null : distanceToPickupKm;
+    rerouteToPickupKm ??
+    (busUnreliable || busPastPickup ? null : distanceToPickupKm);
 
   const driverSpeedKmh = useMemo(
     () => estimateBusSpeedKmh(driverHistory),
@@ -1092,7 +1134,9 @@ export default function PassengerLiveMap({
   const driverName = live?.driver?.name || bookingDetails?.driver_name || null;
   const driverPhone = live?.driver?.phone || null;
   const showPickupLeg =
-    Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable && !busPastPickup;
+    rerouteToPickupKm != null ||
+    (Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable && !busPastPickup);
+  const pickupDistanceKm = rerouteToPickupKm ?? distanceToPickupKm;
 
   const pickup =
     pickupStage?.name ||
@@ -1103,6 +1147,28 @@ export default function PassengerLiveMap({
     live?.booking?.pickup_stage_name ||
     live?.booking?.pickup_location ||
     'Pickup point';
+
+  const destinationName =
+    live?.route?.end_point ||
+    bookingDetails?.route_end_point ||
+    'your destination';
+  const guide = tripGuide({
+    bookingStatus: bookingDetails?.status,
+    tripIsLive,
+    parked: Boolean(parkedBus),
+    boarding: String(parkedTripStatus || '').toLowerCase() === 'boarding',
+    departureLabel: parkedLabel,
+    boarded,
+    rerouted: Boolean(reroute),
+    busPastPickup: busPastPickup && !reroute,
+    pickupKm: showPickupLeg ? pickupDistanceKm : null,
+    etaText: etaMinutes == null ? null : formatEta(etaMinutes),
+    startName: parkedStageName,
+    pickupName: pickup,
+    destinationName,
+    lastSeenText: ageText,
+  });
+  const boardingPin = guide.showPin ? bookingDetails?.verification_pin : null;
 
   const distance =
     live?.distance_km != null
@@ -1251,6 +1317,7 @@ export default function PassengerLiveMap({
           />
 
           {busOffRoute &&
+            !reroute &&
             matchedDriverPosition &&
             geometry[driverRouteIndex] && (
             <Polyline
@@ -1453,6 +1520,19 @@ export default function PassengerLiveMap({
           <div className="passenger-live-map__handle" />
         </div>
 
+        <div className="passenger-live-map__guide" role="status">
+          <div className="passenger-live-map__guide-text">
+            <strong>{guide.title}</strong>
+            <span>{guide.detail}</span>
+          </div>
+          {boardingPin && (
+            <div className="passenger-live-map__guide-pin">
+              <span>Boarding PIN</span>
+              <strong>{boardingPin}</strong>
+            </div>
+          )}
+        </div>
+
         <div className="passenger-live-map__status-row">
           <div>
             <span className="passenger-live-map__eyebrow">
@@ -1465,7 +1545,7 @@ export default function PassengerLiveMap({
             <Navigation size={16} />
             <strong>
               {showPickupLeg
-                ? formatDistance(distanceToPickupKm)
+                ? formatDistance(pickupDistanceKm)
                 : (!busUnreliable && distance) || '—'}
             </strong>
             <span>{showPickupLeg ? 'to pickup' : 'away'}</span>

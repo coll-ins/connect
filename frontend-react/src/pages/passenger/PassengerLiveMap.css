@@ -1018,3 +1018,55 @@
   box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
   pointer-events: none;
 }
+
+.passenger-live-map__guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #0f172a;
+}
+
+.passenger-live-map__guide-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.passenger-live-map__guide-text strong {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.passenger-live-map__guide-text span {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.passenger-live-map__guide-pin {
+  display: grid;
+  flex: none;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  text-align: center;
+}
+
+.passenger-live-map__guide-pin span {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.passenger-live-map__guide-pin strong {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
