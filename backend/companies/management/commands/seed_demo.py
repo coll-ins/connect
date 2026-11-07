@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from companies.models import Route, Trip
+from companies.models import PickupStage, Route, Trip
 from drivers.models import Driver
 
 import os
@@ -26,9 +26,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **opts):
-        if not settings.DEBUG or settings.APP_ENVIRONMENT == 'production':
+        # Not staging either: it creates a superuser with a known password.
+        if not settings.DEBUG or settings.APP_ENVIRONMENT not in ('development', 'test'):
             raise CommandError(
-                'seed_demo is limited to non-production DEBUG environments.'
+                'seed_demo is limited to development/test DEBUG environments.'
             )
         User = get_user_model()
 
@@ -37,7 +38,13 @@ class Command(BaseCommand):
             .distinct().order_by('id').first()
         )
         if route is None:
-            raise CommandError('No route with an active pickup stage exists.')
+            # Fresh database: the seeded routes have no stages yet.
+            route = Route.objects.order_by('id').first()
+            if route is None:
+                raise CommandError('No route exists.')
+            PickupStage.objects.create(
+                route=route, name='Kencom House', order=1,
+                latitude='-1.285582', longitude='36.824962')
         company = route.company
         stage = route.pickup_stages.filter(is_active=True).order_by('order', 'id').first()
 
@@ -80,11 +87,17 @@ class Command(BaseCommand):
         account('demo_passenger', '+254799000001', 'passenger', False)
         account('demo_operator', '+254799000002', 'company_operator', True)
         account('demo_driver', d1.phone_number, 'driver', True)
+        account('demo_manager', '+254799000003', 'company_manager', True)
+        account('demo_auditor', '+254799000004', 'company_auditor', True)
+        admin = account('demo_admin', '+254799000005', 'platform_admin', False)
+        admin.is_staff = admin.is_superuser = True
+        admin.save(update_fields=['is_staff', 'is_superuser'])
 
         self.stdout.write(self.style.SUCCESS(
             f'Route: {route.name} ({company.name}) | first stage: {stage.name}\n'
             f'Boarding trip id {boarding.id} (bus DEMO-001) | scheduled trip id {later.id}\n'
-            f'Logins (password {PASSWORD}): demo_passenger, demo_operator, demo_driver\n'
+            f'Logins (password {PASSWORD}): demo_passenger, demo_operator, demo_driver, '
+            f'demo_manager, demo_auditor, demo_admin\n'
             f'Then run:  python manage.py seed_demo --drive'))
 
     def _drive(self, driver, stage):

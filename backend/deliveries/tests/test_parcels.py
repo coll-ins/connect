@@ -241,6 +241,18 @@ class ParcelTests(APITestCase):
             UnappliedPayment.objects.filter(
                 reference=p.provider_reference, status='refund_due').count(), 1)
 
+    def test_paid_parcel_cancel_requeues_an_already_applied_charge_row(self):
+        p = self.paid()
+        from bookings.models import UnappliedPayment
+        UnappliedPayment.objects.create(
+            reference=p.provider_reference, kind='parcel', amount=p.price,
+            currency='KES', reason='first try failed', payload={},
+            status='applied')
+        self.client.force_authenticate(self.sender)
+        self.assertEqual(self.client.post(f'{BASE}{p.id}/cancel/').status_code, 200)
+        row = UnappliedPayment.objects.get(reference=p.provider_reference)
+        self.assertEqual(row.status, 'refund_due')
+
     # ---------- driver list ----------
     def test_driver_list_only_own_paid_parcels(self):
         self.paid()

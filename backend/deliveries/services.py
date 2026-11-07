@@ -113,17 +113,25 @@ def cancel_parcel(*, parcel_id, user):
             parcel.status = 'cancelled'
             parcel.cancelled_at = timezone.now()
             parcel.save(update_fields=['status', 'cancelled_at', 'updated_at'])
-            UnappliedPayment.objects.get_or_create(
+            reason = 'Customer cancelled before pickup; full refund.'
+            row, created = UnappliedPayment.objects.select_for_update().get_or_create(
                 reference=parcel.provider_reference,
                 defaults={
                     'kind': 'parcel',
                     'amount': parcel.price,
                     'currency': 'KES',
-                    'reason': 'Customer cancelled before pickup; full refund.',
+                    'reason': reason,
                     'payload': {},
                     'status': 'refund_due',
                 },
             )
+            # A row left by an earlier failed-then-applied charge must not
+            # swallow this refund; one already refunding/refunded is final.
+            if not created and row.status in ('retry', 'review', 'applied'):
+                row.status = 'refund_due'
+                row.amount = parcel.price
+                row.reason = reason
+                row.save(update_fields=['status', 'amount', 'reason'])
             return parcel
         raise ParcelError('This parcel can no longer be cancelled.', 409)
 

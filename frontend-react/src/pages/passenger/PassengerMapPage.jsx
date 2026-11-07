@@ -29,6 +29,7 @@ export default function PassengerMapPage() {
   );
   const [loading, setLoading] = useState(!hasInitialBooking);
   const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const bookingLoadInProgress = useRef(false);
   const hasLoadedBooking = useRef(Boolean(hasInitialBooking));
   const updateBooking = useCallback((nextBooking) => {
@@ -42,6 +43,7 @@ export default function PassengerMapPage() {
 
     try {
       if (!hasLoadedBooking.current) setLoading(true);
+      setLoadFailed(false);
 
       const data = await apiRequest('/bookings/my/');
       const bookings = Array.isArray(data) ? data : [];
@@ -158,6 +160,7 @@ export default function PassengerMapPage() {
         setTrackingAvailable(false);
       }
       setError(err.message || 'Unable to load your trips.');
+      setLoadFailed(true);
     } finally {
       hasLoadedBooking.current = true;
       bookingLoadInProgress.current = false;
@@ -214,7 +217,7 @@ export default function PassengerMapPage() {
         }}
       >
         <NoticeStack>
-          {error && (
+          {loadFailed && error && (
             <Notice title="We couldn't load your trip">
               {error}{' '}
               <button type="button" onClick={loadBooking}>

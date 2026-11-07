@@ -159,7 +159,7 @@ class LatePaymentTests(_Fixture, APITestCase):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
             'status': True,
-            'data': {'status': 'success', 'amount': 80000},
+            'data': {'status': 'success', 'amount': 80000, 'currency': 'KES'},
         }
         mock_post.return_value = _paystack_ok(555)
 
@@ -187,8 +187,22 @@ class LatePaymentTests(_Fixture, APITestCase):
                     Payment.objects.select_for_update()
                     .select_related('booking').get(pk=payment.pk)
                 )
-                self.assertTrue(_mark_payment_confirmed(locked, 80000))
+                self.assertTrue(_mark_payment_confirmed(locked, 80000, 'KES'))
         self.assertEqual(BookingHold.objects.filter(booking=booking).count(), 1)
+
+    def test_mark_payment_confirmed_rejects_other_currency(self):
+        from bookings.views import _mark_payment_confirmed
+
+        booking, payment = self.booking('pending', 'REF_USD')
+        with transaction.atomic():
+            locked = (
+                Payment.objects.select_for_update()
+                .select_related('booking').get(pk=payment.pk)
+            )
+            self.assertFalse(_mark_payment_confirmed(locked, 80000, 'USD'))
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, 'failed')
+        self.assertFalse(BookingHold.objects.filter(booking=booking).exists())
 
     @patch('bookings.views.requests.post')
     def test_callback_url_must_stay_on_our_frontend(self, mock_post):

@@ -38,3 +38,4 @@ routes_stages_backup.json
 *.before-*
 *.bak
 node_modules/
+smoke.sqlite3
