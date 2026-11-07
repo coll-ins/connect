@@ -297,8 +297,6 @@ export default function DriverDashboard() {
   const sendDriverLocation = useCallback(
     async (position) => {
       if (!driver) return;
-      // Simulator mode: never post the laptop's fixed GPS.
-      if (window.location.search.includes('sim=1') || window.localStorage.getItem('sim') === '1') return;
 
       try {
         setError('');

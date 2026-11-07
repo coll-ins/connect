@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from companies.models import Company, Trip
+from companies.models import Company, Trip, TripSimulation
 from users.models import CustomUser
 from users.permissions import (
     can_manage_company,
@@ -507,6 +507,23 @@ def _can_manage_driver_location(request, driver):
     return can_manage_company(user, driver.company)
 
 
+def record_driver_fix(driver, latitude, longitude):
+    """Save a driver position and run the auto-depart hook."""
+    prev = (driver.latitude, driver.longitude)
+    driver.latitude = latitude
+    driver.longitude = longitude
+    driver.location_updated_at = timezone.now()
+    driver.save(
+        update_fields=['latitude', 'longitude', 'location_updated_at']
+    )
+    try:
+        from bookings.departure import auto_depart_on_movement
+        auto_depart_on_movement(driver, prev[0], prev[1], latitude, longitude)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('auto-depart hook failed')
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @throttle_classes([DriverLocationThrottle])
@@ -566,27 +583,11 @@ def driver_location(request, driver_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    _prev_fix = (driver.latitude, driver.longitude)
-    driver.latitude = latitude
-    driver.longitude = longitude
-    driver.location_updated_at = timezone.now()
-
-    driver.save(
-        update_fields=[
-            'latitude',
-            'longitude',
-            'location_updated_at',
-        ]
-    )
-
-    try:
-        from bookings.departure import auto_depart_on_movement
-        auto_depart_on_movement(
-            driver, _prev_fix[0], _prev_fix[1], latitude, longitude
-        )
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception('auto-depart hook failed')
+    record_driver_fix(driver, latitude, longitude)
+    # A real GPS post means a real driver is driving: end any admin simulation.
+    TripSimulation.objects.filter(
+        trip__driver=driver, status='running'
+    ).update(status='stopped')
 
     return Response(
         {

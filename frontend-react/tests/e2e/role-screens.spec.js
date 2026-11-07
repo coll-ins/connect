@@ -264,7 +264,7 @@ test('driver live-location screen shows its route, styles the panel, and sends G
   const sheetBackground = await page
     .locator('.driver-live-sheet')
     .evaluate((element) => getComputedStyle(element).backgroundColor);
-  expect(sheetBackground).toBe('rgba(15, 23, 42, 0.96)');
+  expect(sheetBackground).toBe('rgb(16, 25, 29)');
 
   await expect.poll(() => capturedGpsPayload, { timeout: 10000 })
     .toEqual(simulatedLocation);

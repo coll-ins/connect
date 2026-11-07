@@ -14,20 +14,16 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
-  Play,
   RefreshCw,
   Route as RouteIcon,
   Settings,
   ShieldCheck,
-  Square,
   Trash2,
   UserRound,
   Users,
   X,
   Menu,
 } from 'lucide-react';
-import { MapContainer, Polyline, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   NavLink,
   useLocation,
@@ -36,9 +32,6 @@ import {
 } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import BaseTileLayer from '../../components/maps/BaseTileLayer';
-import BusMarker from '../../components/maps/BusMarker';
-import { buildRoute } from '../../components/maps/route';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -100,69 +93,46 @@ const emptyOperator = {
   password: '',
 };
 
-// Follow: street-level camera that glides with the bus (what a client
-// watches). Otherwise: the whole route in view.
-function DemoCamera({ path, position, follow }) {
-  const map = useMap();
+const SIMULATABLE_STATUSES = ['scheduled', 'boarding', 'departed'];
 
-  useEffect(() => {
-    if (!follow && path.length > 1) map.fitBounds(path, { padding: [24, 24] });
-  }, [map, path, follow]);
-
-  useEffect(() => {
-    if (!follow) return;
-    if (map.getZoom() < 15) {
-      map.setView(position, 15, { animate: false });
-    } else {
-      map.panTo(position, { animate: true, duration: 1.5, easeLinearity: 1 });
-    }
-  }, [map, position, follow]);
-
-  return null;
-}
-
-function DemoTripMap({ simulation }) {
-  const path = simulation.path;
-  const progressPath = path.slice(0, simulation.position_index + 1);
-  // Same road-following, heading-aware bus as the passenger live map: it
-  // glides along the road between ticks instead of jumping point to point.
-  const road = useMemo(
-    () => buildRoute({ coordinates: path.map(([lat, lng]) => [lng, lat]) }),
-    [path],
-  );
-
-  const [follow, setFollow] = useState(true);
-
+function TripSimulateControl({ trip, sim, busy, onStart, onStop }) {
+  const running = sim?.status === 'running';
+  if (running && sim.trip_id === trip.id) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span
+          aria-hidden="true"
+          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)' }}
+        />
+        <span role="status" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          Moving · {sim.progress}%
+        </span>
+        <button
+          type="button"
+          className="pa-danger-button"
+          onClick={onStop}
+          disabled={busy}
+        >
+          Stop
+        </button>
+      </span>
+    );
+  }
+  let reason = '';
+  if (running) reason = 'Another trip is being simulated. Stop it first.';
+  else if (!SIMULATABLE_STATUSES.includes(trip.status)) {
+    reason = 'Only scheduled, boarding or departed trips can be simulated.';
+  } else if (!(trip.driver || trip.driver_name)) reason = 'Assign a driver first.';
   return (
-    <div style={{ position: 'relative' }}>
     <button
       type="button"
-      onClick={() => setFollow((v) => !v)}
-      style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 500, minHeight: 40,
-        padding: '8px 16px', borderRadius: 8, border: 0,
-        background: 'rgba(11, 18, 32, 0.9)', color: '#fff', fontWeight: 600,
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)', cursor: 'pointer',
-      }}
+      className="pa-secondary-button"
+      onClick={() => onStart(trip)}
+      disabled={Boolean(reason) || busy}
+      title={reason || undefined}
     >
-      {follow ? 'Show whole route' : 'Follow bus'}
+      Simulate
     </button>
-    <MapContainer
-      key={simulation.id}
-      center={simulation.position}
-      zoom={15}
-      scrollWheelZoom={false}
-      style={{ height: 'min(60vh, 460px)', width: '100%', borderRadius: 12 }}
-    >
-      <BaseTileLayer />
-      <DemoCamera path={path} position={simulation.position} follow={follow} />
-      <Polyline positions={path} pathOptions={{ color: '#10b981', weight: 5, opacity: 0.6 }} />
-      {progressPath.length > 1 && (
-        <Polyline positions={progressPath} pathOptions={{ color: '#2563eb', weight: 6 }} />
-      )}
-      <BusMarker route={road} lat={simulation.position[0]} lng={simulation.position[1]} />
-    </MapContainer>
-    </div>
   );
 }
 
@@ -1352,13 +1322,9 @@ export default function PlatformAdminDashboard() {
 
   const [systemChecks, setSystemChecks] = useState(null);
   const [systemTestLoading, setSystemTestLoading] = useState(false);
-  const [demoSimulation, setDemoSimulation] = useState(null);
-  const [demoRoutes, setDemoRoutes] = useState([]);
-  const [demoRouteId, setDemoRouteId] = useState('');
-  const [demoEnabled, setDemoEnabled] = useState(null);
-  const [demoBusy, setDemoBusy] = useState(false);
-  const [demoError, setDemoError] = useState('');
-  const [demoMessage, setDemoMessage] = useState('');
+  const [sim, setSim] = useState(null);
+  const [simBusy, setSimBusy] = useState(false);
+  const [simError, setSimError] = useState('');
 
   const [companyModal, setCompanyModal] = useState(false);
   const [companyForm, setCompanyForm] = useState(emptyCompany);
@@ -1470,96 +1436,78 @@ export default function PlatformAdminDashboard() {
   useEffect(() => {
     if (section !== 'trips') return undefined;
     let mounted = true;
-    apiRequest('/system/demo-simulation/')
+    apiRequest('/system/trip-simulations/active/')
       .then((result) => {
-        if (!mounted) return;
-        setDemoEnabled(true);
-        setDemoSimulation(result?.simulation || null);
-        setDemoRoutes(
-          Array.isArray(result?.available_routes)
-            ? result.available_routes
-            : [],
-        );
-        setDemoError('');
+        if (mounted) setSim(result?.simulation || null);
       })
-      .catch((err) => {
-        if (!mounted) return;
-        setDemoEnabled(false);
-        setDemoError(err.message || 'Demo simulation is unavailable.');
-      });
+      .catch(() => {});
     return () => {
       mounted = false;
     };
   }, [section]);
 
+  const simId = sim?.id;
+  const simRunning = sim?.status === 'running';
   useEffect(() => {
-    if (!demoSimulation || demoSimulation.status !== 'running') return undefined;
+    if (!simRunning) return undefined;
     let mounted = true;
-    let timer;
-    const advance = async () => {
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const result = await apiRequest(
-          `/system/demo-simulation/${demoSimulation.id}/advance/`,
+          `/system/trip-simulations/${simId}/advance/`,
           { method: 'POST', body: {} },
         );
         if (!mounted) return;
-        setDemoSimulation(result.simulation);
-        setDemoError('');
-        if (result.simulation.status === 'completed') {
-          setDemoMessage('Demo trip completed. No operational trip data was changed.');
-          return;
-        }
+        setSim(result.simulation);
+        if (result.simulation.status !== 'running') load();
       } catch (err) {
         if (!mounted) return;
-        setDemoError(err.message || 'Unable to advance the demo trip.');
-        return;
+        setSimError(err.message || 'The simulation stopped.');
+        setSim(null);
+      } finally {
+        inFlight = false;
       }
-      if (mounted) {
-        timer = window.setTimeout(advance, 1500);
-      }
-    };
-    timer = window.setTimeout(advance, 1500);
+    }, 2000);
     return () => {
       mounted = false;
-      window.clearTimeout(timer);
+      window.clearInterval(timer);
     };
-  }, [demoSimulation]);
+  }, [simId, simRunning, load]);
 
-  const startDemoSimulation = async () => {
-    if (!demoRouteId || demoBusy) return;
-    setDemoBusy(true);
-    setDemoError('');
-    setDemoMessage('');
+  const startSimulation = async (trip) => {
+    if (simBusy) return;
+    setSimBusy(true);
+    setSimError('');
     try {
-      const result = await apiRequest('/system/demo-simulation/', {
+      const result = await apiRequest(`/system/trips/${trip.id}/simulate/`, {
         method: 'POST',
-        body: { route_id: Number(demoRouteId) },
+        body: {},
       });
-      setDemoSimulation(result.simulation);
-      setDemoEnabled(true);
-      setDemoMessage('Demo simulation started. This is isolated from live operations.');
+      setSim(result.simulation);
     } catch (err) {
-      setDemoError(err.message || 'Unable to start the demo trip.');
+      setSimError(err.message || 'Unable to start the simulation.');
     } finally {
-      setDemoBusy(false);
+      setSimBusy(false);
     }
   };
 
-  const stopDemoSimulation = async () => {
-    if (!demoSimulation || demoBusy) return;
-    setDemoBusy(true);
-    setDemoError('');
+  const stopSimulation = async () => {
+    if (!sim || simBusy) return;
+    setSimBusy(true);
+    setSimError('');
     try {
-      const result = await apiRequest(
-        `/system/demo-simulation/${demoSimulation.id}/stop/`,
-        { method: 'POST', body: {} },
-      );
-      setDemoSimulation(result.simulation);
-      setDemoMessage('Demo simulation stopped. No operational trip data was changed.');
+      await apiRequest(`/system/trip-simulations/${sim.id}/stop/`, {
+        method: 'POST',
+        body: {},
+      });
+      setSim(null);
     } catch (err) {
-      setDemoError(err.message || 'Unable to stop the demo trip.');
+      setSimError(err.message || 'Unable to stop the simulation.');
     } finally {
-      setDemoBusy(false);
+      setSimBusy(false);
     }
   };
 
@@ -3002,139 +2950,6 @@ export default function PlatformAdminDashboard() {
               </button>
             </div>
 
-            <div className="pa-panel" data-testid="demo-simulation-panel">
-              <div className="pa-panel-header">
-                <div>
-                  <h3>Client demo simulator</h3>
-                  <p>
-                    Preview a bus moving along a route without creating or changing
-                    real trips, drivers, bookings, GPS records, or sending notifications.
-                  </p>
-                </div>
-                <span className={`pa-badge ${
-                  demoEnabled === false ? 'warning' : demoSimulation?.status === 'running' ? '' : 'muted'
-                }`}>
-                  {demoEnabled === null
-                    ? 'Checking availability'
-                    : demoEnabled === false
-                      ? 'Unavailable'
-                      : demoSimulation?.status === 'running'
-                        ? 'Running'
-                        : demoSimulation?.status || 'Ready'}
-                </span>
-              </div>
-
-              {demoEnabled ? (
-                <>
-                  {!demoSimulation && (
-                    <div className="pa-page-actions">
-                      <label className="pa-field" style={{ flex: 1, maxWidth: 420 }}>
-                        <span>Demo route</span>
-                        <select
-                          aria-label="Demo route"
-                          value={demoRouteId}
-                          onChange={(event) => setDemoRouteId(event.target.value)}
-                        >
-                          <option value="">
-                            {demoRoutes.length
-                              ? 'Choose a route with map data'
-                              : 'No routes with valid map data'}
-                          </option>
-                          {demoRoutes.map((route) => (
-                            <option key={route.id} value={route.id}>
-                              {route.name} · {route.company_name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        className="pa-primary-button"
-                        onClick={startDemoSimulation}
-                        disabled={!demoRouteId || demoBusy || !demoRoutes.length}
-                      >
-                        <Play size={15} />
-                        {demoBusy ? 'Starting…' : 'Start demo simulation'}
-                      </button>
-                    </div>
-                  )}
-
-                  {demoSimulation && (
-                    <>
-                      <div className="pa-demo-meta">
-                        <strong>{demoSimulation.route_name}</strong>
-                        <span>{demoSimulation.start_point} to {demoSimulation.end_point}</span>
-                        <span>{demoSimulation.bus_number}</span>
-                        <span>{demoSimulation.progress}% complete</span>
-                        {demoSimulation.status === 'running' && (
-                          <button
-                            type="button"
-                            className="pa-danger-button"
-                            onClick={stopDemoSimulation}
-                            disabled={demoBusy}
-                          >
-                            <Square size={14} />
-                            Stop simulation
-                          </button>
-                        )}
-                        {demoSimulation.status !== 'running' && (
-                          <button
-                            type="button"
-                            className="pa-secondary-button"
-                            onClick={() => {
-                              setDemoSimulation(null);
-                              setDemoMessage('');
-                            }}
-                          >
-                            <Play size={14} />
-                            Start another demo
-                          </button>
-                        )}
-                      </div>
-                      <div
-                        className="pa-demo-map"
-                        aria-label="Isolated demo bus map"
-                      >
-                        <DemoTripMap simulation={demoSimulation} />
-                      </div>
-                      <div
-                        role="progressbar"
-                        aria-label="Demo trip progress"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                        aria-valuenow={demoSimulation.progress}
-                        style={{
-                          height: 5,
-                          marginTop: 12,
-                          overflow: 'hidden',
-                          borderRadius: 999,
-                          background: 'rgba(255,255,255,.1)',
-                        }}
-                      >
-                        <div style={{
-                          width: `${demoSimulation.progress}%`,
-                          height: '100%',
-                          background: '#10b981',
-                          transition: 'width .6s ease',
-                        }} />
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <p role="status" className="pa-command-message">
-                  {demoError || 'Demo simulation is not enabled on this server.'}
-                </p>
-              )}
-
-              {demoError && demoEnabled && (
-                <p role="alert" className="pa-error">{demoError}</p>
-              )}
-              {demoMessage && (
-                <p role="status" className="pa-command-message">{demoMessage}</p>
-              )}
-            </div>
-
             <div className="pa-panel">
               <div className="pa-table-wrap">
                 <table className="pa-table">
@@ -3257,6 +3072,17 @@ export default function PlatformAdminDashboard() {
                                 Cancelled
                               </option>
                             </select>
+                            {user?.is_superuser && (
+                              <div style={{ marginTop: 8 }}>
+                                <TripSimulateControl
+                                  trip={trip}
+                                  sim={sim}
+                                  busy={simBusy}
+                                  onStart={startSimulation}
+                                  onStop={stopSimulation}
+                                />
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -3264,6 +3090,15 @@ export default function PlatformAdminDashboard() {
                 </table>
               </div>
             </div>
+
+            {simError && (
+              <p role="alert" className="pa-error">{simError}</p>
+            )}
+            <p style={{ color: 'var(--text-2)', fontSize: 12, maxWidth: '72ch' }}>
+              Simulate moves this trip's bus along its route as if the driver were
+              driving. Passengers booked on it see it live. Keep this tab open;
+              closing it stops the bus.
+            </p>
           </section>
         )}
 

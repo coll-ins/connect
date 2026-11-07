@@ -13,13 +13,6 @@ APP_ENVIRONMENT = os.getenv(
     'APP_ENVIRONMENT',
     'development' if DEBUG else 'production',
 ).strip().lower()
-DEMO_SIMULATION_ENABLED = (
-    APP_ENVIRONMENT in {'development', 'test', 'staging'}
-    and os.getenv(
-        'DEMO_SIMULATION_ENABLED',
-        'True' if APP_ENVIRONMENT == 'development' else 'False',
-    ).lower() == 'true'
-)
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
@@ -322,7 +315,6 @@ if not DEBUG:
             '(unapplied payments are reported there).'
         )
 
-REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '10/hour'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login_ip'] = '60/minute'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 

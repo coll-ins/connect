@@ -2220,6 +2220,15 @@ def move_booking_to_trip(request, booking_id):
         old_trip = locked.get(booking.trip_id)
         new_trip = locked.get(target_id)
 
+        # Re-read the booking under lock: a cancel may have landed since the
+        # unlocked read above.
+        booking = Booking.objects.select_for_update().get(pk=booking.pk)
+        if booking.status in {'completed', 'cancelled', 'no_show'}:
+            return Response(
+                {'error': f'Cannot move a booking with status: {booking.status}'},
+                status=status.HTTP_409_CONFLICT
+            )
+
         if new_trip is None:
             return Response(
                 {'error': 'Target trip not found.'},
@@ -3293,6 +3302,7 @@ def booking_live_location(request, booking_id):
             'company_operator',
         }
         and user.company_id == booking.route.company_id
+        and can_handle_route(user, booking.route_id)
     )
 
     is_platform_admin = user.is_superuser

@@ -1,4 +1,5 @@
 """Small geometry helpers for placing pickup stages along a route line."""
+import json
 import math
 
 MAX_STAGE_OFFSET_M = 300
@@ -93,3 +94,77 @@ def line_health(geometry, stages):
         if loc is not None and loc[0] > MAX_STAGE_OFFSET_M:
             result['stages_off'].append({'id': sid, 'name': name, 'offset_m': round(loc[0])})
     return result
+
+
+def haversine_m(a, b):
+    dlat = math.radians(b[0] - a[0])
+    dlng = math.radians(b[1] - a[1])
+    h = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(a[0])) * math.cos(math.radians(b[0]))
+        * math.sin(dlng / 2) ** 2
+    )
+    return 6371000.0 * 2 * math.asin(math.sqrt(h))
+
+
+def parse_geometry(raw):
+    """GeoJSON LineString/Feature/MultiLineString -> [(lat, lng), ...] or None."""
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return None
+    if not isinstance(raw, dict):
+        return None
+    if raw.get('type') == 'Feature':
+        raw = raw.get('geometry') or {}
+    if raw.get('type') == 'FeatureCollection':
+        feats = raw.get('features') or []
+        raw = (feats[0].get('geometry') if feats else {}) or {}
+    kind, coords = raw.get('type'), raw.get('coordinates')
+    if kind == 'LineString':
+        pts = coords
+    elif kind == 'MultiLineString':
+        pts = [p for line in (coords or []) for p in line]
+    else:
+        return None
+    out = []
+    for p in pts or []:
+        try:
+            out.append((float(p[1]), float(p[0])))  # GeoJSON is [lng, lat]
+        except (TypeError, ValueError, IndexError):
+            continue
+    return out if len(out) >= 2 else None
+
+
+def orient_path(path, start):
+    """Make the path begin at the end nearest the boarding stage."""
+    if haversine_m(path[-1], start) < haversine_m(path[0], start):
+        return list(reversed(path))
+    return list(path)
+
+
+def point_along(path, dist_m):
+    remaining = dist_m
+    for a, b in zip(path, path[1:]):
+        seg = haversine_m(a, b)
+        if seg == 0:
+            continue
+        if remaining <= seg:
+            f = remaining / seg
+            return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), False
+        remaining -= seg
+    return path[-1], True
+
+
+def resample_evenly(path, step_m):
+    """Points spaced step_m apart along the line, including both ends."""
+    total = sum(haversine_m(a, b) for a, b in zip(path, path[1:]))
+    if total <= 0:
+        return []
+    count = max(2, round(total / step_m) + 1)
+    return [
+        point_along(path, total * i / (count - 1))[0] for i in range(count)
+    ]

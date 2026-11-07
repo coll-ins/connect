@@ -163,67 +163,6 @@ function MapResize() {
 }
 
 
-function buildCumulative(geometry) {
-  if (!geometry || geometry.length < 2) return null;
-  const cum = [0];
-  for (let i = 1; i < geometry.length; i += 1) {
-    cum.push(cum[i - 1] + haversineKm(geometry[i - 1], geometry[i]));
-  }
-  return cum;
-}
-
-function pointAtDistance(geometry, cum, s) {
-  const total = cum[cum.length - 1];
-  const d = Math.max(0, Math.min(total, s));
-  let lo = 0, hi = cum.length - 1;
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (cum[mid] <= d) lo = mid; else hi = mid;
-  }
-  const a = geometry[lo], b = geometry[lo + 1];
-  const seg = cum[lo + 1] - cum[lo];
-  const t = seg > 0 ? (d - cum[lo]) / seg : 0;
-  const lat = a[0] + (b[0] - a[0]) * t;
-  const lng = a[1] + (b[1] - a[1]) * t;
-  const heading =
-    (Math.atan2(
-      (b[1] - a[1]) * Math.cos((a[0] * Math.PI) / 180),
-      b[0] - a[0],
-    ) * 180) / Math.PI;
-  return { position: [lat, lng], heading: (heading + 360) % 360 };
-}
-
-
-
-function useDemoDriver(geometry) {
-  const enabled =
-    typeof window !== 'undefined' &&
-    (new URLSearchParams(window.location.search).get('demo') === '1' ||
-      window.localStorage.getItem('demo') === '1');
-  const [pos, setPos] = useState(null);
-
-  useEffect(() => {
-    if (!enabled || !geometry || geometry.length < 2) return undefined;
-    const cum = buildCumulative(geometry);
-    const total = cum[cum.length - 1];
-    let s = 0;
-
-    const id = window.setInterval(() => {
-      s += 0.03; // km per 2 s = ~54 km/h
-      if (s > total) s = 0;
-      const p = pointAtDistance(geometry, cum, s).position;
-      setPos([
-        p[0] + (Math.random() - 0.5) * 0.0002,
-        p[1] + (Math.random() - 0.5) * 0.0002,
-      ]);
-    }, 2000);
-
-    return () => window.clearInterval(id);
-  }, [enabled, geometry]);
-
-  return enabled ? pos : null;
-}
-
 function MapRoute({ positions }) {
   const map = useMap();
   const fittedRouteRef = useRef('');
@@ -753,21 +692,10 @@ export default function PassengerLiveMap({
   const vehicleMarkerRef = useRef(null);
   const vehicleHeadingRef = useRef(0);
 
-  const demoTarget = useDemoDriver(geometry);
-
-  // Simulation may override GPS only when the server confirms an active trip.
-  const displayedDriverPosition =
-    live?.is_trip_live === true && demoTarget
-      ? demoTarget
-      : driverPosition;
-  const routeMatchSource =
-    live?.is_trip_live === true && demoTarget
-      ? demoTarget
-      : driverTarget;
-  const routeMatch = useRouteMatch(geometry, routeMatchSource);
+  const routeMatch = useRouteMatch(geometry, driverTarget);
   const matchedDriverPosition = routeMatch?.onRoute
-    ? displayedDriverPosition
-    : routeMatch?.position ?? displayedDriverPosition;
+    ? driverPosition
+    : routeMatch?.position ?? driverPosition;
   const gpsHeading = Number(live?.driver?.heading);
   const matchedDriverHeading =
     routeMatch?.onRoute && routeMatch.heading != null
@@ -1193,7 +1121,7 @@ export default function PassengerLiveMap({
           />
 
           {geometry.length > 1 &&
-            !(MAP_TILT_ENABLED && displayedDriverPosition) && (
+            !(MAP_TILT_ENABLED && driverPosition) && (
             <MapRoute positions={geometry} />
           )}
 

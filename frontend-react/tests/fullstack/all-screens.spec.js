@@ -40,7 +40,7 @@ for (const [role, [phone, paths]] of Object.entries(ROLES)) {
 
     if (role === 'admin') {
       await page.goto('/platform-admin/users');
-      await expect(page.getByText('demo_passenger')).toBeVisible();
+      await expect(page.getByText('wanjiku.k')).toBeVisible();
     }
 
     expect(problems).toEqual([]);

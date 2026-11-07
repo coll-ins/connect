@@ -122,7 +122,7 @@ export default function DriverLiveLocation() {
     refresh();
 
     // Keep the driver's map synchronized with the backend.
-    // This is what allows the simulator and real GPS updates
+    // This is what allows real GPS updates
     // to animate on the driver map.
     const interval = setInterval(refresh, 5000);
 
@@ -150,12 +150,6 @@ export default function DriverLiveLocation() {
     const driverId = currentDriver?.id ?? driverIdRef.current;
 
     if (!driverId || sendingRef.current) return;
-
-    const simulatorMode =
-      window.location.search.includes('sim=1') ||
-      window.localStorage.getItem('sim') === '1';
-
-    if (simulatorMode) return;
 
     const now = Date.now();
 
@@ -216,23 +210,17 @@ export default function DriverLiveLocation() {
    * ------------------------------------------------------------
    */
   useEffect(() => {
-    const simulatorMode =
-      window.location.search.includes('sim=1') ||
-      window.localStorage.getItem('sim') === '1';
-
     const driverId = driver?.id ?? null;
 
     console.info('[DRIVER LIVE] GPS effect state:', {
       driverId,
       hasGeolocation: !!navigator.geolocation,
-      simulatorMode,
     });
 
-    if (!driverId || !navigator.geolocation || simulatorMode) {
+    if (!driverId || !navigator.geolocation) {
       console.warn('[DRIVER LIVE] GPS watcher NOT started:', {
         driverId,
         hasGeolocation: !!navigator.geolocation,
-        simulatorMode,
       });
       return undefined;
     }
@@ -362,7 +350,7 @@ export default function DriverLiveLocation() {
   const mapDriver = useMemo(() => {
     if (!driver && !location) return null;
 
-    // Polled backend position (simulator / real GPS) wins.
+    // Polled backend position (real GPS) wins.
     // Browser geolocation is only a fallback.
     const base = { ...(location || {}), ...(driver || {}) };
 
@@ -381,10 +369,6 @@ export default function DriverLiveLocation() {
     const id = window.setInterval(() => setNowTick(Date.now()), 5000);
     return () => window.clearInterval(id);
   }, []);
-
-  const simMode =
-    window.location.search.includes('sim=1') ||
-    window.localStorage.getItem('sim') === '1';
 
   const gpsAgeSec = useMemo(() => {
     const t = Date.parse(mapDriver?.location_updated_at || '');
@@ -528,29 +512,6 @@ export default function DriverLiveLocation() {
           />
         )}
 
-        {gpsLost && simMode && (
-          <div
-            role="status"
-            style={{
-              position: 'absolute',
-              top: 12,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 1000,
-              padding: '8px 14px',
-              borderRadius: 999,
-              background: 'rgba(180, 40, 40, 0.88)',
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-              backdropFilter: 'blur(8px)',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
-            }}
-          >
-            Simulator mode: start simulate_bus
-          </div>
-        )}
-
         <button
           type="button"
           className="driver-live-back"
@@ -579,7 +540,7 @@ export default function DriverLiveLocation() {
             }
           />
           {gpsStatus === 'LIVE'
-            ? simMode ? 'Simulated GPS live' : 'GPS live'
+            ? 'GPS live'
             : gpsStatus === 'DELAYED'
               ? `GPS delayed · ${Math.round(gpsAgeSec)}s`
               : gpsStatus === 'LOST'

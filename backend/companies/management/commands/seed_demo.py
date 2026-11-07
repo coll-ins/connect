@@ -17,12 +17,12 @@ PASSWORD = os.environ.get('DEMO_PASSWORD', 'demo-pass-123')
 
 
 class Command(BaseCommand):
-    help = 'Create a boarding trip + a scheduled trip and demo logins (DEV only).'
+    help = 'Create a boarding trip, a scheduled trip and sample logins (DEV only).'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--drive', action='store_true',
-            help='Send two GPS fixes away from the stage as the demo driver.',
+            help='Send two GPS fixes away from the stage as the seeded driver.',
         )
 
     def handle(self, *args, **opts):
@@ -45,7 +45,7 @@ class Command(BaseCommand):
             PickupStage.objects.create(
                 route=route, name='Kencom House', order=1,
                 latitude='-1.285582', longitude='36.824962')
-            # A second stage gives the route a drawable path (demo trip, maps).
+            # A second stage gives the route a drawable path.
             PickupStage.objects.create(
                 route=route, name='Prestige', order=2,
                 latitude='-1.299720', longitude='36.787239')
@@ -63,8 +63,8 @@ class Command(BaseCommand):
             d.save()
             return d
 
-        d1 = driver_for('DEMO-001', '+254799000010', 'Demo Driver (simulated)')
-        d2 = driver_for('DEMO-002', '+254799000011', 'Demo Driver 2 (simulated)')
+        d1 = driver_for('KDA 123A', '+254799000010', 'Peter Mwangi')
+        d2 = driver_for('KDB 456B', '+254799000011', 'Joseph Kiprop')
 
         if opts['drive']:
             return self._drive(d1, stage)
@@ -77,36 +77,37 @@ class Command(BaseCommand):
             route=route, driver=d2, capacity=14, status='scheduled',
             departure_at=timezone.now() + dt.timedelta(hours=3))
 
-        def account(username, phone, role, with_company):
+        def account(username, phone, role, with_company, first, last):
             u, _ = User.objects.get_or_create(
                 username=username,
                 defaults={'phone_number': phone, 'role': role},
             )
+            u.first_name, u.last_name = first, last
             u.role = role
             u.company = company if with_company else None
             u.set_password(PASSWORD)
             u.save()
             return u
 
-        account('demo_passenger', '+254799000001', 'passenger', False)
-        account('demo_operator', '+254799000002', 'company_operator', True)
-        account('demo_driver', d1.phone_number, 'driver', True)
-        account('demo_manager', '+254799000003', 'company_manager', True)
-        account('demo_auditor', '+254799000004', 'company_auditor', True)
-        admin = account('demo_admin', '+254799000005', 'platform_admin', False)
+        account('wanjiku.k', '+254799000001', 'passenger', False, 'Wanjiku', 'Kamau')
+        account('brian.o', '+254799000002', 'company_operator', True, 'Brian', 'Otieno')
+        account('peter.m', d1.phone_number, 'driver', True, 'Peter', 'Mwangi')
+        account('achieng.o', '+254799000003', 'company_manager', True, 'Achieng', 'Odhiambo')
+        account('salim.h', '+254799000004', 'company_auditor', True, 'Salim', 'Hassan')
+        admin = account('mercy.n', '+254799000005', 'platform_admin', False, 'Mercy', 'Njeri')
         admin.is_staff = admin.is_superuser = True
         admin.save(update_fields=['is_staff', 'is_superuser'])
 
         self.stdout.write(self.style.SUCCESS(
             f'Route: {route.name} ({company.name}) | first stage: {stage.name}\n'
-            f'Boarding trip id {boarding.id} (bus DEMO-001) | scheduled trip id {later.id}\n'
-            f'Logins (password {PASSWORD}): demo_passenger, demo_operator, demo_driver, '
-            f'demo_manager, demo_auditor, demo_admin\n'
+            f'Boarding trip id {boarding.id} (bus KDA 123A) | scheduled trip id {later.id}\n'
+            f'Logins (password {PASSWORD}): wanjiku.k (passenger), brian.o, peter.m (driver), '
+            f'achieng.o, salim.h, mercy.n (platform admin)\n'
             f'Then run:  python manage.py seed_demo --drive'))
 
     def _drive(self, driver, stage):
         User = get_user_model()
-        user = User.objects.filter(username='demo_driver').first()
+        user = User.objects.filter(username='peter.m').first()
         if user is None:
             raise CommandError('Run seed_demo once without --drive first.')
         client = APIClient()

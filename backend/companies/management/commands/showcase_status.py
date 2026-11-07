@@ -22,17 +22,16 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         while True:
             trips = Trip.objects.select_related('route', 'driver')
-            demo = trips.filter(driver__bus_number__startswith='DEMO')
             trip = (
                 trips.filter(pk=opts['trip']).first() if opts['trip']
                 else (
-                    demo.filter(status='boarding').order_by('-id').first()
-                    or demo.filter(status='departed').order_by('-id').first()
-                    or demo.order_by('-id').first()
+                    trips.filter(status='boarding').order_by('-id').first()
+                    or trips.filter(status='departed').order_by('-id').first()
+                    or trips.order_by('-id').first()
                 )
             )
             if trip is None:
-                raise CommandError('No trip found. Run seed_demo, or pass --trip ID.')
+                raise CommandError('No trip found. Pass --trip ID.')
             if opts['watch']:
                 self.stdout.write('\033[2J\033[H', ending='')
             self._show(trip)
