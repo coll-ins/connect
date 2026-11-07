@@ -376,7 +376,6 @@ function PlatformShell({ logout, children }) {
             width: 100% !important;
             margin-left: 0 !important;
             min-height: 100vh;
-            padding-top: 62px;
           }
 
           .pa-topbar {
@@ -430,8 +429,8 @@ function PlatformShell({ logout, children }) {
           margin-bottom: 16px !important;
         }
 
-        @media (max-width: 640px) {
-          .pa-user > div,
+        @media (max-width: 800px) {
+          .pa-user > div:not(.pa-avatar),
           .pa-system-status > svg {
             display: none;
           }
@@ -446,9 +445,8 @@ function PlatformShell({ logout, children }) {
           }
 
           .pa-topbar {
-            padding-top: 12px;
-            padding-bottom: 12px;
-            padding-right: 16px;
+            min-height: 68px;
+            padding: 12px 16px 12px 68px;
             gap: 12px;
           }
 
