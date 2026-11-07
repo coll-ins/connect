@@ -119,6 +119,11 @@ def start_trip_simulation(request, trip_id):
                 path=path,
                 expires_at=timezone.now() + SESSION_TTL,
             )
+            if trip.status == 'scheduled':
+                # Passenger maps only track boarding or departed trips, and
+                # auto-depart only runs from boarding.
+                trip.status = 'boarding'
+                trip.save(update_fields=['status'])
     except IntegrityError:
         return _error(
             'Another simulation is already running. Stop it first.',

@@ -997,3 +997,24 @@
 .connect-labels-hidden .connect-stage-label {
   visibility: hidden;
 }
+
+.passenger-vehicle-marker.is-parked .passenger-vehicle-marker__glow {
+  background: rgba(100, 116, 139, .14);
+  box-shadow: 0 0 0 7px rgba(100, 116, 139, .08);
+}
+
+.passenger-vehicle-marker__parked-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  border: 2px solid #111827;
+  border-radius: 9px;
+  background: #fff;
+  color: #111827;
+  font: 800 12px/1.2 Arial, sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
+  pointer-events: none;
+}

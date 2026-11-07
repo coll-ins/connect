@@ -253,6 +253,36 @@ test('live map labels stale GPS, route progress, and the lack of live city traff
   await expect(page.getByText('Bus to pickup')).toBeVisible();
 });
 
+test('a trip that has not started shows the bus parked at the first stage', async ({ page }) => {
+  await setPassengerSession(page);
+  const liveLocationRequests = await stubPaymentReturnApi(page);
+  const departure = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+  await page.route('**/api/bookings/my/', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          ...confirmedBooking,
+          departure_at: departure,
+          route_start_point: 'CBD',
+          route_start_latitude: -1.2864,
+          route_start_longitude: 36.8172,
+        },
+      ]),
+    }),
+  );
+
+  await page.goto('/passenger/map?booking=42');
+
+  const parkedBus = page.locator('.passenger-vehicle-marker.is-parked');
+  await expect(parkedBus).toBeVisible();
+  await expect(parkedBus).toContainText(/Departs/);
+  await expect(page.getByText(/^Parked at CBD · Departs/).first()).toBeVisible();
+  expect(liveLocationRequests()).toBe(0);
+});
+
 test('payment connection errors are explained in a top notice', async ({ page }) => {
   await setPassengerSession(page);
   await stubPaymentReturnApi(page, { failVerification: true });

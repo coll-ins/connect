@@ -88,6 +88,17 @@ class TripSimulationApiTests(TestCase):
         self.assertEqual(self.start().status_code, 403)
         self.assertEqual(TripSimulation.objects.count(), 0)
 
+    def test_starting_a_scheduled_trip_makes_it_trackable(self):
+        self.trip.status = 'scheduled'
+        self.trip.save(update_fields=['status'])
+
+        resp = self.start()
+
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertEqual(resp.json()['simulation']['trip_status'], 'boarding')
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.status, 'boarding')
+
     def test_refusals(self):
         self.trip.status = 'completed'
         self.trip.save(update_fields=['status'])
