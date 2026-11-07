@@ -99,6 +99,47 @@ class TripSimulationApiTests(TestCase):
         self.trip.refresh_from_db()
         self.assertEqual(self.trip.status, 'boarding')
 
+    def test_divert_sends_the_bus_off_the_route_and_back(self):
+        sim_id = self.start().json()['simulation']['id']
+        before = TripSimulation.objects.get(pk=sim_id).path
+
+        resp = self.client.post(f'/api/system/trip-simulations/{sim_id}/divert/')
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        after = TripSimulation.objects.get(pk=sim_id).path
+        self.assertEqual(len(after), len(before))
+        self.assertEqual(after[0], before[0])
+        self.assertEqual(after[-1], before[-1])
+        self.assertNotEqual(after, before)
+
+    def test_finish_ends_the_trip_and_stops_the_bus(self):
+        sim_id = self.start().json()['simulation']['id']
+
+        resp = self.client.post(f'/api/system/trips/{self.trip.id}/finish/')
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.status, 'completed')
+        self.assertEqual(TripSimulation.objects.get(pk=sim_id).status, 'stopped')
+        self.assertEqual(
+            self.client.post(f'/api/system/trips/{self.trip.id}/finish/').status_code, 409,
+        )
+
+    def test_journey_controls_are_superuser_only(self):
+        sim_id = self.start().json()['simulation']['id']
+        staff = User.objects.create_user(
+            username='plain', password='x', phone_number='+254700000222',
+        )
+        self.client.force_authenticate(user=staff)
+        self.assertEqual(
+            self.client.post(f'/api/system/trip-simulations/{sim_id}/divert/').status_code, 403,
+        )
+        self.assertEqual(
+            self.client.post(f'/api/system/trips/{self.trip.id}/finish/').status_code, 403,
+        )
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.status, 'boarding')
+
     def test_refusals(self):
         self.trip.status = 'completed'
         self.trip.save(update_fields=['status'])

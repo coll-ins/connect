@@ -933,7 +933,7 @@ export default function PassengerLiveMap({
   const parkedStageName = bookingDetails?.route_start_point || 'the first stage';
   const liveBadge = tripIsLive ? 'Live' : parkedBus ? 'Parked' : 'Offline';
 
-  const boarded = live?.boarded === true;
+  const boarded = live?.boarded === true || bookingDetails?.boarded === true;
   const busIsOffRoute = useMemo(
     () =>
       tripIsLive &&
@@ -996,7 +996,7 @@ export default function PassengerLiveMap({
     }
 
     const targetIndex =
-      pickupRouteIndex >= driverRouteIndex
+      !boarded && pickupRouteIndex >= driverRouteIndex
         ? pickupRouteIndex
         : destinationRouteIndex;
 
@@ -1010,6 +1010,7 @@ export default function PassengerLiveMap({
     pickupRouteIndex,
     destinationRouteIndex,
     matchedDriverPosition,
+    boarded,
   ]);
 
   const blueRoute = parkedBus
@@ -1135,7 +1136,7 @@ export default function PassengerLiveMap({
   const driverPhone = live?.driver?.phone || null;
   const showPickupLeg =
     rerouteToPickupKm != null ||
-    (Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable && !busPastPickup);
+    (!boarded && Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable && !busPastPickup);
   const pickupDistanceKm = rerouteToPickupKm ?? distanceToPickupKm;
 
   const pickup =

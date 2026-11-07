@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import { canOpenTripMap } from './liveMapUtils';
 import {
   Armchair,
   CreditCard,
@@ -387,7 +388,7 @@ function bookingActions(b) {
     pay: status === 'pending' && trip !== 'departed' && pay !== 'confirmed'
       && !(lower(b.payment_method) === 'cash' && pay === 'pending'),
     cancel: live && trip === 'scheduled',
-    track: status === 'confirmed' && ['boarding', 'departed'].includes(trip),
+    track: canOpenTripMap(b),
   };
 }
 
@@ -504,7 +505,7 @@ function BookingsBody({ activeOnly = false }) {
                     {can.track && (
                       <button type="button" className="btn btn-primary"
                         onClick={() => navigate(`/passenger/map?booking=${booking.booking_id}`)}>
-                        Track bus
+                        Open map
                       </button>
                     )}
                     {can.cancel && (
