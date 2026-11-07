@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   estimateBusSpeedKmh,
+  parkedBusLabel,
+  planParkedBus,
   recordDriverPosition,
 } from '../src/pages/passenger/liveMapUtils.js';
 
@@ -73,4 +75,51 @@ test('does not use stale, future, or out-of-order GPS fixes', () => {
   assert.equal(outOfOrder, history);
   assert.equal(stale.length, 0);
   assert.equal(future.length, 0);
+});
+
+const line = [[-1.2864, 36.8172], [-1.28, 36.81], [-1.27, 36.8], [-1.26, 36.79]];
+
+test('parks the bus at the route start with the road to the pickup', () => {
+  const plan = planParkedBus({
+    geometry: line,
+    routeStart: [-1.2864, 36.8172],
+    pickup: [-1.2701, 36.8001],
+    tripStatus: 'scheduled',
+  });
+
+  assert.deepEqual(plan.position, line[0]);
+  assert.deepEqual(plan.pickupLeg, line.slice(0, 3));
+  assert.ok(plan.heading > 270 && plan.heading < 360);
+});
+
+test('parks at the correct end when the route line is drawn backwards', () => {
+  const plan = planParkedBus({
+    geometry: [...line].reverse(),
+    routeStart: [-1.2864, 36.8172],
+    pickup: [-1.28, 36.81],
+    tripStatus: 'boarding',
+  });
+
+  assert.deepEqual(plan.position, line[0]);
+  assert.deepEqual(plan.pickupLeg, line.slice(0, 2));
+});
+
+test('never parks a bus for a trip that has left or ended, or with no location', () => {
+  for (const tripStatus of ['departed', 'completed', 'cancelled', '', null]) {
+    assert.equal(planParkedBus({ geometry: line, tripStatus }), null);
+  }
+  assert.equal(planParkedBus({ geometry: [], tripStatus: 'scheduled' }), null);
+});
+
+test('labels the departure time, the day when it is not today, and late buses', () => {
+  const timeZone = 'Africa/Nairobi';
+  const now = Date.parse('2026-11-07T12:00:00+03:00');
+  const label = (tripStatus, departureAt) =>
+    parkedBusLabel({ tripStatus, departureAt, now, timeZone });
+
+  assert.match(label('scheduled', '2026-11-07T22:30:00+03:00'), /^Departs 10:30\sPM$/);
+  assert.match(label('scheduled', '2026-11-08T08:00:00+03:00'), /^Departs Sun 8:00\sAM$/);
+  assert.match(label('boarding', '2026-11-07T22:30:00+03:00'), /^Boarding · departs 10:30\sPM$/);
+  assert.equal(label('scheduled', '2026-11-07T08:00:00+03:00'), 'Waiting to depart');
+  assert.equal(label('boarding', '2026-11-07T08:00:00+03:00'), 'Boarding now');
 });
