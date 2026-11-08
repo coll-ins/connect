@@ -469,3 +469,22 @@ test('payment connection errors are explained in a top notice', async ({ page })
   );
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 });
+
+test('leaving the map after a payment lands on the overview, by arrow or phone back', async ({ page }) => {
+  await setPassengerSession(page);
+  await stubPaymentReturnApi(page);
+
+  await page.goto('/passenger?step=trips&mode=seat&company=17&route=5');
+  await page.goto('/passenger/payment/42?reference=e2e-reference');
+  await expect(page).toHaveURL(/\/passenger\/map\?booking=42$/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/passenger$/);
+  await expect(page.getByText('Upcoming and active bookings')).toBeVisible();
+
+  await page.goForward();
+  await expect(page).toHaveURL(/\/passenger\/map\?booking=42$/);
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(page).toHaveURL(/\/passenger$/);
+  await expect(page.getByText('Upcoming and active bookings')).toBeVisible();
+});

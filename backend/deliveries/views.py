@@ -12,7 +12,8 @@ from companies.models import PickupStage, Route, Trip
 from drivers.views import COMPANY_STAFF_ROLES
 
 from .models import Parcel
-from django.conf import settings
+
+from connect.frontend import frontend_url
 
 from connect import paystack_extra as paystack
 from .services import ParcelError, cancel_parcel, create_parcel, deliver, pick_up
@@ -223,10 +224,6 @@ def company_parcels(request):
     return Response([payload(p, user) for p in qs[:200]])
 
 
-def _frontend(path):
-    return f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/')}{path}"
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def parcel_pay(request, parcel_id):
@@ -245,7 +242,7 @@ def parcel_pay(request, parcel_id):
             email=request.user.email or f'user_{request.user.id}@connect.local',
             amount=parcel.price,
             reference=reference,
-            callback_url=_frontend(f'/passenger/delivery/{parcel.id}'),
+            callback_url=frontend_url(request, f'/passenger/delivery/{parcel.id}'),
             metadata={'parcel_id': parcel.id, 'user_id': request.user.id},
         )
     except paystack.GatewayError as exc:

@@ -1,3 +1,4 @@
+from connect.frontend import frontend_url
 from django.db.models import Q
 import hmac
 import logging
@@ -275,16 +276,7 @@ def initialize_paystack_payment(request, booking_id):
         'amount': amount_in_cents,
         'currency': 'KES',
         'reference': reference,
-        'callback_url': (
-            request.data.get('callback_url')
-            if str(request.data.get('callback_url') or '').startswith(
-                getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + '/'
-            )
-            else (
-                f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')}"
-                f"/passenger/payment/{booking.id}"
-            )
-        ),
+        'callback_url': frontend_url(request, f'/passenger/payment/{booking.id}'),
         'metadata': {
             'booking_id': booking.id,
             'user_id': request.user.id,
