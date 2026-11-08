@@ -101,8 +101,12 @@ class Command(BaseCommand):
                     )
                     bookings_settled += 1
 
+                # Cash passengers at later stages pay the driver on boarding;
+                # their seat stays held until the trip ends.
                 expired_count = trip.bookings.filter(
                     status="pending"
+                ).exclude(
+                    payment__method="cash", payment__status="pending",
                 ).update(status="cancelled")
                 bookings_expired += expired_count
 
