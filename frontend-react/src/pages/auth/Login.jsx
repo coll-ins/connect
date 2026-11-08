@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import '../../legal/Legal.css';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
 import PasswordInput from '../../components/PasswordInput';
@@ -8,6 +8,7 @@ import PasswordInput from '../../components/PasswordInput';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -35,7 +36,14 @@ export default function Login() {
         password,
       });
 
-      navigate(dashboardPath(user), { replace: true });
+      const home = dashboardPath(user);
+      const from = location.state?.from;
+      // Only return to a page inside this user's own area.
+      const back =
+        typeof from === 'string' && (from === home || from.startsWith(`${home}/`))
+          ? from
+          : home;
+      navigate(back, { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

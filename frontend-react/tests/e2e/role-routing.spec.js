@@ -138,3 +138,29 @@ test('unknown driver subroute returns to driver overview', async ({ page }) => {
     page.getByRole('heading', { level: 1, name: 'Overview' }),
   ).toBeVisible();
 });
+
+test('logging in after a bank payment return finishes that payment, not the dashboard', async ({ page }) => {
+  await addCsrfCookie(page);
+  await stubApi(page, { loginRole: 'passenger' });
+
+  await page.goto('/passenger/payment/42?reference=bank-ref');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('Phone number').fill('0712345678');
+  await page.getByRole('textbox', { name: 'Password' }).fill('test-password-only');
+  await page.getByRole('button', { name: /log in|sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/passenger\/payment\/42\?reference=bank-ref$/);
+});
+
+test('login ignores a return path outside the user role area', async ({ page }) => {
+  await addCsrfCookie(page);
+  await stubApi(page, { loginRole: 'passenger' });
+
+  await page.goto('/platform-admin');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('Phone number').fill('0712345678');
+  await page.getByRole('textbox', { name: 'Password' }).fill('test-password-only');
+  await page.getByRole('button', { name: /log in|sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/passenger$/);
+});

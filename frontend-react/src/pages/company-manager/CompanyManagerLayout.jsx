@@ -165,7 +165,7 @@ export default function CompanyManagerLayout() {
             <Menu size={21} />
           </button>
 
-          <div>
+          <div className="company-topbar-title">
             <p className="company-eyebrow">Company manager</p>
             <h1>{user?.company_name || 'My Company'}</h1>
           </div>
@@ -175,8 +175,10 @@ export default function CompanyManagerLayout() {
               type="button"
               className="company-logout"
               onClick={logout}
+              aria-label="Logout"
             >
-              Logout
+              <LogOut size={18} />
+              <span className="company-logout-label">Logout</span>
             </button>
           </div>
         </header>

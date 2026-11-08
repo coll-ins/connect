@@ -8,7 +8,8 @@ from drivers.views import COMPANY_STAFF_ROLES
 from users.permissions import can_manage_company
 
 from .models import CharterRequest
-from django.conf import settings
+
+from connect.frontend import frontend_url
 
 from connect import paystack_extra as paystack
 from .services import (
@@ -247,10 +248,6 @@ def charter_complete(request, charter_id):
     return Response(payload(_qs().get(id=result.id), request.user))
 
 
-def _frontend(path):
-    return f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/')}{path}"
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def charter_pay(request, charter_id):
@@ -263,7 +260,7 @@ def charter_pay(request, charter_id):
             email=request.user.email or f'user_{request.user.id}@connect.local',
             amount=charter.quote_price,
             reference=reference,
-            callback_url=_frontend(f'/passenger/charter/{charter.id}'),
+            callback_url=frontend_url(request, f'/passenger/charter/{charter.id}'),
             metadata={'charter_id': charter.id, 'user_id': request.user.id},
         )
     except paystack.GatewayError as exc:

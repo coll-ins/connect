@@ -43,8 +43,10 @@ export default function PaymentReturn() {
                 (item) => String(item.booking_id || item.id) === String(bookingId),
               )
             : null;
+          // Under the map sits the overview, so leaving the map never goes
+          // back to this page or the payment provider.
+          navigate('/passenger', { replace: true });
           navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
-            replace: true,
             state: {
               booking: booking
                 ? {

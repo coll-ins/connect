@@ -507,7 +507,7 @@ def _can_manage_driver_location(request, driver):
     return can_manage_company(user, driver.company)
 
 
-def record_driver_fix(driver, latitude, longitude):
+def record_driver_fix(driver, latitude, longitude, simulated=False):
     """Save a driver position and run the auto-depart hook."""
     prev = (driver.latitude, driver.longitude)
     driver.latitude = latitude
@@ -516,6 +516,10 @@ def record_driver_fix(driver, latitude, longitude):
     driver.save(
         update_fields=['latitude', 'longitude', 'location_updated_at']
     )
+    # Simulated points would paint fake traffic, so only real fixes are kept.
+    if not simulated:
+        from .traffic import keep_ping
+        keep_ping(driver, latitude, longitude, driver.location_updated_at)
     try:
         from bookings.departure import auto_depart_on_movement
         auto_depart_on_movement(driver, prev[0], prev[1], latitude, longitude)
