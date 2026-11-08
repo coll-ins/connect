@@ -231,8 +231,9 @@ class CharterTests(APITestCase):
         self.assertEqual(self.client.post(f'{BASE}{cid}/cancel/').status_code, 200)
         self.assertEqual(self.client.post(f'{BASE}{cid}/cancel/').status_code, 409)
 
-    def test_paid_hire_cannot_be_cancelled_yet(self):
+    def test_paid_hire_inside_48h_cannot_be_cancelled_online(self):
         c = self.confirmed()
+        CharterRequest.objects.filter(pk=c.pk).update(depart_at=timezone.now() + timedelta(hours=25))
         self.client.force_authenticate(self.pax)
         self.assertEqual(self.client.post(f'{BASE}{c.id}/cancel/').status_code, 409)
 

@@ -14,6 +14,7 @@ urlpatterns = [
     path('<int:charter_id>/quote/', views.charter_quote, name='charter-quote'),
     path('<int:charter_id>/decline/', views.charter_decline, name='charter-decline'),
     path('<int:charter_id>/cancel/', views.charter_cancel, name='charter-cancel'),
+    path('<int:charter_id>/company-cancel/', views.charter_company_cancel, name='charter-company-cancel'),
     path('<int:charter_id>/pay/', views.charter_pay, name='charter-pay'),
     path('<int:charter_id>/verify/', views.charter_verify, name='charter-verify'),
     path('<int:charter_id>/complete/', views.charter_complete, name='charter-complete'),

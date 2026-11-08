@@ -181,6 +181,46 @@ function QuoteForm({ charter, drivers, onDone }) {
   );
 }
 
+function CancelPaidHire({ charter, onDone }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!window.confirm(`Cancel ${charter.reference}? The passenger gets a full refund of ${money(charter.quote_price)}.`)) return;
+    setBusy(true); setError('');
+    try {
+      await apiRequest(`/charters/${charter.id}/company-cancel/`, { method: 'POST', body: { reason: reason.trim() } });
+      onDone();
+    } catch (e) { setError(e.message); setBusy(false); }
+  };
+
+  if (!open) {
+    return (
+      <div className="svc-actions">
+        <button className="btn btn-ghost" onClick={() => setOpen(true)}>Cancel hire and refund</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 14 }}>
+      {error && <div className="svc-error" style={{ marginBottom: 10 }}>{error}</div>}
+      <div className="svc-form">
+        <label className="svc-field wide">Reason (the passenger will see this)
+          <input className="input" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </label>
+        <div className="svc-actions wide" style={{ gridColumn: '1 / -1', marginTop: 0 }}>
+          <button className="btn btn-primary" disabled={busy || !reason.trim()} onClick={submit}>
+            {busy ? 'Cancelling…' : `Cancel and refund ${money(charter.quote_price)}`}
+          </button>
+          <button className="btn btn-ghost" disabled={busy} onClick={() => setOpen(false)}>Keep hire</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ManagerCharters() {
   const { user } = useAuth();
   const [accepts, setAccepts] = useState(null);
@@ -272,6 +312,7 @@ export function ManagerCharters() {
               {['requested', 'quoted'].includes(c.status) && (
                 <QuoteForm charter={c} drivers={drivers} onDone={loadRows} />
               )}
+              {c.status === 'confirmed' && <CancelPaidHire charter={c} onDone={loadRows} />}
             </div>
           ))}
         </div>
