@@ -1,5 +1,6 @@
 from django.db.models import Q
 import hmac
+import logging
 import hashlib
 import json
 import requests
@@ -876,6 +877,46 @@ def verify_paystack_payment(request, booking_id):
 # PAYSTACK WEBHOOK
 # ============================================================
 
+def _queue_unmatched_booking_refund(reference, data):
+    """
+    A booking charge whose reference was replaced: the passenger paid an old
+    checkout after retrying or switching to cash. Record it durably as a
+    refund for process_unapplied (one-winner claim, reconcile, no resend)
+    instead of calling Paystack here, so a slow refund can never make Paystack
+    resend the webhook. Replays hit the unique reference and do nothing.
+    """
+    from bookings.models import UnappliedPayment
+    from connect.paystack_extra import GatewayError, to_kes
+
+    try:
+        amount = to_kes(data.get('amount'))
+    except GatewayError:
+        amount = None
+    refundable = amount is not None and amount > 0 and _currency_ok(data.get('currency'))
+    try:
+        _, created = UnappliedPayment.objects.get_or_create(
+            reference=reference,
+            defaults={
+                'kind': 'booking',
+                'amount': amount,
+                'currency': str(data.get('currency') or '')[:10],
+                'reason': 'paid a replaced booking checkout',
+                'payload': data,
+                'status': 'refund_due' if refundable else 'review',
+            },
+        )
+    except Exception:
+        logging.getLogger(__name__).exception('Could not record unmatched charge %s', reference)
+        _alert_payment_problem(reference, 'unmatched booking charge NOT recorded: refund manually')
+        return
+    if created:
+        _alert_payment_problem(
+            reference,
+            'unmatched booking charge: automatic refund queued' if refundable
+            else 'unmatched booking charge with a bad amount/currency: refund manually',
+        )
+
+
 def _alert_payment_problem(reference, reason):
     """Log and SMS the admins about money that needs a human. Never raises."""
     import logging
@@ -1045,21 +1086,11 @@ def paystack_webhook(request):
 
     except Payment.DoesNotExist:
         # Unknown references must not cause endless Paystack retries, but a
-        # signed successful charge we cannot match is real money. A booking
-        # reference lands here when the passenger paid an old checkout after
-        # starting a new attempt or switching to cash: give the money back.
-        outcome = 'needs a manual refund'
+        # signed successful charge we cannot match is real money.
         if str(reference).startswith('CONNECT-'):
-            from connect.paystack_extra import refund_charge, to_kes
-            try:
-                refund_status, _ = refund_charge(reference, to_kes(data.get('amount')))
-                outcome = f'refund requested ({refund_status})'
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception(
-                    'Refund for unmatched charge %s failed', reference)
-        _alert_payment_problem(
-            reference, f'charge.success for an unknown reference: {outcome}')
+            _queue_unmatched_booking_refund(reference, data)
+        else:
+            _alert_payment_problem(reference, 'charge.success for an unknown reference')
         return HttpResponse(status=200)
 
     if refund_after_commit:
