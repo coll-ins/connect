@@ -1,4 +1,6 @@
 from decimal import Decimal
+import io
+from django.core.management import call_command
 import json
 import hmac
 import hashlib
@@ -915,20 +917,49 @@ class DeadDigitalAttemptTests(TestCase):
         self.payment.refresh_from_db()
         self.assertEqual(self.payment.status, 'failed')
 
-    def _webhook(self, ref):
+    def _webhook(self, ref, currency='KES'):
         body = json.dumps({'event': 'charge.success', 'data': {
-            'reference': ref, 'amount': 20000, 'currency': 'KES'}}).encode()
+            'reference': ref, 'amount': 20000, 'currency': currency}}).encode()
         sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body,
                        hashlib.sha512).hexdigest()
         return self.client.post(reverse('bookings:paystack-webhook'), data=body,
                                 content_type='application/json',
                                 HTTP_X_PAYSTACK_SIGNATURE=sig)
 
-    @patch('connect.paystack_extra.refund_charge', return_value=('pending', 1))
-    @patch('bookings.views.requests.get')
-    def test_paying_the_old_checkout_after_switching_is_refunded(self, mock_get, refund):
-        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'abandoned'}})
-        self.client.post(reverse('bookings:initialize-cash-payment',
-                                 kwargs={'booking_id': self.booking.id}))
+    def _switch_to_cash(self):
+        with patch('bookings.views.requests.get') as mock_get:
+            self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'abandoned'}})
+            r = self.client.post(reverse('bookings:initialize-cash-payment',
+                                         kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 200, r.data)
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('connect.paystack_extra.refund_charge', return_value=('pending', 77))
+    def test_paying_the_old_checkout_after_switching_is_refunded(self, refund, sms):
+        from bookings.models import UnappliedPayment
+        self._switch_to_cash()
         self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
+        self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)  # Paystack replay
+        refund.assert_not_called()  # never inline: the webhook stays fast
+        row = UnappliedPayment.objects.get(reference='CONNECT-OLD')
+        self.assertEqual((row.kind, row.status, row.amount),
+                         ('booking', 'refund_due', Decimal('200.00')))
+        self.assertEqual(sms.call_count, 1)  # one alert, not one per replay
+
+        call_command('process_unapplied', stdout=io.StringIO())
+        call_command('process_unapplied', stdout=io.StringIO())
         refund.assert_called_once_with('CONNECT-OLD', Decimal('200.00'))
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.refund_reference), ('refunded', '77'))
+        self.payment.refresh_from_db()
+        self.assertEqual((self.payment.method, self.payment.status), ('cash', 'pending'))
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('connect.paystack_extra.refund_charge')
+    def test_unmatched_charge_in_wrong_currency_goes_to_a_human(self, refund, sms):
+        from bookings.models import UnappliedPayment
+        self._switch_to_cash()
+        self._webhook('CONNECT-OLD', currency='USD')
+        call_command('process_unapplied', stdout=io.StringIO())
+        refund.assert_not_called()
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
