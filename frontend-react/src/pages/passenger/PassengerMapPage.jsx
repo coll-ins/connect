@@ -307,7 +307,7 @@ export default function PassengerMapPage() {
         onBack={() =>
           // Opened from the overview (directly or after paying): step back to
           // it, so one press leaves the map and history has no duplicate.
-          location.state?.backToOverview
+          location.state?.backToOverview && window.history.state?.idx > 0
             ? navigate(-1)
             : navigate('/passenger', { replace: true })
         }
