@@ -12,14 +12,15 @@ const contact = () => {
 const terms = {
   slug: 'terms',
   title: 'Terms of Service',
-  summary: 'The agreement between you and CONNECT when you create an account, book a seat, send a parcel or hire a bus.',
+  summary: 'The rules for using CONNECT, the technology platform that connects you with transport companies to book seats, send parcels and hire buses.',
   sections: [
     {
       h: 'Who we are and what CONNECT does',
       body: [
-        `CONNECT is an online booking platform operated by ${BUSINESS.entity}, ${BUSINESS.address} ("CONNECT", "we", "us").`,
-        'CONNECT lets you find and book seats on matatus and buses, send parcels on scheduled trips, and request to hire a whole bus. The transport itself is provided by the transport company (sacco or operator) shown on your booking. That company is the carrier: it owns or runs the vehicle, employs or engages the driver and crew, and holds the licences and insurance needed to carry passengers and goods.',
-        'CONNECT does not drive, own or operate vehicles. We take bookings and payments on behalf of transport companies and pass trip information between you and them.',
+        `CONNECT is a technology platform operated by ${BUSINESS.entity}, ${BUSINESS.address} ("CONNECT", "we", "us"). It lets you find and book seats on matatus and buses, send parcels on scheduled trips, and request to hire a whole bus from independent transport companies.`,
+        'CONNECT is an intermediary. We are not a transport company, courier or bus hire operator. We do not own, operate or control any vehicle, driver, crew, route, timetable or fare, and we have no authority over how a transport company runs its business.',
+        'When you book a seat, send a parcel or hire a bus, your contract for that service is with the transport company (sacco or operator) shown in the app. That company is the carrier. It alone decides and is responsible for its fares, timetables, vehicles, drivers and crew, the safety of passengers and goods, parcel handling, hire quotes, and the licences and insurance its business needs.',
+        'CONNECT is responsible only for the platform itself: the app and its systems, your account, collecting payments on behalf of the transport company, applying the automatic refund rules built into the platform, and protecting the personal data we hold.',
       ],
     },
     {
@@ -44,17 +45,17 @@ const terms = {
             'Online payment (M-PESA, card or bank through Paystack) must be completed within 20 minutes. An unpaid online booking is cancelled after that and its seats are released.',
             'If you choose cash, your seat is held until the trip departs. Pay the conductor or driver when you board. A cash booking that has not been paid when the trip departs is cancelled.',
             'You can hold up to 3 unpaid bookings at a time.',
-            'Fares are set by the transport company and shown in Kenya Shillings before you pay. The fare you see when you book is the fare you pay.',
-            'Show your booking or boarding code when you board. The crew may refuse a passenger who cannot show a valid booking, is a danger to others, or breaks the law or the carrier’s rules.',
+            'Fares are set by the transport company, not by CONNECT, and shown in Kenya Shillings before you pay. The fare you see when you book is the fare charged through the app.',
+            'Show your booking or boarding code when you board. Boarding is controlled by the transport company’s crew, who may refuse a passenger who cannot show a valid booking, is a danger to others, or breaks the law or the company’s rules.',
           ],
         },
-        'Departure times are set by the transport company and can change because of traffic, weather, breakdowns or police checks. Live locations and arrival estimates are a guide, not a promise.',
+        'Departure times are set by the transport company and can change because of traffic, weather, breakdowns or police checks. Live locations and arrival estimates come from the company’s vehicles and are a guide, not a promise.',
       ],
     },
     {
       h: 'Cancellations, no-shows and refunds',
       body: [
-        'The full rules, including amounts and timing, are in the Refund and Cancellation Policy, which is part of these Terms. In short: you get a full refund when the transport company cancels or cannot carry you; you get half the fare back if you cancel before boarding starts or do not board.',
+        'The platform applies the refund rules in the Refund and Cancellation Policy automatically, on behalf of the transport company. In short: you get a full refund when the transport company cancels or cannot carry you; you get half the fare back if you cancel before boarding starts or do not board. Anything outside those rules, such as compensation for a delay or a cash refund, is for the transport company to decide.',
       ],
     },
     {
@@ -66,7 +67,8 @@ const terms = {
     {
       h: 'Payments',
       body: [
-        'Online payments are processed by Paystack, a licensed payment processor. Your card, bank or M-PESA details are entered with Paystack; CONNECT never sees or stores your full card number or PIN.',
+        'CONNECT collects online payments as the transport company’s payment agent and pays the company its share after the trip. Payments are processed by Paystack, a licensed payment processor. Your card, bank or M-PESA details are entered with Paystack; CONNECT never sees or stores your full card number or PIN.',
+        'Cash is paid directly to the transport company’s crew. CONNECT never receives cash.',
         'Payments are taken in Kenya Shillings. Your bank or mobile money provider may charge its own fees, which we do not control.',
         'If you are charged more than once for the same booking, or charged for a booking that was not confirmed, we refund the extra charge automatically to the account you paid from.',
         'The Wallet screen in the app shows your trip spending. It does not hold money and cannot be topped up.',
@@ -86,19 +88,19 @@ const terms = {
       ],
     },
     {
-      h: 'Responsibility for your journey',
+      h: 'Who is responsible for what',
       body: [
-        'The transport company is responsible for carrying you safely and for its vehicles, crew and the goods in its care, as required by Kenyan law, including the Traffic Act and the rules of the National Transport and Safety Authority (NTSA).',
-        'CONNECT is responsible for running the booking platform with reasonable care and skill: taking your booking and payment correctly, passing it to the transport company, and paying refunds as these Terms say.',
-        'To the extent the law allows, CONNECT is not responsible for delays, route changes or events on the road that are outside our control, and our total liability to you for a booking is limited to the amount you paid for it.',
+        'The transport company is solely responsible for the transport service: carrying you safely, its vehicles, drivers and crew, the goods in its care, its fares and timetables, and complying with Kenyan law, including the Traffic Act and the rules of the National Transport and Safety Authority (NTSA). Claims about injury, loss or damage during a trip, a lost or damaged parcel, or how a hire was carried out are claims against the transport company.',
+        'CONNECT is responsible for running the platform with reasonable care and skill: recording your booking correctly, charging the amount shown, passing your booking to the transport company, applying the platform’s refund rules, and protecting your personal data.',
+        'To the extent the law allows, CONNECT is not liable for anything done or not done by a transport company, its drivers or crew, or for delays, cancellations, route changes or events on the road, and our total liability to you for any booking, parcel or hire is limited to the amount you paid through the app for it.',
         'Nothing in these Terms limits any right you have under the Consumer Protection Act, 2012 or other Kenyan law that cannot be limited by agreement, or excludes liability for death or personal injury caused by negligence, or for fraud.',
       ],
     },
     {
       h: 'Complaints',
       body: [
-        `${contact()} Include your booking, parcel or hire reference. We aim to reply within 2 working days and to resolve complaints within 14 days.`,
-        'Complaints about a driver, vehicle or crew are passed to the transport company and, where safety is involved, can also be reported to the NTSA.',
+        `For problems with the app, your account, a payment or your data: ${contact()} Include your booking, parcel or hire reference. We aim to reply within 2 working days.`,
+        'Complaints about the transport service itself (a driver, vehicle, crew, delay, parcel or hire) are for the transport company to resolve. We pass them to the company with your booking details and tell you its response. Safety issues can also be reported to the NTSA.',
       ],
     },
     {
@@ -119,7 +121,7 @@ const terms = {
 const refunds = {
   slug: 'refunds',
   title: 'Refund and Cancellation Policy',
-  summary: 'When you get money back, how much, and how long it takes.',
+  summary: 'The refund rules the CONNECT platform applies automatically on behalf of transport companies: when you get money back, how much, and how long it takes.',
   sections: [
     {
       h: 'Seat bookings',
@@ -137,7 +139,7 @@ const refunds = {
           ],
         },
         'Once boarding has started you can no longer cancel a booking in the app.',
-        'If you paid cash, any refund due is paid by the transport company, not through the app. Ask the crew or contact us.',
+        'If you paid cash, CONNECT never received the money. Any refund is for the transport company to decide and pay; ask the crew or the company.',
         'Refunds of less than KES 5 cannot be sent through our payment processor and are not paid.',
       ],
     },
@@ -162,7 +164,7 @@ const refunds = {
             ['You cancel before the parcel is picked up', 'Full delivery fee'],
             ['The trip carrying the parcel is cancelled', 'Full delivery fee'],
             ['The parcel was never picked up and the trip has ended', 'Full delivery fee'],
-            ['The parcel was picked up but not delivered', 'Handled case by case; see the Parcel Terms'],
+            ['The parcel was picked up but not delivered', 'For the transport company to resolve; see the Parcel Terms'],
           ],
         },
       ],
@@ -230,8 +232,9 @@ const parcels = {
     {
       h: 'If something goes wrong',
       body: [
-        'If a parcel is picked up but not delivered within 48 hours of the trip ending, we follow it up with the transport company and contact you. The driver can still complete the delivery with the PIN.',
-        'The transport company is responsible for a parcel while it is in its care. If a parcel is lost or damaged while in the company’s care, report it within 7 days with your tracking code. To the extent the law allows, CONNECT’s liability for a parcel is limited to the delivery fee you paid.',
+        'The parcel service is provided by the transport company, which is the carrier and is solely responsible for the parcel from pickup to hand-over. CONNECT never handles parcels.',
+        'If a parcel is picked up but not delivered within 48 hours of the trip ending, the platform flags it and we pass it to the transport company to resolve. The driver can still complete the delivery with the PIN.',
+        'Report a lost or damaged parcel within 7 days with your tracking code. We pass the report and the parcel record to the transport company; any claim for loss or damage is against that company. To the extent the law allows, CONNECT’s own liability for a parcel is limited to the delivery fee you paid through the app.',
         'Refunds for parcels are in the Refund and Cancellation Policy.',
       ],
     },
@@ -247,7 +250,8 @@ const hire = {
       h: 'How bus hire works',
       body: [
         'You send a request to a transport company with your trip details: purpose, pickup, destination, dates and number of passengers. Departure must be at least 24 hours away and a hire can last up to 14 days.',
-        'The company may decline the request or send a quote with a price, a driver and a bus. A quote is valid until the time shown. Paying the quote in full confirms the hire. The agreement for the hire is between you and the transport company; CONNECT takes the payment and passes details between you.',
+        'The company decides whether to accept the request and sets the price, the driver and the bus. A quote is valid until the time shown. Paying the quote in full confirms the hire.',
+        'The hire contract is between you and the transport company. CONNECT only passes the request and quote between you, collects the payment on the company’s behalf, and applies the cancellation rules below. The company is solely responsible for carrying out the hire.',
       ],
     },
     {
@@ -287,7 +291,7 @@ const privacy = {
     {
       h: 'Who is responsible for your data',
       body: [
-        `${BUSINESS.entity}, ${BUSINESS.address}, is the data controller for personal data processed through CONNECT. Transport companies receive the data they need to run your trip and are responsible for how they use it. ${contact()}`,
+        `${BUSINESS.entity}, ${BUSINESS.address}, is the data controller for the personal data held in the CONNECT platform, and this is the part of the service CONNECT is directly responsible for. Each transport company receives only the data it needs to run your trip, parcel or hire, and is a separate data controller responsible for how it uses that data. ${contact()}`,
       ],
     },
     {
