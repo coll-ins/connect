@@ -304,7 +304,7 @@ export default function PassengerMapPage() {
             booking.pickup_stage?.id ??
             null,
         }}
-        onBack={() => navigate('/passenger')}
+        onBack={() => navigate('/passenger', { replace: true })}
       />
     </>
   );

@@ -224,6 +224,39 @@ class LatePaymentTests(_Fixture, APITestCase):
         self.assertTrue(sent.startswith(settings.FRONTEND_URL.rstrip('/')), sent)
         self.assertNotIn('evil.example', sent)
 
+    @patch('bookings.views.requests.post')
+    def test_payment_returns_to_the_trusted_site_it_started_on(self, mock_post):
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            'status': True,
+            'data': {'authorization_url': 'https://paystack.test/pay', 'reference': 'X'},
+        }
+        self.client.force_authenticate(user=self.passenger)
+        site = 'https://connect-live.example'
+
+        def callback_for(origin):
+            booking = Booking.objects.create(
+                user=self.passenger, route=self.route, trip=self.trip,
+                booking_number='BK' + uuid.uuid4().hex[:8],
+                total_amount=Decimal('800.00'), status='pending',
+            )
+            mock_post.reset_mock()
+            mock_post.return_value.json.return_value = {
+                'status': True,
+                'data': {'authorization_url': 'https://paystack.test/pay',
+                         'reference': uuid.uuid4().hex},
+            }
+            url = reverse('bookings:initialize-paystack-payment', kwargs={'booking_id': booking.id})
+            self.client.post(url, {}, format='json', HTTP_ORIGIN=origin)
+            self.assertTrue(mock_post.called)
+            return booking.id, mock_post.call_args.kwargs['json']['callback_url']
+
+        with self.settings(CORS_ALLOWED_ORIGINS=[site], FRONTEND_URL='https://other.example'):
+            booking_id, sent = callback_for(site)
+            self.assertEqual(sent, f'{site}/passenger/payment/{booking_id}')
+            booking_id, sent = callback_for('https://evil.example')
+            self.assertEqual(sent, f'https://other.example/passenger/payment/{booking_id}')
+
 
 class RefundOutcomeTests(_Fixture, APITestCase):
     def setUp(self):
