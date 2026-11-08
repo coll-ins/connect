@@ -13,6 +13,8 @@ import { MapZoomButtons, NextStageBanner } from './MapNavOverlays';
 import RouteProgress from './RouteProgress';
 import useRouteMatch from './useRouteMatch';
 import { useRoadDriverPosition } from './useRoadDriverPosition';
+import useBusReroute from './useBusReroute';
+import { lineAheadOfBus } from '../../pages/passenger/liveMapUtils';
 import { nextStageAhead, stagesAlongRoute } from './wazeNav';
 
 import RoadLayer from './RoadLayer';
@@ -249,6 +251,7 @@ export default function ConnectMap({
   onMapReady,
   onDriverPositionChange,
   onHeadingChange,
+  rerouteUrl = null,
 }) {
   const driverLat = driver?.latitude;
   const driverLng = driver?.longitude;
@@ -301,16 +304,36 @@ export default function ConnectMap({
   );
 
   const routeMatch = useRouteMatch(routePositions, driverGpsPosition);
+  // Off the planned route, the bus is drawn on the road the server finds
+  // from its GPS fix, not on whatever building the raw fix lands on.
+  const reroute = useBusReroute({
+    url: rerouteUrl,
+    offRoute: Boolean(rerouteUrl && routeMatch?.route && !routeMatch.onRoute),
+    goal: 'destination',
+    busPosition: driverGpsPosition,
+  });
+  const newRoadMatch = useRouteMatch(reroute?.line, driverGpsPosition);
+  const onNewRoad = Boolean(reroute && newRoadMatch?.onRoute);
+  // On a new road the bus drives along it the same way as on the route.
+  const newRoadGlide = useRoadDriverPosition(driverGpsPosition, reroute?.line);
   const matchedPosition = routeMatch?.onRoute
     ? driverPosition
-    : routeMatch?.position ?? driverPosition;
+    : onNewRoad
+      ? newRoadGlide.position ?? newRoadMatch.position
+      : routeMatch?.position ?? driverPosition;
   const gpsHeading = Number(driver?.heading);
   const matchedHeading =
-    routeMatch?.onRoute && routeMatch.heading != null
-      ? routeMatch.heading
-      : Number.isFinite(gpsHeading)
-        ? gpsHeading
-        : rawDriverHeading;
+    routeMatch?.onRoute
+      ? rawDriverHeading
+      : onNewRoad
+        ? newRoadGlide.heading
+        : Number.isFinite(gpsHeading)
+          ? gpsHeading
+          : rawDriverHeading;
+  const rerouteLine = useMemo(
+    () => (reroute ? lineAheadOfBus(matchedPosition, reroute.line) : null),
+    [reroute, matchedPosition],
+  );
 
   useEffect(() => {
     onHeadingChange?.(matchedHeading);
@@ -524,6 +547,19 @@ export default function ConnectMap({
           </>
         )}
         <RouteProgress split={routeMatch?.split} weight={7} />
+        {rerouteLine?.length > 1 && (
+          <Polyline
+            positions={rerouteLine}
+            pathOptions={{
+              color: '#1677ff',
+              weight: 7,
+              opacity: 0.95,
+              lineCap: 'round',
+              lineJoin: 'round',
+              interactive: false,
+            }}
+          />
+        )}
 
         {/*
          * ------------------------------------------------------

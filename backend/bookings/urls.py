@@ -24,6 +24,7 @@ urlpatterns = [
     path('<int:booking_id>/stage-departure/', views.set_stage_departure, name='set-stage-departure'),
     path('driver/<int:driver_id>/', views.get_driver_bookings, name='get-driver-bookings'),
     path('driver/<int:driver_id>/end-trip/', views.driver_end_trip, name='driver-end-trip'),
+    path('driver/<int:driver_id>/reroute/', views.driver_reroute, name='driver-reroute'),
     path('incidents/', views.incident_list, name='incident-list'),
     path('incidents/report/', views.report_incident, name='report-incident'),
     path('incidents/<int:incident_id>/', views.incident_detail, name='incident-detail'),

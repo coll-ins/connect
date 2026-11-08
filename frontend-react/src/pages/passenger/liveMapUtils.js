@@ -252,8 +252,10 @@ export function lineAheadOfBus(busPosition, line) {
  * The one thing the passenger needs to know right now, and whether their
  * boarding PIN belongs next to it.
  */
-export function tripGuide({
+export function tripGuide(options) {
+  const {
   bookingStatus,
+  cashOnBoard,
   tripIsLive,
   parked,
   boarding,
@@ -267,8 +269,16 @@ export function tripGuide({
   pickupName,
   destinationName,
   lastSeenText,
-}) {
+  } = options;
   if (String(bookingStatus || '').toLowerCase() === 'pending') {
+    // Cash is paid to the driver on boarding, so the PIN is needed now.
+    if (cashOnBoard) {
+      const next = tripGuide({ ...options, bookingStatus: 'confirmed', cashOnBoard: false });
+      return {
+        ...next,
+        detail: `${next.detail} Pay your fare in cash to the driver, then show your PIN.`,
+      };
+    }
     return {
       title: 'Payment needed to confirm your seat',
       detail: 'Your boarding PIN appears once your payment is confirmed.',

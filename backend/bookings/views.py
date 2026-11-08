@@ -38,6 +38,8 @@ from .models import Booking, BookingHold, Payment, BoardingEvent
 from .services import (
     settle_booking_fault,
     cancel_dead_pending_bookings,
+    cash_due_on_board,
+    cash_still_payable,
     trip_has_departed,
     create_booking_hold,
     release_booking_hold,
@@ -80,7 +82,7 @@ class BoardingVerifyThrottle(SimpleRateThrottle):
 
 
 class BusRerouteThrottle(SimpleRateThrottle):
-    """Limits calls to the outside road service from one passenger's map."""
+    """Limits calls to the outside road service from one user's map."""
 
     scope = 'bus_reroute'
 
@@ -1531,7 +1533,7 @@ def confirm_cash_payment(request, booking_id):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            if trip_has_departed(booking.trip):
+            if not cash_still_payable(booking.trip):
                 return Response(
                     {
                         'error': (
@@ -1819,7 +1821,12 @@ def get_my_bookings(request):
         data.append({
             'booking_id': b.id,
             'booking_number': b.booking_number,
-            'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
+            'verification_pin': (
+                b.verification_pin
+                if b.status == 'confirmed'
+                or cash_due_on_board(b, getattr(b, 'payment', None))
+                else None
+            ),
             'boarded': hasattr(b, 'boarding_event'),
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
@@ -3387,6 +3394,9 @@ def _passenger_can_track(booking):
     """
     if booking.status == 'confirmed':
         return True
+    # Paying cash on boarding: they need to see the bus to meet it.
+    if cash_due_on_board(booking, getattr(booking, 'payment', None)):
+        return True
     return (
         booking.status == 'completed'
         and hasattr(booking, 'boarding_event')
@@ -3538,6 +3548,12 @@ def booking_live_location(request, booking_id):
          and (
              booking.status in ('pending', 'confirmed')
              or _passenger_can_track(booking)
+         )
+         # Unpaid cash holds last the whole trip and cost nothing, so they
+         # see the bus but not the driver's phone number.
+         and not (
+             is_passenger
+             and cash_due_on_board(booking, getattr(booking, 'payment', None))
          ))
         or is_company_staff
         or is_platform_admin
@@ -3635,8 +3651,10 @@ def _reroute_goal_point(booking, goal):
     if goal == 'pickup':
         stage = booking.pickup_stage
         return (float(stage.latitude), float(stage.longitude)) if stage else None
+    return _route_end_point(booking.route)
 
-    route = booking.route
+
+def _route_end_point(route):
     if route.end_latitude is not None and route.end_longitude is not None:
         return (float(route.end_latitude), float(route.end_longitude))
     last_stage = (
@@ -3722,6 +3740,61 @@ def booking_reroute(request, booking_id):
         cache.set(cache_key, payload, BUS_REROUTE_CACHE_SECONDS)
 
     return Response({**payload, 'goal': goal}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([BusRerouteThrottle])
+def driver_reroute(request, driver_id):
+    """Road from the driver's last fix to the end of their live trip's route.
+
+    The driver's map asks for this when the bus has left its planned route, so
+    the bus is drawn on a real road. Only the driver's own account may ask.
+    """
+    from django.core.cache import cache
+    from companies.routing import RoutingError, road_line
+    from .live_signals import location_freshness, trip_is_live
+
+    driver = Driver.objects.filter(id=driver_id).first()
+    if not driver:
+        return Response({'error': 'Driver not found'}, status=status.HTTP_404_NOT_FOUND)
+    user = request.user
+    if not (user.is_superuser or (user.role == 'driver' and is_driver_account_for(user, driver))):
+        return Response({'error': 'Not authorized for this driver.'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Same trip the driver's map shows (get_driver_bookings): boarding first.
+    trips = Trip.objects.select_related('route').filter(driver_id=driver.id)
+    trip = (
+        trips.filter(status='boarding').order_by('departure_at', 'id').first()
+        or trips.filter(status='departed').order_by('-departure_at', '-id').first()
+    )
+    if not trip_is_live(trip) or location_freshness(driver)['is_stale']:
+        return Response(
+            {'error': 'This bus has no live location to route from.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+    target = _route_end_point(trip.route)
+    if target is None:
+        return Response(
+            {'error': 'This trip has no location for that goal.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    bus = (float(driver.latitude), float(driver.longitude))
+    cache_key = (
+        f'bus-reroute:{target[0]:.5f},{target[1]:.5f}:'
+        f'{bus[0]:.3f},{bus[1]:.3f}'
+    )
+    payload = cache.get(cache_key)
+    if payload is None:
+        try:
+            geometry, distance_m = road_line([bus, target], timeout=8)
+        except RoutingError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        payload = {'geometry': geometry, 'distance_m': round(distance_m)}
+        cache.set(cache_key, payload, BUS_REROUTE_CACHE_SECONDS)
+
+    return Response({**payload, 'goal': 'destination'}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -5019,6 +5092,7 @@ def passenger_records(request):
                 'verification_pin': (
                     booking.verification_pin
                     if booking.status == 'confirmed'
+                    or cash_due_on_board(booking, payment)
                     else None
                 ),
             },

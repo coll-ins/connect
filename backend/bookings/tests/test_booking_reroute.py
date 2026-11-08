@@ -115,3 +115,49 @@ class BookingRerouteTests(APITestCase):
             booking=self.booking, trip=self.trip, method='pin',
         )
         self.assertIs(self.client.get(url).json()['boarded'], True)
+
+
+class DriverRerouteTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        company = Company.objects.create(name='A', description='d', areas_served='N')
+        route = Route.objects.create(
+            company=company, name='R', start_point='CBD', end_point='Ngong',
+            price=Decimal('100.00'),
+            end_latitude=Decimal('-1.36'), end_longitude=Decimal('36.65'),
+        )
+        self.driver = Driver.objects.create(
+            name='D', phone_number='0700000001', bus_number='K1', company=company,
+            latitude=Decimal('-1.29'), longitude=Decimal('36.83'),
+            location_updated_at=timezone.now(),
+        )
+        self.trip = Trip.objects.create(
+            route=route, driver=self.driver, capacity=10, status='departed',
+            departure_at=timezone.now() - timedelta(minutes=5),
+        )
+        self.account = User.objects.create_user(
+            username='drv', password='x', phone_number='0700000001', role='driver',
+        )
+        self.url = f'/api/bookings/driver/{self.driver.id}/reroute/'
+        self.client.force_authenticate(user=self.account)
+
+    @patch('companies.routing.road_line', return_value=(LINE, 900.0))
+    def test_routes_the_drivers_bus_to_the_end_of_the_route(self, road_line):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()['geometry'], LINE)
+        self.assertEqual(road_line.call_args.args[0], [(-1.29, 36.83), (-1.36, 36.65)])
+
+    @patch('companies.routing.road_line', return_value=(LINE, 900.0))
+    def test_refuses_another_driver_and_a_trip_that_is_not_live(self, road_line):
+        other = User.objects.create_user(
+            username='o', password='x', phone_number='0700000009', role='driver',
+        )
+        self.client.force_authenticate(user=other)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+        self.client.force_authenticate(user=self.account)
+        self.trip.status = 'scheduled'
+        self.trip.save(update_fields=['status'])
+        self.assertEqual(self.client.get(self.url).status_code, 409)
+        road_line.assert_not_called()
