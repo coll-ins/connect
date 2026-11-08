@@ -82,7 +82,40 @@ function VectorBaseLayer({ onReady }) {
   return null;
 }
 
-export default function BaseTileLayer({ traffic = false }) {
+// Traffic is shown only this close to the bus, where it matters to the trip.
+export const TRAFFIC_RADIUS_M = 1000;
+
+/* Clip the traffic pane to a circle around `center` ([lat, lng]). */
+function TrafficNear({ center }) {
+  const map = useMap();
+  const lat = center?.[0];
+  const lng = center?.[1];
+
+  useEffect(() => {
+    const pane = map.getPane('traffic');
+    if (!pane) return undefined;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      pane.style.clipPath = 'circle(0px at 0px 0px)';
+      return undefined;
+    }
+    // Panes share the map pane's layer coordinates, so this follows panning.
+    const clip = () => {
+      const at = map.latLngToLayerPoint([lat, lng]);
+      const edge = map.latLngToLayerPoint([lat + TRAFFIC_RADIUS_M / 111320, lng]);
+      const radius = Math.abs(at.y - edge.y);
+      pane.style.clipPath = `circle(${radius}px at ${at.x}px ${at.y}px)`;
+    };
+    clip();
+    map.on('zoomend viewreset', clip);
+    return () => {
+      map.off('zoomend viewreset', clip);
+    };
+  }, [map, lat, lng]);
+
+  return null;
+}
+
+export default function BaseTileLayer({ traffic = false, trafficAround }) {
   const [vectorReady, setVectorReady] = useState(false);
   const markReady = useCallback(() => setVectorReady(true), []);
   const src = KEY ? CARTO : OSM;
@@ -109,6 +142,7 @@ export default function BaseTileLayer({ traffic = false }) {
             maxZoom={19}
             minZoom={10}
           />
+          {trafficAround !== undefined && <TrafficNear center={trafficAround} />}
         </Pane>
       )}
     </>
