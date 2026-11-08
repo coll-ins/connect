@@ -431,9 +431,15 @@
   }
 }
 
-@media (max-width: 700px) {
+/* Tablets get the drawer too: index.css slides the sidebar away at 820px,
+   so a fixed sidebar here left an empty column with no menu button. */
+@media (max-width: 900px) {
   .driver-app {
     display: block;
+  }
+
+  .driver-app .driver-main {
+    width: 100%;
   }
 
   .driver-sidebar {
@@ -862,7 +868,9 @@
   .driver-stat-card {
     min-height: 112px;
   }
+}
 
+@media (max-width: 900px) {
   .driver-sidebar-open + .driver-mobile-backdrop,
   .driver-mobile-backdrop {
     position: fixed;

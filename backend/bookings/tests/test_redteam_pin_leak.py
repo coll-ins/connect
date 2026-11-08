@@ -108,3 +108,28 @@ class PinNeverLeaksTests(APITestCase):
         self.assertEqual(resp.status_code, 200, resp.content.decode()[:300])
         self.assertIn(self.booking.booking_number, resp.content.decode())
         self.assertNotIn(PIN, resp.content.decode())
+
+    def test_cash_passenger_gets_pin_before_paying_but_cannot_board_unpaid(self):
+        Booking.objects.filter(pk=self.booking.pk).update(status="pending")
+        Payment.objects.filter(booking=self.booking).update(status="pending")
+        self.client.force_authenticate(user=self.owner)
+        for name in ("bookings:get-my-bookings", "bookings:passenger-records"):
+            self.assertIn(PIN, self.client.get(reverse(name)).content.decode(), name)
+
+        # The PIN alone must not board an unpaid cash passenger.
+        resp = self._post_pin(self.drv_user)
+        self.assertEqual(resp.status_code, 400, resp.content.decode()[:300])
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, "pending")
+
+        # Pending digital checkout: still no PIN.
+        Payment.objects.filter(booking=self.booking).update(method="digital")
+        self.client.force_authenticate(user=self.owner)
+        self.assertNotIn(PIN, self.client.get(reverse("bookings:get-my-bookings")).content.decode())
+
+    def _post_pin(self, user):
+        self.client.force_authenticate(user=user)
+        with patch("bookings.views.is_driver_account_for", return_value=True):
+            return self.client.post(
+                reverse("bookings:verify-boarding", args=[self.booking.id]),
+                {"boarding_pin": PIN}, format="json")

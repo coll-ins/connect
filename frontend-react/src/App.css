@@ -510,7 +510,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .connect-sidebar {
     width: var(--connect-sidebar-width);
     transform: translateX(-100%);
@@ -4730,7 +4730,7 @@
   display: none;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
 
   /* Sidebar becomes a real mobile drawer */
   .connect-sidebar {
@@ -4870,7 +4870,7 @@
    MOBILE DRAWER — FORCE FULL SIDEBAR CONTENT
    ========================================================= */
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
 
   .connect-sidebar.mobile-open,
   .connect-sidebar.mobile-open.is-collapsed {
@@ -4933,7 +4933,7 @@
    MOBILE SIDEBAR — ALWAYS SHOW NAVIGATION LABELS
    ========================================================= */
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
 
   /* When the mobile drawer is open, completely override
      the desktop collapsed-sidebar presentation. */

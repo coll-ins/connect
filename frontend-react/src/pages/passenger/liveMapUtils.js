@@ -254,6 +254,7 @@ export function lineAheadOfBus(busPosition, line) {
  */
 export function tripGuide({
   bookingStatus,
+  payingCash,
   tripIsLive,
   parked,
   boarding,
@@ -268,6 +269,14 @@ export function tripGuide({
   destinationName,
   lastSeenText,
 }) {
+  if (String(bookingStatus || '').toLowerCase() === 'pending' && payingCash) {
+    return {
+      title: `Pay cash at ${pickupName}`,
+      detail: 'Pay the driver, then show this PIN to board.',
+      showPin: true,
+    };
+  }
+
   if (String(bookingStatus || '').toLowerCase() === 'pending') {
     return {
       title: 'Payment needed to confirm your seat',

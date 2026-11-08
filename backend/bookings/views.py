@@ -1790,6 +1790,22 @@ def create_booking(request):
 # MY BOOKINGS & DETAILS
 # ============================================================
 
+def _owner_boarding_pin(booking):
+    """PIN for the booking's owner. Cash passengers need it at the stage
+    before the driver confirms their cash; boarding still requires a
+    confirmed payment, so showing it early lets nobody ride unpaid."""
+    if booking.status == 'confirmed':
+        return booking.verification_pin
+    payment = getattr(booking, 'payment', None)
+    if (
+        booking.status == 'pending'
+        and payment is not None
+        and payment.method == 'cash'
+        and payment.status == 'pending'
+    ):
+        return booking.verification_pin
+    return None
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_bookings(request):
@@ -1827,7 +1843,7 @@ def get_my_bookings(request):
         data.append({
             'booking_id': b.id,
             'booking_number': b.booking_number,
-            'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
+            'verification_pin': _owner_boarding_pin(b),
             'boarded': hasattr(b, 'boarding_event'),
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
@@ -5010,11 +5026,7 @@ def passenger_records(request):
                 'status': booking.status,
                 'created_at': booking.created_at,
                 'updated_at': booking.updated_at,
-                'verification_pin': (
-                    booking.verification_pin
-                    if booking.status == 'confirmed'
-                    else None
-                ),
+                'verification_pin': _owner_boarding_pin(booking),
             },
 
             'payment': {

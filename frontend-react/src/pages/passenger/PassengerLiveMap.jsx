@@ -1155,6 +1155,9 @@ export default function PassengerLiveMap({
     'your destination';
   const guide = tripGuide({
     bookingStatus: bookingDetails?.status,
+    payingCash:
+      String(bookingDetails?.payment_method || '').toLowerCase() === 'cash' &&
+      String(bookingDetails?.payment_status || '').toLowerCase() === 'pending',
     tripIsLive,
     parked: Boolean(parkedBus),
     boarding: String(parkedTripStatus || '').toLowerCase() === 'boarding',
