@@ -914,3 +914,21 @@ class DeadDigitalAttemptTests(TestCase):
         self.assertEqual(r.status_code, 502)
         self.payment.refresh_from_db()
         self.assertEqual(self.payment.status, 'failed')
+
+    def _webhook(self, ref):
+        body = json.dumps({'event': 'charge.success', 'data': {
+            'reference': ref, 'amount': 20000, 'currency': 'KES'}}).encode()
+        sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body,
+                       hashlib.sha512).hexdigest()
+        return self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                                content_type='application/json',
+                                HTTP_X_PAYSTACK_SIGNATURE=sig)
+
+    @patch('connect.paystack_extra.refund_charge', return_value=('pending', 1))
+    @patch('bookings.views.requests.get')
+    def test_paying_the_old_checkout_after_switching_is_refunded(self, mock_get, refund):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'abandoned'}})
+        self.client.post(reverse('bookings:initialize-cash-payment',
+                                 kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
+        refund.assert_called_once_with('CONNECT-OLD', Decimal('200.00'))
