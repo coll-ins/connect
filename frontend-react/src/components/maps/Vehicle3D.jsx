@@ -253,6 +253,7 @@ export default function Vehicle3D({
   position: snappedPosition,
   heading,
   stale = false,
+  zoom = 2.3,
   onReady,
 }) {
   const [position, setPosition] = useState(null);
@@ -338,7 +339,7 @@ export default function Vehicle3D({
               camera={{
                 position: CAMERA_POSITION,
                 up: [0, 0, 1],
-                zoom: 2.3,
+                zoom,
                 near: 0.1,
                 far: 300,
               }}
