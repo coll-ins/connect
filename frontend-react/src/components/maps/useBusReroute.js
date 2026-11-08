@@ -12,21 +12,21 @@ const DRIFT_FROM_NEW_ROAD_KM = 0.08;
 
 /*
  * Once the bus has stayed off its route for a while, ask the server for the
- * road from where the bus is now to the passenger's next goal. Asks again only
- * if the bus leaves that new road or the goal changes.
+ * road from where the bus is now to the next goal (`url` names the endpoint).
+ * Asks again only if the bus leaves that new road or the goal changes.
  */
 export default function useBusReroute({
-  bookingId,
+  url,
   offRoute,
   goal,
   busPosition,
 }) {
   const [reroute, setReroute] = useState(null);
-  const latestRef = useRef({ bookingId, goal, busPosition });
+  const latestRef = useRef({ url, goal, busPosition });
 
   useEffect(() => {
-    latestRef.current = { bookingId, goal, busPosition };
-  }, [bookingId, goal, busPosition]);
+    latestRef.current = { url, goal, busPosition };
+  }, [url, goal, busPosition]);
 
   useEffect(() => {
     if (!offRoute) {
@@ -46,7 +46,7 @@ export default function useBusReroute({
 
       if (
         inFlight ||
-        !latest.bookingId ||
+        !latest.url ||
         !latest.busPosition ||
         now - offSince < OFF_ROUTE_CONFIRM_MS ||
         now - lastRequest < MIN_REQUEST_GAP_MS
@@ -66,10 +66,10 @@ export default function useBusReroute({
       lastRequest = now;
 
       try {
-        const data = await apiRequest(
-          `/bookings/${latest.bookingId}/reroute/?goal=${latest.goal}`,
-          { silent: true, timeoutMs: 15000 },
-        );
+        const data = await apiRequest(latest.url, {
+          silent: true,
+          timeoutMs: 15000,
+        });
         const line = geoJsonLinePositions(data?.geometry);
 
         if (active && line.length > 1) {
