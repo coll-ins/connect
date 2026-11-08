@@ -245,6 +245,7 @@ export default function ConnectMap({
   showDriver = true,
   showPassenger = true,
   tilt = MAP_TILT_ENABLED,
+  traffic = false,
   onMapReady,
   onDriverPositionChange,
   onHeadingChange,
@@ -472,7 +473,7 @@ export default function ConnectMap({
         <MapReady onMapReady={onMapReady} />
         <ZoomLabels />
 
-        <BaseTileLayer />
+        <BaseTileLayer traffic={traffic} />
 
         <MapResize height={height} />
 

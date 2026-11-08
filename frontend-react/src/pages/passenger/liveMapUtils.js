@@ -43,7 +43,7 @@ export function recordDriverPosition(history, driver, receivedAt = Date.now()) {
   return [
     ...history.filter((sample) => time - sample.time <= DRIVER_HISTORY_WINDOW_MS),
     { position: [latitude, longitude], time },
-  ].slice(-8);
+  ].slice(-60);
 }
 
 export function estimateBusSpeedKmh(history, now = Date.now()) {

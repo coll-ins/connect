@@ -15,7 +15,11 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
+    // CI tests the production build (built in the step before), which is what
+    // users get; dev-mode React is several times slower and skews timings.
+    command: process.env.CI
+      ? 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort'
+      : 'npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 30000,

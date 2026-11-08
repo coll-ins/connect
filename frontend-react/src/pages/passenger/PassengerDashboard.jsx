@@ -290,6 +290,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     }
 
     setPaymentBooking(null);
+    // Leaving the map (back arrow or phone back) should land on the overview
+    // with My trips, not on the booking step this payment came from.
+    navigate('/passenger', { replace: true });
     navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
       state: { booking },
     });

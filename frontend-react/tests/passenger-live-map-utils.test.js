@@ -123,3 +123,18 @@ test('labels the departure time, the day when it is not today, and late buses', 
   assert.equal(label('scheduled', '2026-11-07T08:00:00+03:00'), 'Waiting to depart');
   assert.equal(label('boarding', '2026-11-07T08:00:00+03:00'), 'Boarding now');
 });
+
+test('estimates speed from fast 2-second polls once 30 seconds have passed', () => {
+  const start = 1_000_000;
+  let history = [];
+  for (let i = 0; i <= 20; i += 1) {
+    const time = start + i * 2000;
+    history = recordDriverPosition(history, {
+      latitude: -1.2864 + i * 0.0001,
+      longitude: 36.8172,
+      location_updated_at: new Date(time).toISOString(),
+    }, time);
+  }
+  const speed = estimateBusSpeedKmh(history, start + 40_000);
+  assert.ok(speed > 15 && speed < 25, `expected ~20 km/h, got ${speed}`);
+});

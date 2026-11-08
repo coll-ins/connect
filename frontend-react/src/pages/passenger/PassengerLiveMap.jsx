@@ -1,7 +1,7 @@
 import 'leaflet/dist/leaflet.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import BaseTileLayer from '../../components/maps/BaseTileLayer';
+import BaseTileLayer, { LIVE_TRAFFIC, TRAFFIC_RADIUS_M } from '../../components/maps/BaseTileLayer';
 import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { API_HOST, apiRequest } from '../../api';
@@ -23,6 +23,7 @@ import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPositi
 import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
 import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '../../components/maps/route';
 import { stopIcon } from '../../components/maps/StopMarker';
+import { webglOk } from '../../components/maps/webgl';
 import {
   estimateBusSpeedKmh,
   OFF_ROUTE_KM,
@@ -147,6 +148,17 @@ function formatEta(minutes) {
   return `${Math.round(minutes)} min`;
 }
 
+const Vehicle3D = webglOk ? lazy(() => import('../../components/maps/Vehicle3D')) : null;
+
+function Bus3D(props) {
+  const map = useMap();
+  return (
+    <Suspense fallback={null}>
+      <Vehicle3D map={map} {...props} />
+    </Suspense>
+  );
+}
+
 function MapResize() {
   const map = useMap();
 
@@ -210,6 +222,72 @@ function MapRoute({ positions }) {
 
     return () => window.clearTimeout(timer);
   }, [map, positions]);
+
+  return null;
+}
+
+const CAMERA_REFIT_MS = 3000;
+const CAMERA_PAUSE_MS = 8000;
+
+// Ride-hailing camera: keep the bus and the pickup inside the map area that the
+// top bar and bottom sheet leave visible. A touch on the map hands control to the
+// passenger; the camera takes over again after a short pause.
+function ApproachCamera({ bus, pickup }) {
+  const map = useMap();
+  const busRef = useRef(bus);
+  const pickupRef = useRef(pickup);
+
+  useEffect(() => {
+    busRef.current = bus;
+    pickupRef.current = pickup;
+  }, [bus, pickup]);
+
+  useEffect(() => {
+    const container = map.getContainer();
+    let pausedUntil = 0;
+    const pause = () => {
+      pausedUntil = Date.now() + CAMERA_PAUSE_MS;
+    };
+
+    const fit = () => {
+      if (Date.now() < pausedUntil || !busRef.current) return;
+      const page = container.closest('.passenger-live-map');
+      const sheet = page?.querySelector('.passenger-live-map__sheet');
+      const topBar = page?.querySelector('.passenger-live-map__topbar');
+      const topLeft = L.point(90, (topBar?.getBoundingClientRect().bottom ?? 80) + 40);
+      const bottomRight = L.point(90, (sheet?.offsetHeight ?? 220) + 50);
+      const points = [busRef.current, pickupRef.current].filter(Boolean);
+      const bounds = L.latLngBounds(points);
+      const zoom =
+        points.length > 1
+          ? Math.min(17, Math.floor(map.getBoundsZoom(bounds, false, topLeft.add(bottomRight)) * 4) / 4)
+          : Math.max(map.getZoom(), 15);
+      const offset = bottomRight.subtract(topLeft).divideBy(2);
+      const center = map.unproject(
+        map.project(bounds.getSouthWest(), zoom)
+          .add(map.project(bounds.getNorthEast(), zoom))
+          .divideBy(2)
+          .add(offset),
+        zoom,
+      );
+      if (Math.abs(zoom - map.getZoom()) < 0.3) {
+        map.panTo(center, { animate: true, duration: 1 });
+      } else {
+        map.setView(center, zoom, { animate: true });
+      }
+    };
+
+    const first = setTimeout(fit, 400);
+    const timer = setInterval(fit, CAMERA_REFIT_MS);
+    container.addEventListener('pointerdown', pause);
+    container.addEventListener('wheel', pause, { passive: true });
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+      container.removeEventListener('pointerdown', pause);
+      container.removeEventListener('wheel', pause);
+    };
+  }, [map]);
 
   return null;
 }
@@ -385,7 +463,10 @@ function useLiveSocket(bookingId, onLocation, enabled) {
 }
 
 
-function createPickupIcon(label) {
+function createPickupIcon(label, eta = null) {
+  const etaChip = eta
+    ? `<span style="display:inline-block;margin-right:7px;padding:2px 7px;border-radius:6px;background:#111827;color:#fff">${eta}</span>`
+    : '';
   const safe = String(label || 'Pickup')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -399,7 +480,7 @@ function createPickupIcon(label) {
         <div style="width:46px;height:46px;border-radius:50%;background:#dc2626;border:4px solid #fff;box-shadow:0 0 0 4px rgba(220,38,38,.3),0 5px 14px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center">
           <div style="width:14px;height:14px;border-radius:50%;background:#fff"></div>
         </div>
-        <div style="margin-top:8px;padding:6px 12px;border-radius:9px;background:#fff;border:2px solid #111827;color:#111827;font:900 13px Arial,sans-serif;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.3)">${safe}</div>
+        <div style="margin-top:8px;padding:6px 12px;border-radius:9px;background:#fff;border:2px solid #111827;color:#111827;font:900 13px Arial,sans-serif;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.3)">${etaChip}${safe}</div>
       </div>
     `,
     iconSize: [200, 90],
@@ -423,6 +504,7 @@ export default function PassengerLiveMap({
   const [locationError, setLocationError] = useState('');
   const [following, setFollowing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(true);
+  const sheetAutoCollapsedRef = useRef(false);
   const [driverHistory, setDriverHistory] = useState([]);
   const [clockNow, setClockNow] = useState(0);
   const pickupAlertSentRef = useRef(false);
@@ -712,6 +794,8 @@ export default function PassengerLiveMap({
 
   const vehicleMarkerRef = useRef(null);
   const vehicleHeadingRef = useRef(0);
+  const [bus3DReady, setBus3DReady] = useState(false);
+  const markBus3DReady = useCallback(() => setBus3DReady(true), []);
 
   const routeMatch = useRouteMatch(geometry, driverTarget);
   const matchedDriverPosition = routeMatch?.onRoute
@@ -725,27 +809,25 @@ export default function PassengerLiveMap({
         ? gpsHeading
         : driverHeading;
 
-  useEffect(() => {
-    if (!Number.isFinite(matchedDriverHeading)) return;
 
-    const markerElement =
-      vehicleMarkerRef.current?.getElement?.();
-    const vehicle = markerElement?.querySelector(
-      '.passenger-vehicle-marker__bus',
-    );
-    if (!vehicle) return;
 
-    const previous = vehicleHeadingRef.current;
-    const diff =
-      ((matchedDriverHeading - previous + 540) % 360) - 180;
-    const next = previous + diff;
-
-    vehicleHeadingRef.current = next;
-    vehicle.style.transformOrigin = 'center center';
-    vehicle.style.transition = 'transform 0.35s ease-out';
-    vehicle.style.transform = `rotate(${next}deg)`;
-  }, [matchedDriverHeading, matchedDriverPosition]);
-
+  // Road speed measured from CONNECT buses (backend drivers/traffic.py).
+  const liveTraffic = live?.traffic;
+  const busTraffic = useMemo(
+    () =>
+      (Array.isArray(liveTraffic) ? liveTraffic : [])
+        .filter((segment) => segment?.level === 'heavy' || segment?.level === 'slow')
+        .map((segment) => ({
+          level: segment.level,
+          positions: (segment.coordinates || [])
+            .map((point) => normalizePosition({ longitude: point?.[0], latitude: point?.[1] }))
+            .filter(Boolean),
+        }))
+        .filter((segment) => segment.positions.length > 1),
+    [liveTraffic],
+  );
+  const trafficKnown = Array.isArray(liveTraffic) && liveTraffic.length > 0;
+  const heavyTraffic = busTraffic.some((segment) => segment.level === 'heavy');
 
   const liveStages = live?.stages;
   const rawStages = useMemo(
@@ -799,11 +881,6 @@ export default function PassengerLiveMap({
 
   const pickupPosition = useMemo(
     () => normalizePosition(pickupStage),
-    [pickupStage],
-  );
-
-  const pickupIcon = useMemo(
-    () => createPickupIcon(pickupStage?.name),
     [pickupStage],
   );
 
@@ -889,6 +966,13 @@ export default function PassengerLiveMap({
     !busStale &&
     tripLifecycleLive;
 
+  // Like ride-hailing apps, give the map the screen once the bus is live.
+  useEffect(() => {
+    if (!tripIsLive || sheetAutoCollapsedRef.current) return;
+    sheetAutoCollapsedRef.current = true;
+    setSheetOpen(false);
+  }, [tripIsLive]);
+
   // Until the bus is really moving, show it waiting at the start of the route.
   const parkedTripStatus = live?.trip_status || bookingDetails?.trip_status;
   const routeStartLatitude = bookingDetails?.route_start_latitude;
@@ -953,10 +1037,57 @@ export default function PassengerLiveMap({
     goal: rerouteGoal,
     busPosition: driverTarget,
   });
-  const rerouteLine = useMemo(
-    () => (reroute ? lineAheadOfBus(matchedDriverPosition, reroute.line) : null),
-    [reroute, matchedDriverPosition],
+  // On a new road the bus is drawn on that road, not at the raw GPS point
+  // a few metres beside it.
+  const newRoadMatch = useRouteMatch(reroute?.line, driverTarget);
+  const busOnNewRoad = Boolean(reroute && newRoadMatch?.onRoute);
+  const shownBusPosition = busOnNewRoad
+    ? newRoadMatch.position
+    : matchedDriverPosition;
+  const shownBusHeading =
+    busOnNewRoad && newRoadMatch.heading != null
+      ? newRoadMatch.heading
+      : matchedDriverHeading;
+  const nearbyTraffic = useMemo(
+    () =>
+      shownBusPosition
+        ? busTraffic
+            .map((segment) => ({
+              ...segment,
+              positions: segment.positions.filter(
+                (point) => haversineKm(point, shownBusPosition) * 1000 <= TRAFFIC_RADIUS_M,
+              ),
+            }))
+            .filter((segment) => segment.positions.length > 1)
+        : [],
+    [busTraffic, shownBusPosition],
   );
+  const rerouteLine = useMemo(
+    () => (reroute ? lineAheadOfBus(shownBusPosition, reroute.line) : null),
+    [reroute, shownBusPosition],
+  );
+
+  useEffect(() => {
+    if (!Number.isFinite(shownBusHeading)) return;
+
+    const markerElement =
+      vehicleMarkerRef.current?.getElement?.();
+    const vehicle = markerElement?.querySelector(
+      '.passenger-vehicle-marker__bus',
+    );
+    if (!vehicle) return;
+
+    const previous = vehicleHeadingRef.current;
+    const diff =
+      ((shownBusHeading - previous + 540) % 360) - 180;
+    const next = previous + diff;
+
+    vehicleHeadingRef.current = next;
+    vehicle.style.transformOrigin = 'center center';
+    vehicle.style.transition = 'transform 0.35s ease-out';
+    vehicle.style.transform = `rotate(${next}deg)`;
+  }, [shownBusHeading, shownBusPosition]);
+
   const rerouteToPickupKm =
     rerouteLine && reroute.goal === 'pickup' ? lineLengthKm(rerouteLine) : null;
 
@@ -1117,6 +1248,9 @@ export default function PassengerLiveMap({
     geometry[0] ||
     [-1.286389, 36.817223];
 
+  const approachCamera =
+    !MAP_TILT_ENABLED && !following && tripIsLive && Boolean(matchedDriverPosition);
+
   const routeName =
     live?.route_name ||
     live?.trip?.route_name ||
@@ -1134,6 +1268,16 @@ export default function PassengerLiveMap({
 
   const driverName = live?.driver?.name || bookingDetails?.driver_name || null;
   const driverPhone = live?.driver?.phone || null;
+  const pickupEta =
+    tripIsLive && !busUnreliable && !busPastPickup && !boarded && etaMinutes != null
+      ? formatEta(etaMinutes)
+      : null;
+  const pickupName = pickupStage?.name;
+  const pickupIcon = useMemo(
+    () => createPickupIcon(pickupName, pickupEta),
+    [pickupName, pickupEta],
+  );
+
   const showPickupLeg =
     rerouteToPickupKm != null ||
     (!boarded && Boolean(pickupPosition) && distanceToPickupKm != null && !busUnreliable && !busPastPickup);
@@ -1228,7 +1372,7 @@ export default function PassengerLiveMap({
       }}
     >
       <div className="passenger-live-map__canvas">
-        <TiltedMapFrame heading={matchedDriverHeading}>
+        <TiltedMapFrame heading={shownBusHeading}>
           <MapContainer
             center={center}
             zoom={MAP_TILT_ENABLED ? MAP_TILT_ZOOM : 15}
@@ -1241,18 +1385,26 @@ export default function PassengerLiveMap({
             attributionControl
             className="passenger-live-map__leaflet"
           >
-          <BaseTileLayer />
+          <BaseTileLayer traffic trafficAround={tripIsLive ? shownBusPosition : null} />
 
           <MapResize />
           <SmartFollow
             enabled={MAP_TILT_ENABLED}
-            position={matchedDriverPosition}
+            position={shownBusPosition}
             nextStageM={nextStage?.distanceM ?? null}
           />
 
           {geometry.length > 1 &&
-            !(MAP_TILT_ENABLED && driverPosition) && (
+            !(MAP_TILT_ENABLED && driverPosition) &&
+            !approachCamera && (
             <MapRoute positions={geometry} />
+          )}
+
+          {approachCamera && (
+            <ApproachCamera
+              bus={shownBusPosition}
+              pickup={busPastPickup || boarded ? null : pickupPosition}
+            />
           )}
 
           {geometry.length > 1 && (
@@ -1316,6 +1468,21 @@ export default function PassengerLiveMap({
             color="#16a34a"
             opacity={0.95}
           />
+
+          {nearbyTraffic.map((segment, index) => (
+            <Polyline
+              key={`traffic-${index}-${segment.level}`}
+              positions={segment.positions}
+              pathOptions={{
+                color: segment.level === 'heavy' ? '#d93025' : '#f29900',
+                weight: 7,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round',
+                interactive: false,
+              }}
+            />
+          ))}
 
           {busOffRoute &&
             !reroute &&
@@ -1398,11 +1565,12 @@ export default function PassengerLiveMap({
             </Marker>
           )}
 
-          {tripIsLive && matchedDriverPosition && (
+          {tripIsLive && shownBusPosition && (
             <Marker
               ref={vehicleMarkerRef}
-              position={matchedDriverPosition}
+              position={shownBusPosition}
               icon={vehicleIcon}
+              opacity={bus3DReady ? 0 : 1}
             >
               <Popup>
                 <strong>{busNumber}</strong>
@@ -1410,6 +1578,16 @@ export default function PassengerLiveMap({
                 Your driver
               </Popup>
             </Marker>
+          )}
+
+          {Vehicle3D && tripIsLive && shownBusPosition && (
+            <Bus3D
+              position={shownBusPosition}
+              heading={shownBusHeading}
+              stale={busStale}
+              zoom={1.35}
+              onReady={markBus3DReady}
+            />
           )}
 
           {passengerPosition && (
@@ -1556,10 +1734,11 @@ export default function PassengerLiveMap({
         {!sheetOpen && (
           <p
             onClick={() => setSheetOpen(true)}
-            style={{ margin: '8px 0 4px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+            style={{ margin: '8px 0 4px', fontSize: 14, fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}
           >
             {busStatus}
             {etaMinutes != null ? ` · ${formatEta(etaMinutes)} to pickup` : ''}
+            {heavyTraffic ? ' · heavy traffic on the route' : ''}
           </p>
         )}
 
@@ -1756,7 +1935,11 @@ export default function PassengerLiveMap({
         <div className="passenger-live-map__traffic-note" role="status">
           <strong>Traffic information</strong>
           <span>
-            {driverSpeedKmh != null && !busUnreliable && tripLifecycleLive
+            {trafficKnown
+              ? `${heavyTraffic ? 'Heavy traffic on this route. ' : busTraffic.length ? 'Some slow traffic on this route. ' : 'Traffic is moving on this route. '}Red is heavy, orange is slow, from CONNECT buses on this road in the last 20 minutes.`
+              : LIVE_TRAFFIC
+              ? 'Live traffic is on the map: green is moving, orange is slow, red is jammed.'
+              : driverSpeedKmh != null && !busUnreliable && tripLifecycleLive
               ? `Recent bus GPS speed: about ${driverSpeedKmh} km/h. This is a bus-speed estimate, not live city traffic.`
               : 'No live city-traffic feed is available. A bus-speed estimate will appear only when recent, reliable GPS updates support one.'}
           </span>
