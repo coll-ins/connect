@@ -692,6 +692,11 @@ def _mark_payment_confirmed(payment, paystack_amount, currency):
 
     expected_amount = int(payment.amount * Decimal('100'))
 
+    # No amount in the answer: cannot judge it, so leave the payment pending
+    # for the signed webhook instead of flagging a possibly valid charge.
+    if paystack_amount in (None, '', 0, '0'):
+        return False
+
     if int(paystack_amount) != expected_amount or not _currency_ok(currency):
         payment.status = 'failed'
         payment.save(update_fields=['status'])
