@@ -906,15 +906,18 @@ def _queue_unmatched_booking_refund(reference, data):
             },
         )
     except Exception:
+        # Not recorded: tell the caller to answer non-200 so Paystack resends
+        # (the unique reference makes the resend safe).
         logging.getLogger(__name__).exception('Could not record unmatched charge %s', reference)
-        _alert_payment_problem(reference, 'unmatched booking charge NOT recorded: refund manually')
-        return
+        _alert_payment_problem(reference, 'unmatched booking charge NOT recorded yet')
+        return False
     if created:
         _alert_payment_problem(
             reference,
             'unmatched booking charge: automatic refund queued' if refundable
             else 'unmatched booking charge with a bad amount/currency: refund manually',
         )
+    return True
 
 
 def _alert_payment_problem(reference, reason):
@@ -1088,7 +1091,8 @@ def paystack_webhook(request):
         # Unknown references must not cause endless Paystack retries, but a
         # signed successful charge we cannot match is real money.
         if str(reference).startswith('CONNECT-'):
-            _queue_unmatched_booking_refund(reference, data)
+            if not _queue_unmatched_booking_refund(reference, data):
+                return HttpResponse(status=500)
         else:
             _alert_payment_problem(reference, 'charge.success for an unknown reference')
         return HttpResponse(status=200)
@@ -1257,7 +1261,18 @@ def paystack_refund_webhook(request):
                         )
 
     except Payment.DoesNotExist:
-        # Unknown transaction reference should not cause retries.
+        # Unknown transaction reference should not cause retries. A refund
+        # process_unapplied sent may still fail later: hand it to a human
+        # instead of leaving it marked refunded.
+        if new_refund_status == 'failed':
+            from bookings.models import UnappliedPayment
+            if UnappliedPayment.objects.filter(
+                reference=transaction_reference,
+                status__in=('refunding', 'refunded'),
+            ).update(status='review', refund_status='failed',
+                     reason='Paystack refund failed', updated_at=timezone.now()):
+                _alert_payment_problem(
+                    transaction_reference, 'automatic refund FAILED: refund manually')
         return HttpResponse(status=200)
 
     return HttpResponse(status=200)

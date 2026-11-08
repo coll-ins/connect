@@ -963,3 +963,26 @@ class DeadDigitalAttemptTests(TestCase):
         call_command('process_unapplied', stdout=io.StringIO())
         refund.assert_not_called()
         self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_recording_failure_makes_paystack_resend(self, sms):
+        from bookings.models import UnappliedPayment
+        self._switch_to_cash()
+        with patch.object(UnappliedPayment.objects, 'get_or_create', side_effect=RuntimeError('db down')):
+            self.assertEqual(self._webhook('CONNECT-OLD').status_code, 500)
+        self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'refund_due')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_failed_queued_refund_goes_back_to_a_human(self, sms):
+        from bookings.models import UnappliedPayment
+        UnappliedPayment.objects.create(reference='CONNECT-GONE', kind='booking',
+                                        amount=Decimal('200.00'), status='refunded')
+        body = json.dumps({'event': 'refund.failed', 'data': {
+            'transaction_reference': 'CONNECT-GONE'}}).encode()
+        sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body, hashlib.sha512).hexdigest()
+        r = self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                             content_type='application/json', HTTP_X_PAYSTACK_SIGNATURE=sig)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-GONE').status, 'review')
+        sms.assert_called_once()
