@@ -1035,3 +1035,18 @@ class WrongAmountChargeTests(DeadDigitalAttemptTests):
                                         amount=Decimal('50.00'), status='refunded')
         self._signed({'event': 'refund.failed', 'data': {'transaction_reference': 'CONNECT-OLD'}})
         self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('bookings.views.requests.get')
+    def test_verify_without_amount_leaves_it_to_the_webhook(self, mock_get, sms):
+        from bookings.models import UnappliedPayment
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'success'}})
+        self.client.post(reverse('bookings:verify-paystack-payment',
+                                 kwargs={'booking_id': self.booking.id}))
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'pending')
+        self.assertFalse(UnappliedPayment.objects.exists())
+        self._signed({'event': 'charge.success', 'data': {
+            'reference': 'CONNECT-OLD', 'amount': 20000, 'currency': 'KES'}})
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'confirmed')
