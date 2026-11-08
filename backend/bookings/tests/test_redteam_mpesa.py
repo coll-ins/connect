@@ -70,6 +70,7 @@ class RedTeamMpesaTests(APITestCase):
         with patch("bookings.views.requests.post",
                    side_effect=requests.RequestException("timeout")):
             self.assertEqual(self._post("+254712345678").status_code, 502)
-        with patch("bookings.views.requests.post") as post:
+        with patch("bookings.views.requests.post") as post, \
+                patch("bookings.views.requests.get", side_effect=requests.RequestException("offline")):
             self.assertEqual(self._post("+254712345678").status_code, 409)
             post.assert_not_called()

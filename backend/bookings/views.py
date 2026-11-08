@@ -96,10 +96,48 @@ BUS_REROUTE_CACHE_SECONDS = 60
 # PAYSTACK PAYMENT INITIALIZATION
 # ============================================================
 
+def _release_dead_digital_attempt(booking_id, user):
+    """
+    Before a new payment attempt is refused because a digital one is
+    "in progress", ask Paystack about it. A checkout the passenger closed or a
+    payment that failed is marked failed, so they can retry or switch to cash.
+    Anything else (paid, still running, Paystack unreachable) is left alone.
+    Runs outside any row lock so the HTTP call never holds the booking.
+    """
+    payment = (
+        Payment.objects
+        .filter(booking_id=booking_id, booking__user=user,
+                status='pending', method='digital')
+        .exclude(provider_reference__isnull=True)
+        .exclude(provider_reference='')
+        .first()
+    )
+    if payment is None:
+        return
+    reference = payment.provider_reference
+    try:
+        response = requests.get(
+            f'https://api.paystack.co/transaction/verify/{reference}',
+            headers={'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'},
+            timeout=15,
+        )
+        result = response.json()
+    except (requests.RequestException, ValueError):
+        return
+    if response.status_code != 200 or not isinstance(result, dict) or not result.get('status'):
+        return
+    if (result.get('data') or {}).get('status') in ('failed', 'abandoned', 'reversed'):
+        # Conditional update: a webhook that confirmed it meanwhile wins.
+        Payment.objects.filter(
+            pk=payment.pk, status='pending', provider_reference=reference,
+        ).update(status='failed')
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_paystack_payment(request, booking_id):
     """Initialize one Paystack checkout attempt for a booking."""
+    _release_dead_digital_attempt(booking_id, request.user)
+
     try:
         with transaction.atomic():
             booking = (
@@ -272,6 +310,11 @@ def initialize_paystack_payment(request, booking_id):
         )
 
     if response.status_code != 200:
+        # Paystack answered and refused, so no checkout exists: release the
+        # attempt so the passenger can retry. A 5xx stays "in progress".
+        if response.status_code < 500:
+            Payment.objects.filter(pk=payment.pk, status='pending').update(
+                status='failed')
         return Response(
             {
                 'error': 'Failed to initialize payment gateway',
@@ -292,6 +335,8 @@ def initialize_paystack_payment(request, booking_id):
         )
 
     if not res_data.get('status'):
+        Payment.objects.filter(pk=payment.pk, status='pending').update(
+            status='failed')
         return Response(
             {
                 'error': res_data.get(
@@ -358,6 +403,8 @@ class MpesaPushThrottle(SimpleRateThrottle):
 @throttle_classes([MpesaPushThrottle])
 def initialize_mpesa_payment(request, booking_id):
     """Send one Paystack M-PESA charge for the passenger's booking."""
+    _release_dead_digital_attempt(booking_id, request.user)
+
     try:
         with transaction.atomic():
             booking = (
@@ -1186,6 +1233,8 @@ def initialize_cash_payment(request, booking_id):
     This serializes simultaneous cash-payment requests for the same
     booking and prevents OneToOne races.
     """
+    _release_dead_digital_attempt(booking_id, request.user)
+
     try:
         with transaction.atomic():
             booking = (

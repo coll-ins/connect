@@ -21,6 +21,11 @@ from drivers.models import Driver
 User = get_user_model()
 
 
+def _paystack_offline(*args, **kwargs):
+    import requests
+    raise requests.RequestException('offline')
+
+
 class PaymentChannelTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -125,6 +130,7 @@ class PaymentChannelTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    @patch('bookings.views.requests.get', new=_paystack_offline)
     def test_initialize_cash_payment_rejects_pending_digital_payment(self):
         Payment.objects.create(
             booking=self.booking,
@@ -300,6 +306,7 @@ class PaymentChannelTests(TestCase):
             'refunded',
         )
 
+    @patch('bookings.views.requests.get', new=_paystack_offline)
     @patch('bookings.views.requests.post')
     def test_paystack_timeout_does_not_allow_duplicate_retry(
         self,
@@ -344,6 +351,7 @@ class PaymentChannelTests(TestCase):
             reference,
         )
 
+    @patch('bookings.views.requests.get', new=_paystack_offline)
     @patch('bookings.views.requests.post')
     def test_mpesa_timeout_does_not_allow_duplicate_retry(
         self,
@@ -819,3 +827,90 @@ class ConcurrentDigitalInitializationTests(TransactionTestCase):
             ),
         )
 
+
+
+class DeadDigitalAttemptTests(TestCase):
+    """A closed or failed Paystack checkout must not lock the booking."""
+
+    def setUp(self):
+        self.client = APIClient()
+        company = Company.objects.create(name='Retry Line')
+        self.passenger = User.objects.create_user(
+            username='retry_passenger', password='password123',
+            phone_number='+254700000077')
+        route = Route.objects.create(
+            company=company, name='CBD - Retry', start_point='CBD',
+            end_point='Retry', price=Decimal('200.00'))
+        driver = Driver.objects.create(
+            company=company, name='Retry Driver', phone_number='+254711111177',
+            bus_number='KAA 077R')
+        trip = Trip.objects.create(
+            route=route, driver=driver, departure_at=timezone.now() + timezone.timedelta(hours=2),
+            capacity=14)
+        self.booking = Booking.objects.create(
+            user=self.passenger, route=route, trip=trip,
+            total_amount=Decimal('200.00'), status='pending')
+        self.payment = Payment.objects.create(
+            booking=self.booking, amount=Decimal('200.00'), method='digital',
+            status='pending', settlement_status='not_ready',
+            provider_reference='CONNECT-OLD', idempotency_key='CONNECT-OLD')
+        self.client.force_authenticate(user=self.passenger)
+
+    def _verify_says(self, mock_get, http, body):
+        mock_get.return_value.status_code = http
+        mock_get.return_value.json.return_value = body
+
+    @patch('bookings.views.requests.get')
+    def test_abandoned_checkout_lets_passenger_switch_to_cash(self, mock_get):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'abandoned'}})
+        r = self.client.post(reverse('bookings:initialize-cash-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 200, r.data)
+        self.payment.refresh_from_db()
+        self.assertEqual((self.payment.method, self.payment.status), ('cash', 'pending'))
+
+    @patch('bookings.views.requests.post')
+    @patch('bookings.views.requests.get')
+    def test_failed_card_payment_can_be_retried(self, mock_get, mock_post):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'failed'}})
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            'status': True,
+            'data': {'authorization_url': 'https://checkout.paystack.com/x',
+                     'reference': 'CONNECT-NEW'}}
+        r = self.client.post(reverse('bookings:initialize-paystack-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 200, r.data)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.provider_reference, 'CONNECT-NEW')
+
+    @patch('bookings.views.requests.get')
+    def test_attempt_still_in_progress_stays_locked(self, mock_get):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'ongoing'}})
+        r = self.client.post(reverse('bookings:initialize-mpesa-payment',
+                                     kwargs={'booking_id': self.booking.id}),
+                             {'phone_number': '+254712345678'}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'pending')
+
+    @patch('bookings.views.requests.get')
+    def test_paid_attempt_is_not_replaced(self, mock_get):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'success'}})
+        r = self.client.post(reverse('bookings:initialize-cash-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 400)
+        self.payment.refresh_from_db()
+        self.assertEqual((self.payment.method, self.payment.provider_reference),
+                         ('digital', 'CONNECT-OLD'))
+
+    @patch('bookings.views.requests.post')
+    def test_refused_checkout_init_does_not_lock(self, mock_post):
+        Payment.objects.filter(pk=self.payment.pk).update(status='failed')
+        mock_post.return_value.status_code = 400
+        mock_post.return_value.json.return_value = {'status': False, 'message': 'Invalid key'}
+        r = self.client.post(reverse('bookings:initialize-paystack-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 502)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'failed')
