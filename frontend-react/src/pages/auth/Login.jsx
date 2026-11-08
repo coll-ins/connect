@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import '../../legal/Legal.css';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
@@ -97,6 +98,11 @@ export default function Login() {
         <p className="auth-footer">
           New to CONNECT? <Link to="/signup">Create an account</Link>
         </p>
+        <nav className="auth-legal" aria-label="Legal">
+          <Link to="/legal/terms">Terms</Link>
+          <Link to="/legal/privacy">Privacy</Link>
+          <Link to="/legal/refunds">Refunds</Link>
+        </nav>
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ class RedTeamSignupTests(APITestCase):
                 phone = f"+25473300900{n}"
                 r = self.client.post(path, {
                     "username": f"evil{n}", "phone_number": phone,
-                    "password": "Tr4velSafe-2026",
+                    "password": "Tr4velSafe-2026", "accept_terms": True,
                     "role": "platform_admin", "is_superuser": True,
                     "is_staff": True, "company": co.id, "company_id": co.id,
                 }, format="json")
