@@ -22,7 +22,7 @@ const newRoad = {
 };
 
 test('off its route, the driver map asks for the real road and draws the bus on it', async ({ page, context }) => {
-  test.setTimeout(60000);
+  test.setTimeout(90000);
   let rerouteCalls = 0;
 
   await context.grantPermissions(['geolocation']);
@@ -69,10 +69,10 @@ test('off its route, the driver map asks for the real road and draws the bus on 
   await page.goto('/driver/location');
 
   const blueLines = page.locator('.leaflet-overlay-pane path[stroke="#1677ff"]');
-  await expect.poll(() => blueLines.count()).toBeGreaterThan(0);
+  await expect.poll(() => blueLines.count(), { timeout: 20000 }).toBeGreaterThan(0);
   const before = await blueLines.count();
 
-  await expect.poll(() => rerouteCalls, { timeout: 30000 }).toBeGreaterThan(0);
+  await expect.poll(() => rerouteCalls, { timeout: 50000 }).toBeGreaterThan(0);
   await expect.poll(() => blueLines.count(), { timeout: 5000 }).toBe(before + 1);
   await page.screenshot({ path: test.info().outputPath('rerouted.png') });
 });

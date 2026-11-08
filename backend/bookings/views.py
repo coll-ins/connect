@@ -80,7 +80,7 @@ class BoardingVerifyThrottle(SimpleRateThrottle):
 
 
 class BusRerouteThrottle(SimpleRateThrottle):
-    """Limits calls to the outside road service from one passenger's map."""
+    """Limits calls to the outside road service from one user's map."""
 
     scope = 'bus_reroute'
 
@@ -3746,11 +3746,11 @@ def driver_reroute(request, driver_id):
     if not (user.is_superuser or (user.role == 'driver' and is_driver_account_for(user, driver))):
         return Response({'error': 'Not authorized for this driver.'}, status=status.HTTP_403_FORBIDDEN)
 
+    # Same trip the driver's map shows (get_driver_bookings): boarding first.
+    trips = Trip.objects.select_related('route').filter(driver_id=driver.id)
     trip = (
-        Trip.objects.select_related('route')
-        .filter(driver_id=driver.id, status__in=('boarding', 'departed'))
-        .order_by('-departure_at', '-id')
-        .first()
+        trips.filter(status='boarding').order_by('departure_at', 'id').first()
+        or trips.filter(status='departed').order_by('-departure_at', '-id').first()
     )
     if not trip_is_live(trip) or location_freshness(driver)['is_stale']:
         return Response(
