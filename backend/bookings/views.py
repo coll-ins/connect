@@ -1,5 +1,6 @@
 from django.db.models import Q
 import hmac
+import logging
 import hashlib
 import json
 import requests
@@ -96,10 +97,48 @@ BUS_REROUTE_CACHE_SECONDS = 60
 # PAYSTACK PAYMENT INITIALIZATION
 # ============================================================
 
+def _release_dead_digital_attempt(booking_id, user):
+    """
+    Before a new payment attempt is refused because a digital one is
+    "in progress", ask Paystack about it. A checkout the passenger closed or a
+    payment that failed is marked failed, so they can retry or switch to cash.
+    Anything else (paid, still running, Paystack unreachable) is left alone.
+    Runs outside any row lock so the HTTP call never holds the booking.
+    """
+    payment = (
+        Payment.objects
+        .filter(booking_id=booking_id, booking__user=user,
+                status='pending', method='digital')
+        .exclude(provider_reference__isnull=True)
+        .exclude(provider_reference='')
+        .first()
+    )
+    if payment is None:
+        return
+    reference = payment.provider_reference
+    try:
+        response = requests.get(
+            f'https://api.paystack.co/transaction/verify/{reference}',
+            headers={'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}'},
+            timeout=15,
+        )
+        result = response.json()
+    except (requests.RequestException, ValueError):
+        return
+    if response.status_code != 200 or not isinstance(result, dict) or not result.get('status'):
+        return
+    if (result.get('data') or {}).get('status') in ('failed', 'abandoned', 'reversed'):
+        # Conditional update: a webhook that confirmed it meanwhile wins.
+        Payment.objects.filter(
+            pk=payment.pk, status='pending', provider_reference=reference,
+        ).update(status='failed')
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_paystack_payment(request, booking_id):
     """Initialize one Paystack checkout attempt for a booking."""
+    _release_dead_digital_attempt(booking_id, request.user)
+
     try:
         with transaction.atomic():
             booking = (
@@ -272,6 +311,11 @@ def initialize_paystack_payment(request, booking_id):
         )
 
     if response.status_code != 200:
+        # Paystack answered and refused, so no checkout exists: release the
+        # attempt so the passenger can retry. A 5xx stays "in progress".
+        if response.status_code < 500 and response.status_code != 429:
+            Payment.objects.filter(pk=payment.pk, status='pending').update(
+                status='failed')
         return Response(
             {
                 'error': 'Failed to initialize payment gateway',
@@ -292,6 +336,8 @@ def initialize_paystack_payment(request, booking_id):
         )
 
     if not res_data.get('status'):
+        Payment.objects.filter(pk=payment.pk, status='pending').update(
+            status='failed')
         return Response(
             {
                 'error': res_data.get(
@@ -358,6 +404,8 @@ class MpesaPushThrottle(SimpleRateThrottle):
 @throttle_classes([MpesaPushThrottle])
 def initialize_mpesa_payment(request, booking_id):
     """Send one Paystack M-PESA charge for the passenger's booking."""
+    _release_dead_digital_attempt(booking_id, request.user)
+
     try:
         with transaction.atomic():
             booking = (
@@ -644,9 +692,20 @@ def _mark_payment_confirmed(payment, paystack_amount, currency):
 
     expected_amount = int(payment.amount * Decimal('100'))
 
+    # No amount in the answer: cannot judge it, so leave the payment pending
+    # for the signed webhook instead of flagging a possibly valid charge.
+    if paystack_amount in (None, '', 0, '0'):
+        return False
+
     if int(paystack_amount) != expected_amount or not _currency_ok(currency):
         payment.status = 'failed'
         payment.save(update_fields=['status'])
+        _queue_charge_refund(
+            payment.provider_reference,
+            {'amount': paystack_amount, 'currency': currency},
+            f'amount/currency mismatch: paid {paystack_amount} {currency}, '
+            f'expected {expected_amount}',
+        )
         return False
 
     booking = payment.booking
@@ -829,6 +888,41 @@ def verify_paystack_payment(request, booking_id):
 # PAYSTACK WEBHOOK
 # ============================================================
 
+def _queue_charge_refund(reference, data, reason):
+    """
+    Durably queue a full refund of a successful charge CONNECT will not apply
+    (replaced reference, wrong amount or currency). process_unapplied sends it
+    (one-winner claim, reconcile, never resends). A charge whose amount or
+    currency is unusable goes to a human instead. Replays hit the unique
+    reference and do nothing. Raises if the row cannot be written, so the
+    caller can make Paystack resend.
+    """
+    from bookings.models import UnappliedPayment
+    from connect.paystack_extra import GatewayError, to_kes
+
+    try:
+        amount = to_kes(data.get('amount'))
+    except GatewayError:
+        amount = None
+    refundable = amount is not None and amount > 0 and _currency_ok(data.get('currency'))
+    _, created = UnappliedPayment.objects.get_or_create(
+        reference=reference,
+        defaults={
+            'kind': 'booking',
+            'amount': amount,
+            'currency': str(data.get('currency') or '')[:10],
+            'reason': reason[:255],
+            'payload': data,
+            'status': 'refund_due' if refundable else 'review',
+        },
+    )
+    if created:
+        tail = ('automatic refund queued' if refundable
+                else 'amount/currency unusable: refund manually')
+        transaction.on_commit(
+            lambda: _alert_payment_problem(reference, f'{reason}: {tail}'))
+
+
 def _alert_payment_problem(reference, reason):
     """Log and SMS the admins about money that needs a human. Never raises."""
     import logging
@@ -912,9 +1006,7 @@ def paystack_webhook(request):
             if paystack_amount is None:
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
-                transaction.on_commit(
-                    lambda: _alert_payment_problem(reference, 'amount missing in webhook')
-                )
+                _queue_charge_refund(reference, data, 'amount missing in webhook')
                 return HttpResponse(status=200)
 
             expected_amount = int(
@@ -926,9 +1018,7 @@ def paystack_webhook(request):
             except (TypeError, ValueError):
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
-                transaction.on_commit(
-                    lambda: _alert_payment_problem(reference, 'amount unreadable in webhook')
-                )
+                _queue_charge_refund(reference, data, 'amount unreadable in webhook')
                 return HttpResponse(status=200)
 
             # Never trust the gateway response blindly.
@@ -939,12 +1029,10 @@ def paystack_webhook(request):
             ):
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
-                transaction.on_commit(
-                    lambda: _alert_payment_problem(
-                        reference,
-                        f'amount/currency mismatch: paid {paystack_amount} '
-                        f'{data.get("currency")}, expected {expected_amount}',
-                    )
+                _queue_charge_refund(
+                    reference, data,
+                    f'amount/currency mismatch: paid {paystack_amount} '
+                    f'{data.get("currency")}, expected {expected_amount}',
                 )
                 return HttpResponse(status=200)
 
@@ -999,14 +1087,25 @@ def paystack_webhook(request):
     except Payment.DoesNotExist:
         # Unknown references must not cause endless Paystack retries, but a
         # signed successful charge we cannot match is real money.
-        _alert_payment_problem(reference, 'charge.success for an unknown reference')
+        if str(reference).startswith('CONNECT-'):
+            try:
+                with transaction.atomic():
+                    _queue_charge_refund(reference, data, 'paid a replaced booking checkout')
+            except Exception:
+                # Not recorded: answer non-200 so Paystack resends (safe:
+                # the reference is unique).
+                logging.getLogger(__name__).exception(
+                    'Could not record unmatched charge %s', reference)
+                _alert_payment_problem(reference, 'unmatched booking charge NOT recorded yet')
+                return HttpResponse(status=500)
+        else:
+            _alert_payment_problem(reference, 'charge.success for an unknown reference')
         return HttpResponse(status=200)
 
     if refund_after_commit:
         try:
             settle_booking_fault(booking, fault_party='company')
         except Exception:
-            import logging
             logging.getLogger(__name__).exception(
                 'Refund for late payment %s failed; needs follow-up', reference)
             try:
@@ -1067,6 +1166,18 @@ def paystack_refund_webhook(request):
 
     if not transaction_reference:
         return HttpResponse(status=400)
+
+    # A refund process_unapplied sent may still fail later: hand it to a
+    # human instead of leaving it marked refunded.
+    if new_refund_status == 'failed':
+        from bookings.models import UnappliedPayment
+        if UnappliedPayment.objects.filter(
+            reference=transaction_reference,
+            status__in=('refunding', 'refunded'),
+        ).update(status='review', refund_status='failed',
+                 reason='Paystack refund failed', updated_at=timezone.now()):
+            _alert_payment_problem(
+                transaction_reference, 'automatic refund FAILED: refund manually')
 
     try:
         with transaction.atomic():
@@ -1186,6 +1297,8 @@ def initialize_cash_payment(request, booking_id):
     This serializes simultaneous cash-payment requests for the same
     booking and prevents OneToOne races.
     """
+    _release_dead_digital_attempt(booking_id, request.user)
+
     try:
         with transaction.atomic():
             booking = (

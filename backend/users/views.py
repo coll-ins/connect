@@ -1,5 +1,6 @@
 import hmac
 from django.conf import settings
+from django.utils import timezone
 from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
@@ -89,9 +90,17 @@ def signup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    if str(data.get('accept_terms')).lower() not in ('true', '1', 'on'):
+        return Response(
+            {'error': 'Accept the Terms of Service and Privacy Policy to create an account.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     serializer = UserSerializer(data=data)
     if serializer.is_valid():
         user = serializer.save()
+        user.terms_version = settings.TERMS_VERSION
+        user.terms_accepted_at = timezone.now()
+        user.save(update_fields=['terms_version', 'terms_accepted_at'])
         login(request, user)
         return Response(
             {'message': 'Account created', 'user': serialize_session_user(user)},

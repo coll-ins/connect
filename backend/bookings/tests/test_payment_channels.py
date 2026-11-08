@@ -1,4 +1,6 @@
 from decimal import Decimal
+import io
+from django.core.management import call_command
 import json
 import hmac
 import hashlib
@@ -19,6 +21,11 @@ from companies.models import Company, Route, Trip
 from drivers.models import Driver
 
 User = get_user_model()
+
+
+def _paystack_offline(*args, **kwargs):
+    import requests
+    raise requests.RequestException('offline')
 
 
 class PaymentChannelTests(TestCase):
@@ -125,6 +132,7 @@ class PaymentChannelTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    @patch('bookings.views.requests.get', new=_paystack_offline)
     def test_initialize_cash_payment_rejects_pending_digital_payment(self):
         Payment.objects.create(
             booking=self.booking,
@@ -300,6 +308,7 @@ class PaymentChannelTests(TestCase):
             'refunded',
         )
 
+    @patch('bookings.views.requests.get', new=_paystack_offline)
     @patch('bookings.views.requests.post')
     def test_paystack_timeout_does_not_allow_duplicate_retry(
         self,
@@ -344,6 +353,7 @@ class PaymentChannelTests(TestCase):
             reference,
         )
 
+    @patch('bookings.views.requests.get', new=_paystack_offline)
     @patch('bookings.views.requests.post')
     def test_mpesa_timeout_does_not_allow_duplicate_retry(
         self,
@@ -819,3 +829,224 @@ class ConcurrentDigitalInitializationTests(TransactionTestCase):
             ),
         )
 
+
+
+class DeadDigitalAttemptTests(TestCase):
+    """A closed or failed Paystack checkout must not lock the booking."""
+
+    def setUp(self):
+        self.client = APIClient()
+        company = Company.objects.create(name='Retry Line')
+        self.passenger = User.objects.create_user(
+            username='retry_passenger', password='password123',
+            phone_number='+254700000077')
+        route = Route.objects.create(
+            company=company, name='CBD - Retry', start_point='CBD',
+            end_point='Retry', price=Decimal('200.00'))
+        driver = Driver.objects.create(
+            company=company, name='Retry Driver', phone_number='+254711111177',
+            bus_number='KAA 077R')
+        trip = Trip.objects.create(
+            route=route, driver=driver, departure_at=timezone.now() + timezone.timedelta(hours=2),
+            capacity=14)
+        self.booking = Booking.objects.create(
+            user=self.passenger, route=route, trip=trip,
+            total_amount=Decimal('200.00'), status='pending')
+        self.payment = Payment.objects.create(
+            booking=self.booking, amount=Decimal('200.00'), method='digital',
+            status='pending', settlement_status='not_ready',
+            provider_reference='CONNECT-OLD', idempotency_key='CONNECT-OLD')
+        self.client.force_authenticate(user=self.passenger)
+
+    def _verify_says(self, mock_get, http, body):
+        mock_get.return_value.status_code = http
+        mock_get.return_value.json.return_value = body
+
+    @patch('bookings.views.requests.get')
+    def test_abandoned_checkout_lets_passenger_switch_to_cash(self, mock_get):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'abandoned'}})
+        r = self.client.post(reverse('bookings:initialize-cash-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 200, r.data)
+        self.payment.refresh_from_db()
+        self.assertEqual((self.payment.method, self.payment.status), ('cash', 'pending'))
+
+    @patch('bookings.views.requests.post')
+    @patch('bookings.views.requests.get')
+    def test_failed_card_payment_can_be_retried(self, mock_get, mock_post):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'failed'}})
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            'status': True,
+            'data': {'authorization_url': 'https://checkout.paystack.com/x',
+                     'reference': 'CONNECT-NEW'}}
+        r = self.client.post(reverse('bookings:initialize-paystack-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 200, r.data)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.provider_reference, 'CONNECT-NEW')
+
+    @patch('bookings.views.requests.get')
+    def test_attempt_still_in_progress_stays_locked(self, mock_get):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'ongoing'}})
+        r = self.client.post(reverse('bookings:initialize-mpesa-payment',
+                                     kwargs={'booking_id': self.booking.id}),
+                             {'phone_number': '+254712345678'}, format='json')
+        self.assertEqual(r.status_code, 409)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'pending')
+
+    @patch('bookings.views.requests.get')
+    def test_paid_attempt_is_not_replaced(self, mock_get):
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'success'}})
+        r = self.client.post(reverse('bookings:initialize-cash-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 400)
+        self.payment.refresh_from_db()
+        self.assertEqual((self.payment.method, self.payment.provider_reference),
+                         ('digital', 'CONNECT-OLD'))
+
+    @patch('bookings.views.requests.post')
+    def test_refused_checkout_init_does_not_lock(self, mock_post):
+        Payment.objects.filter(pk=self.payment.pk).update(status='failed')
+        mock_post.return_value.status_code = 400
+        mock_post.return_value.json.return_value = {'status': False, 'message': 'Invalid key'}
+        r = self.client.post(reverse('bookings:initialize-paystack-payment',
+                                     kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 502)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'failed')
+
+    def _webhook(self, ref, currency='KES'):
+        body = json.dumps({'event': 'charge.success', 'data': {
+            'reference': ref, 'amount': 20000, 'currency': currency}}).encode()
+        sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body,
+                       hashlib.sha512).hexdigest()
+        return self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                                content_type='application/json',
+                                HTTP_X_PAYSTACK_SIGNATURE=sig)
+
+    def _switch_to_cash(self):
+        with patch('bookings.views.requests.get') as mock_get:
+            self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'abandoned'}})
+            r = self.client.post(reverse('bookings:initialize-cash-payment',
+                                         kwargs={'booking_id': self.booking.id}))
+        self.assertEqual(r.status_code, 200, r.data)
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('connect.paystack_extra.refund_charge', return_value=('pending', 77))
+    def test_paying_the_old_checkout_after_switching_is_refunded(self, refund, sms):
+        from bookings.models import UnappliedPayment
+        self._switch_to_cash()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
+            self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)  # Paystack replay
+        refund.assert_not_called()  # never inline: the webhook stays fast
+        row = UnappliedPayment.objects.get(reference='CONNECT-OLD')
+        self.assertEqual((row.kind, row.status, row.amount),
+                         ('booking', 'refund_due', Decimal('200.00')))
+        self.assertEqual(sms.call_count, 1)  # one alert, not one per replay
+
+        call_command('process_unapplied', stdout=io.StringIO())
+        call_command('process_unapplied', stdout=io.StringIO())
+        refund.assert_called_once_with('CONNECT-OLD', Decimal('200.00'))
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.refund_reference), ('refunded', '77'))
+        self.payment.refresh_from_db()
+        self.assertEqual((self.payment.method, self.payment.status), ('cash', 'pending'))
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('connect.paystack_extra.refund_charge')
+    def test_unmatched_charge_in_wrong_currency_goes_to_a_human(self, refund, sms):
+        from bookings.models import UnappliedPayment
+        self._switch_to_cash()
+        self._webhook('CONNECT-OLD', currency='USD')
+        call_command('process_unapplied', stdout=io.StringIO())
+        refund.assert_not_called()
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_recording_failure_makes_paystack_resend(self, sms):
+        from bookings.models import UnappliedPayment
+        self._switch_to_cash()
+        with patch.object(UnappliedPayment.objects, 'get_or_create', side_effect=RuntimeError('db down')):
+            self.assertEqual(self._webhook('CONNECT-OLD').status_code, 500)
+        self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'refund_due')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_failed_queued_refund_goes_back_to_a_human(self, sms):
+        from bookings.models import UnappliedPayment
+        UnappliedPayment.objects.create(reference='CONNECT-GONE', kind='booking',
+                                        amount=Decimal('200.00'), status='refunded')
+        body = json.dumps({'event': 'refund.failed', 'data': {
+            'transaction_reference': 'CONNECT-GONE'}}).encode()
+        sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body, hashlib.sha512).hexdigest()
+        r = self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                             content_type='application/json', HTTP_X_PAYSTACK_SIGNATURE=sig)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-GONE').status, 'review')
+        sms.assert_called_once()
+
+
+class WrongAmountChargeTests(DeadDigitalAttemptTests):
+    """A real charge that does not match the booking is refunded, never kept."""
+
+    def _signed(self, payload):
+        body = json.dumps(payload).encode()
+        sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body, hashlib.sha512).hexdigest()
+        return self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                                content_type='application/json', HTTP_X_PAYSTACK_SIGNATURE=sig)
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_webhook_underpayment_is_queued_for_refund(self, sms):
+        from bookings.models import UnappliedPayment
+        with self.captureOnCommitCallbacks(execute=True):
+            self._signed({'event': 'charge.success', 'data': {
+                'reference': 'CONNECT-OLD', 'amount': 5000, 'currency': 'KES'}})
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'failed')
+        row = UnappliedPayment.objects.get(reference='CONNECT-OLD')
+        self.assertEqual((row.status, row.amount), ('refund_due', Decimal('50.00')))
+        sms.assert_called_once()
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_webhook_missing_amount_goes_to_a_human(self, sms):
+        from bookings.models import UnappliedPayment
+        self._signed({'event': 'charge.success', 'data': {'reference': 'CONNECT-OLD'}})
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('bookings.views.requests.get')
+    def test_verify_wrong_currency_is_queued_for_human_review(self, mock_get, sms):
+        from bookings.models import UnappliedPayment
+        self._verify_says(mock_get, 200, {'status': True, 'data': {
+            'status': 'success', 'amount': 20000, 'currency': 'USD'}})
+        self.client.post(reverse('bookings:verify-paystack-payment',
+                                 kwargs={'booking_id': self.booking.id}))
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'failed')
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_failed_refund_on_a_tracked_reference_reopens_it(self, sms):
+        from bookings.models import UnappliedPayment
+        UnappliedPayment.objects.create(reference='CONNECT-OLD', kind='booking',
+                                        amount=Decimal('50.00'), status='refunded')
+        self._signed({'event': 'refund.failed', 'data': {'transaction_reference': 'CONNECT-OLD'}})
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('bookings.views.requests.get')
+    def test_verify_without_amount_leaves_it_to_the_webhook(self, mock_get, sms):
+        from bookings.models import UnappliedPayment
+        self._verify_says(mock_get, 200, {'status': True, 'data': {'status': 'success'}})
+        self.client.post(reverse('bookings:verify-paystack-payment',
+                                 kwargs={'booking_id': self.booking.id}))
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'pending')
+        self.assertFalse(UnappliedPayment.objects.exists())
+        self._signed({'event': 'charge.success', 'data': {
+            'reference': 'CONNECT-OLD', 'amount': 20000, 'currency': 'KES'}})
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'confirmed')

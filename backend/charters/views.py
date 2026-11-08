@@ -12,7 +12,8 @@ from django.conf import settings
 
 from connect import paystack_extra as paystack
 from .services import (
-    CharterError, cancel_charter, check_payable, complete_charter, create_charter,
+    CharterError, cancel_charter, check_payable, company_cancel_charter, complete_charter,
+    create_charter,
     decline_charter, quote_charter, set_pending_reference,
 )
 from users.identity import drivers_for_user
@@ -212,6 +213,19 @@ def charter_decline(request, charter_id):
 @permission_classes([IsAuthenticated])
 def charter_cancel(request, charter_id):
     result, err = _call(cancel_charter, charter_id=charter_id, user=request.user)
+    if err:
+        return err
+    return Response(payload(_qs().get(id=result.id), request.user))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def charter_company_cancel(request, charter_id):
+    charter, err = _manager_target(request, charter_id)
+    if err:
+        return err
+    result, err = _call(company_cancel_charter, charter_id=charter.id, manager=request.user,
+                        reason=str(request.data.get('reason', '')))
     if err:
         return err
     return Response(payload(_qs().get(id=result.id), request.user))

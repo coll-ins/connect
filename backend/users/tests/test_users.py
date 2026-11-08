@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -34,8 +35,17 @@ class UsersTestSuite(APITestCase):
             "name": "Test User",
             "location": "Nairobi",
         }
+        refused = self.client.post(url, payload, format="json")
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Terms', refused.data['error'])
+        self.assertFalse(User.objects.filter(phone_number='+254700000000').exists())
+
+        payload["accept_terms"] = True
         response = self.client.post(url, payload, format="json")
         self.assertIn(response.status_code, [status.HTTP_201_CREATED, status.HTTP_200_OK])
+        created = User.objects.get(phone_number='+254700000000')
+        self.assertEqual(created.terms_version, settings.TERMS_VERSION)
+        self.assertIsNotNone(created.terms_accepted_at)
         self.assertEqual(response.data['user']['role'], 'passenger')
         self.assertEqual(response.data['user']['phone_number'], '+254700000000')
         profile = self.client.get(self._get_url('user_profile'))

@@ -59,6 +59,8 @@
 .help-glass-card svg { color: var(--accent-text); }
 .help-glass-card h3 { margin: 14px 0 8px; font-size: 16px; }
 .help-glass-card p { margin: 0; color: var(--text-2); line-height: 1.6; font-size: 14px; }
+.help-glass-card p + p { margin-top: 8px; }
+.help-link { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
 
 .wallet-glass-card.wallet-main {
   border-color: rgb(var(--accent-rgb) / 0.28);
