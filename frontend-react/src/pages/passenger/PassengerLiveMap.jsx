@@ -1,5 +1,5 @@
 import 'leaflet/dist/leaflet.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import BaseTileLayer from '../../components/maps/BaseTileLayer';
 import L from 'leaflet';
@@ -23,6 +23,7 @@ import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPositi
 import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
 import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '../../components/maps/route';
 import { stopIcon } from '../../components/maps/StopMarker';
+import { webglOk } from '../../components/maps/webgl';
 import {
   estimateBusSpeedKmh,
   OFF_ROUTE_KM,
@@ -145,6 +146,17 @@ function formatEta(minutes) {
   if (minutes <= 1) return '1 min';
 
   return `${Math.round(minutes)} min`;
+}
+
+const Vehicle3D = webglOk ? lazy(() => import('../../components/maps/Vehicle3D')) : null;
+
+function Bus3D(props) {
+  const map = useMap();
+  return (
+    <Suspense fallback={null}>
+      <Vehicle3D map={map} {...props} />
+    </Suspense>
+  );
 }
 
 function MapResize() {
@@ -712,6 +724,8 @@ export default function PassengerLiveMap({
 
   const vehicleMarkerRef = useRef(null);
   const vehicleHeadingRef = useRef(0);
+  const [bus3DReady, setBus3DReady] = useState(false);
+  const markBus3DReady = useCallback(() => setBus3DReady(true), []);
 
   const routeMatch = useRouteMatch(geometry, driverTarget);
   const matchedDriverPosition = routeMatch?.onRoute
@@ -1403,6 +1417,7 @@ export default function PassengerLiveMap({
               ref={vehicleMarkerRef}
               position={matchedDriverPosition}
               icon={vehicleIcon}
+              opacity={bus3DReady ? 0 : 1}
             >
               <Popup>
                 <strong>{busNumber}</strong>
@@ -1410,6 +1425,15 @@ export default function PassengerLiveMap({
                 Your driver
               </Popup>
             </Marker>
+          )}
+
+          {Vehicle3D && tripIsLive && matchedDriverPosition && (
+            <Bus3D
+              position={matchedDriverPosition}
+              heading={matchedDriverHeading}
+              stale={busStale}
+              onReady={markBus3DReady}
+            />
           )}
 
           {passengerPosition && (

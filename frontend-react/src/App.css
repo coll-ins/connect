@@ -2996,10 +2996,6 @@
     flex-direction: column;
   }
 
-  .company-top-actions {
-    display: none;
-  }
-
   .company-form-grid,
   .company-profile-details {
     grid-template-columns: 1fr;
@@ -5133,6 +5129,26 @@
     width: 40px;
     height: 40px;
     flex: 0 0 40px;
+  }
+
+  .company-topbar-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .company-topbar-title h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .company-logout {
+    width: 40px;
+    padding: 0;
+  }
+
+  .company-logout-label {
+    display: none;
   }
 }
 
