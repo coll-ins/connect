@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
@@ -17,6 +18,8 @@ from bookings.services import (
 
 # Passengers are only treated as no-shows this long after departure.
 GRACE_PERIOD = timedelta(minutes=15)
+# A departed trip this old was never ended: settle everyone still unboarded.
+STALE_TRIP = timedelta(hours=getattr(settings, 'TRIP_AUTO_CLOSE_AFTER_HOURS', 12))
 
 
 class Command(BaseCommand):
@@ -67,11 +70,28 @@ class Command(BaseCommand):
                 if trip.departure_at > now - GRACE_PERIOD:
                     unboarded = unboarded.none()
 
+                # Only the first stage has had its chance to board by now.
+                # Passengers further along are settled when the driver ends
+                # the trip, or here once the trip is stale and nobody did.
+                first_stage = (
+                    trip.route.pickup_stages.filter(is_active=True)
+                    .order_by('order').values_list('order', flat=True).first()
+                )
+
                 active_incident_exists = trip.incidents.filter(
                     status__in=["reported", "investigating"],
                 ).exists()
 
                 for booking in unboarded:
+                    stage = booking.pickup_stage
+                    if (
+                        first_stage is not None
+                        and stage is not None
+                        and stage.order > first_stage
+                        and trip.departure_at > now - STALE_TRIP
+                    ):
+                        continue
+
                     # An active trip incident means the passenger was
                     # prevented from boarding by a company/trip event.
                     # Do not classify the passenger as a no-show or
@@ -101,8 +121,12 @@ class Command(BaseCommand):
                     )
                     bookings_settled += 1
 
+                # Cash passengers at later stages pay the driver on boarding;
+                # their seat stays held until the trip ends.
                 expired_count = trip.bookings.filter(
                     status="pending"
+                ).exclude(
+                    payment__method="cash", payment__status="pending",
                 ).update(status="cancelled")
                 bookings_expired += expired_count
 

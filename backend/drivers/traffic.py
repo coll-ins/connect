@@ -210,7 +210,9 @@ def compute_traffic(coords, stages, pings, own_driver_id=None, company_of=None):
 
     bins = {}
     for driver_id, pairs in pairs_by_driver.items():
-        for pair in _drop_parked(pairs):
+        # The passenger's own bus is on a live trip, away from stages and the
+        # ends of the route: standing still there is a jam, not parking.
+        for pair in pairs if driver_id == own_driver_id else _drop_parked(pairs):
             low, high = sorted((pair['s1'], pair['s2']))
             for b in range(int(low // BIN_M), int(high // BIN_M) + 1):
                 bins.setdefault(b, []).append((pair['t'], pair['speed'], driver_id))

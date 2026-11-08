@@ -65,9 +65,16 @@ class ComputeTrafficTests(TestCase):
         segments = compute_traffic(COORDS, [], drive(7, 1500, 3, 120), own_driver_id=7)
         self.assertEqual(levels_at(segments, 1550), ['heavy'])
 
-    def test_a_bus_parked_off_a_stage_is_not_traffic(self):
-        parked = drive(7, 1000, 0, 600)  # ten minutes without moving
-        self.assertEqual(compute_traffic(COORDS, [], parked, own_driver_id=7), [])
+    def test_other_buses_parked_off_a_stage_are_not_traffic(self):
+        parked = []
+        for bus in (1, 2, 3):
+            parked += drive(bus, 1000, 0, 600)  # ten minutes without moving
+        self.assertEqual(compute_traffic(COORDS, [], parked), [])
+
+    def test_the_passengers_own_bus_stuck_for_long_is_heavy_traffic(self):
+        stuck = drive(7, 1000, 0, 600)  # ten minutes in a jam on a live trip
+        segments = compute_traffic(COORDS, [], stuck, own_driver_id=7)
+        self.assertEqual(levels_at(segments, 1000), ['heavy'])
 
     def test_a_short_stop_in_a_jam_is_traffic(self):
         stop = drive(7, 1000, 0, 120)
