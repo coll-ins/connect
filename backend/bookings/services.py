@@ -44,7 +44,10 @@ def cash_still_payable(trip):
     """Cash can be taken until the trip ends: passengers board at stages
     along the way, after the bus has left the first one."""
     if trip and trip.status in ('boarding', 'departed'):
-        return True
+        from django.conf import settings
+        hours = getattr(settings, 'TRIP_AUTO_CLOSE_AFTER_HOURS', 12)
+        # A trip nobody ended is not still running days later.
+        return trip.departure_at > timezone.now() - timedelta(hours=hours)
     return not trip_has_departed(trip)
 
 

@@ -23,7 +23,11 @@ def is_driver_account_for(user, driver):
     if not user_phone or user_phone != driver_phone:
         return False
     company_id = getattr(user, 'company_id', None)
-    return company_id is None or company_id == getattr(driver, 'company_id', None)
+    if company_id is not None:
+        return company_id == getattr(driver, 'company_id', None)
+    # A login with no company (old accounts) may only stand for a driver whose
+    # phone no other company uses; otherwise it could act for a rival's bus.
+    return drivers_for_user(user).values('company_id').distinct().count() == 1
 
 
 def drivers_for_user(user):
@@ -39,5 +43,7 @@ def drivers_for_user(user):
     queryset = Driver.objects.filter(phone_number__in=variants)
     company_id = getattr(user, 'company_id', None)
     if company_id is not None:
-        queryset = queryset.filter(company_id=company_id)
+        return queryset.filter(company_id=company_id)
+    if queryset.values('company_id').distinct().count() > 1:
+        return Driver.objects.none()
     return queryset
