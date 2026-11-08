@@ -48,6 +48,7 @@ export default function PaymentReturn() {
           navigate('/passenger', { replace: true });
           navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
             state: {
+              backToOverview: true,
               booking: booking
                 ? {
                     ...booking,

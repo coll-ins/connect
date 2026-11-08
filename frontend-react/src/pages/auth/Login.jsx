@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react';
 import '../../legal/Legal.css';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
 import PasswordInput from '../../components/PasswordInput';
 
+// Only return to a page inside this user's own area.
+function returnPath(user, from) {
+  const home = dashboardPath(user);
+  return typeof from === 'string' && (from === home || from.startsWith(`${home}/`))
+    ? from
+    : home;
+}
+
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user: signedInUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -36,20 +44,18 @@ export default function Login() {
         password,
       });
 
-      const home = dashboardPath(user);
-      const from = location.state?.from;
-      // Only return to a page inside this user's own area.
-      const back =
-        typeof from === 'string' && (from === home || from.startsWith(`${home}/`))
-          ? from
-          : home;
-      navigate(back, { replace: true });
+      navigate(returnPath(user, location.state?.from), { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // Already signed in on this device: go straight in.
+  if (signedInUser) {
+    return <Navigate to={returnPath(signedInUser, location.state?.from)} replace />;
+  }
 
   return (
     <div className="auth-page">
