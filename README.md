@@ -147,6 +147,24 @@ additional provider and infrastructure settings; see [deploy/RUNBOOK.md](./deplo
 | `ALLOWED_HOSTS` | Comma-separated list of allowed domains in production |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed frontend origins |
 
+Frontend (`frontend-react/.env.example`, set the same names in Vercel):
+
+| Variable | Description |
+|---|---|
+| `VITE_LEGAL_ENTITY` | Registered business name shown in the Terms and Privacy Policy |
+| `VITE_LEGAL_ADDRESS` | Business address shown in the legal pages (default `Nairobi, Kenya`) |
+| `VITE_SUPPORT_EMAIL`, `VITE_SUPPORT_PHONE` | Support contact shown in Help and the legal pages |
+
+## Legal pages
+
+Terms, Privacy, Refund, Parcel and Bus Hire terms live in
+`frontend-react/src/legal/documents.js` and are served at `/legal/<slug>`. Signup
+requires accepting them; the accepted version and time are stored on the user
+(`terms_version`, `terms_accepted_at`). When the text changes materially, bump
+`TERMS_VERSION` in `backend/connect/settings.py` and `LAST_UPDATED` in
+`frontend-react/src/legal/business.js`. The refund rules in the documents mirror
+the code; change both together.
+
 ---
 
 ## API endpoints

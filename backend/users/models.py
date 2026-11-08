@@ -30,6 +30,9 @@ class CustomUser(AbstractUser):
     )
     boarded_count = models.PositiveIntegerField(default=0)
     no_show_count = models.PositiveIntegerField(default=0)
+    # Proof of agreement: which Terms version the user accepted, and when.
+    terms_version = models.CharField(max_length=20, blank=True, default='')
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
 
     REQUIRED_FIELDS = ['email', 'phone_number'] 
 
