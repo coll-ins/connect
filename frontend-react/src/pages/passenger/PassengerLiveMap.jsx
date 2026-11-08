@@ -1043,12 +1043,14 @@ export default function PassengerLiveMap({
   // a few metres beside it.
   const newRoadMatch = useRouteMatch(reroute?.line, driverTarget);
   const busOnNewRoad = Boolean(reroute && newRoadMatch?.onRoute);
+  // On a new road the bus drives along it the same way as on the route.
+  const newRoadGlide = useRoadDriverPosition(driverTarget, reroute?.line);
   const shownBusPosition = busOnNewRoad
-    ? newRoadMatch.position
+    ? newRoadGlide.position ?? newRoadMatch.position
     : matchedDriverPosition;
   const shownBusHeading =
-    busOnNewRoad && newRoadMatch.heading != null
-      ? newRoadMatch.heading
+    busOnNewRoad
+      ? newRoadGlide.heading
       : matchedDriverHeading;
   const nearbyTraffic = useMemo(
     () =>
