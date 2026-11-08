@@ -314,17 +314,19 @@ export default function ConnectMap({
   });
   const newRoadMatch = useRouteMatch(reroute?.line, driverGpsPosition);
   const onNewRoad = Boolean(reroute && newRoadMatch?.onRoute);
+  // On a new road the bus drives along it the same way as on the route.
+  const newRoadGlide = useRoadDriverPosition(driverGpsPosition, reroute?.line);
   const matchedPosition = routeMatch?.onRoute
     ? driverPosition
     : onNewRoad
-      ? newRoadMatch.position
+      ? newRoadGlide.position ?? newRoadMatch.position
       : routeMatch?.position ?? driverPosition;
   const gpsHeading = Number(driver?.heading);
   const matchedHeading =
     routeMatch?.onRoute
       ? rawDriverHeading
-      : onNewRoad && newRoadMatch.heading != null
-        ? newRoadMatch.heading
+      : onNewRoad
+        ? newRoadGlide.heading
         : Number.isFinite(gpsHeading)
           ? gpsHeading
           : rawDriverHeading;
