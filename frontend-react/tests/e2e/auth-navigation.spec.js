@@ -102,6 +102,8 @@ test.describe('CONNECT public entry and access guards', () => {
     await page.getByLabel('Phone number').fill('0712345678');
     await page.getByLabel('Usual location').fill('CBD');
     await page.getByRole('textbox', { name: 'Password' }).fill('StrongPassword123!');
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
+    await page.getByRole('checkbox', { name: /I agree to the Terms of Service/ }).check();
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(page).toHaveURL(/\/passenger$/);
@@ -110,6 +112,7 @@ test.describe('CONNECT public entry and access guards', () => {
       name: 'New Passenger',
       phone_number: '0712345678',
       location: 'CBD',
+      accept_terms: true,
     });
     await expect.poll(async () => page.evaluate(() => {
       const user = JSON.parse(localStorage.getItem('user_session') || 'null');
@@ -131,6 +134,8 @@ test.describe('CONNECT public entry and access guards', () => {
     await page.getByLabel('First and last name').fill('Existing Passenger');
     await page.getByLabel('Phone number').fill('0712345678');
     await page.getByRole('textbox', { name: 'Password' }).fill('StrongPassword123!');
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
+    await page.getByRole('checkbox', { name: /I agree to the Terms of Service/ }).check();
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(

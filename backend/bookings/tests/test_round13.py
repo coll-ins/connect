@@ -126,6 +126,21 @@ class ExpirePendingBookingsTests(_Bookings, APITestCase):
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, 'pending')
 
+    def test_cash_booking_waits_for_the_bus(self):
+        # Cash is paid on boarding, so age alone must not cancel it.
+        Payment.objects.filter(booking=self.old).update(method='cash')
+        self.assertIn('cancelled 0', self._expire())
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, 'pending')
+
+    def test_cash_booking_on_a_departed_trip_is_still_cancelled(self):
+        Payment.objects.filter(booking=self.old).update(method='cash')
+        Trip.objects.filter(pk=self.trip.pk).update(
+            departure_at=timezone.now() - timedelta(minutes=1))
+        self._expire()
+        self.old.refresh_from_db()
+        self.assertEqual(self.old.status, 'cancelled')
+
     def test_second_run_cancels_nothing(self):
         self._expire()
         self.assertIn('cancelled 0', self._expire())

@@ -52,6 +52,7 @@ const PassengerPayments = lazy(() => import('./pages/passenger/PassengerPages').
 const PassengerProfile = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerProfile })));
 const PassengerRecords = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerRecords })));
 const PassengerSeats = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerSeats })));
+const LegalPage = lazy(() => import('./legal/LegalPage'));
 const PassengerHelp = lazy(() => import('./pages/passenger/PassengerPages').then(m => ({ default: m.PassengerHelp })));
 
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal.jsx'));
@@ -115,6 +116,8 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/legal" element={<Navigate to="/legal/terms" replace />} />
+      <Route path="/legal/:slug" element={<LegalPage />} />
 
       <Route path="/passenger/*" element={<PassengerRoutes />} />
 

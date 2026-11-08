@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import { canOpenTripMap } from './liveMapUtils';
+import { BUSINESS } from '../../legal/business';
 import {
   Armchair,
   CreditCard,
@@ -367,6 +368,23 @@ export function PassengerHelp() {
           <p>
             For incidents affecting a trip, your booking record can show the
             related incident and resolution when one exists.
+          </p>
+        </div>
+
+        <div className="help-glass-card">
+          <ShieldCheck size={26} />
+          <h3>Contact and policies</h3>
+          {(BUSINESS.email || BUSINESS.phone) && (
+            <p>
+              {BUSINESS.email && <>Email <a className="help-link" href={`mailto:${BUSINESS.email}`}>{BUSINESS.email}</a>{BUSINESS.phone && ' or '}</>}
+              {BUSINESS.phone && <>call <a className="help-link" href={`tel:${BUSINESS.phone.replace(/\s/g, '')}`}>{BUSINESS.phone}</a></>}
+              {' '}with your reference.
+            </p>
+          )}
+          <p>
+            Read the <Link className="help-link" to="/legal/refunds">refund policy</Link>,{' '}
+            <Link className="help-link" to="/legal/terms">terms</Link> and{' '}
+            <Link className="help-link" to="/legal/privacy">privacy policy</Link>.
           </p>
         </div>
       </div>
