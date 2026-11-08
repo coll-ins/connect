@@ -31,6 +31,9 @@ class Command(BaseCommand):
         candidate_ids = list(
             Booking.objects
             .filter(status='pending', created_at__lt=cutoff, trip__status='scheduled')
+            # Cash is paid to the conductor on boarding, so waiting is not abandonment.
+            # Departed trips still clear it via cancel_dead_pending_bookings below.
+            .exclude(payment__method='cash')
             .values_list('pk', flat=True)
         )
 
