@@ -1,4 +1,4 @@
-import { Canvas, extend } from '@react-three/fiber';
+import { Canvas, extend, useFrame } from '@react-three/fiber';
 import { PMREMGenerator } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -98,8 +98,33 @@ function Wheel({ x, y }) {
   );
 }
 
+// Seconds for the body to cover most of a turn. A heading that jumps between
+// GPS fixes is eased in, so the bus turns instead of snapping round.
+const TURN_S = 0.35;
+
 function VehicleModel({ heading, stale, onReady }) {
   const ready = useRef(false);
+  const yawRef = useRef(null);
+  const invalidate = useThree((state) => state.invalidate);
+  const targetYaw = -(heading * Math.PI) / 180;
+  const [initialYaw] = useState(targetYaw);
+
+  useEffect(() => {
+    invalidate();
+  }, [targetYaw, invalidate]);
+
+  useFrame((_, delta) => {
+    const body = yawRef.current;
+    if (!body) return;
+    const gap = targetYaw - body.rotation.z;
+    const diff = Math.atan2(Math.sin(gap), Math.cos(gap));
+    if (Math.abs(diff) < 0.002) {
+      body.rotation.z = targetYaw;
+      return;
+    }
+    body.rotation.z += diff * (1 - Math.exp(-Math.min(delta, 0.1) / TURN_S));
+    invalidate();
+  });
   const livery = stale ? '#d84343' : '#f28c28';
   const handleAfterRender = useCallback(() => {
     if (ready.current) return;
@@ -116,7 +141,7 @@ function VehicleModel({ heading, stale, onReady }) {
   );
 
   return (
-    <group rotation={[0, 0, -(heading * Math.PI) / 180]}>
+    <group ref={yawRef} rotation={[0, 0, initialYaw]}>
       <mesh position={[0, 0, 0.01]} scale={[W * 0.72, L * 0.56, 1]}>
         <circleGeometry args={[1, 40]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.3} depthWrite={false} />
