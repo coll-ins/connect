@@ -486,6 +486,7 @@ export default function DriverLiveLocation() {
           showPassenger={false}
           height="100%"
           zoom={14}
+          traffic
           showDriver={!vehicleReady}
           onMapReady={setLeafletMap}
           onDriverPositionChange={setBusPosition}
