@@ -294,7 +294,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     // with My trips, not on the booking step this payment came from.
     navigate('/passenger', { replace: true });
     navigate(`/passenger/map?booking=${encodeURIComponent(bookingId)}`, {
-      state: { booking },
+      state: { booking, backToOverview: true },
     });
   }, [navigate, paymentBooking]);
 
@@ -721,7 +721,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                               navigate(
                                 `/passenger/map?booking=${encodeURIComponent(
                                   b.booking_id || b.id
-                                )}`
+                                )}`,
+                                { state: { backToOverview: true } }
                               )
                             }
                           >
