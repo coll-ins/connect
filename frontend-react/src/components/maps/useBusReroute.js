@@ -89,7 +89,7 @@ export default function useBusReroute({
       active = false;
       window.clearInterval(timer);
     };
-  }, [offRoute]);
+  }, [offRoute, url]);
 
   return offRoute ? reroute : null;
 }
