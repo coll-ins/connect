@@ -43,9 +43,9 @@ def levels_at(segments, metres):
 
 
 class ComputeTrafficTests(TestCase):
-    def test_labels_heavy_slow_and_moving_road_when_buses_agree(self):
+    def test_labels_heavy_slow_and_moving_road_when_companies_agree(self):
         pings = []
-        for bus in (1, 2):
+        for bus in (1, 2, 3):
             pings += (
                 drive(bus, 200, 40, 40)            # 200-650 m at 40 km/h
                 + drive(10 + bus, 900, 14, 60)     # 900-1130 m at 14 km/h

@@ -34,6 +34,7 @@ SLOW_KMH = 20
 MIN_DT_S, MAX_DT_S = 3, 180
 MAX_PINGS = 20000
 CACHE_S = 30
+MIN_COMPANIES = 3
 EARTH_M = 6371000.0
 
 
@@ -48,6 +49,11 @@ def keep_ping(driver, latitude, longitude, at):
             LocationPing.objects.filter(recorded_at__lt=at - KEEP).delete()
     except Exception:
         logger.exception('could not keep GPS ping for driver %s', driver.pk)
+
+
+def _median(values):
+    values = sorted(values)
+    return values[len(values) // 2]
 
 
 def _level(speed_kmh):
@@ -156,15 +162,21 @@ def _drop_parked(pairs):
     return keep
 
 
-def compute_traffic(coords, stages, pings, own_driver_id=None):
+def compute_traffic(coords, stages, pings, own_driver_id=None, company_of=None):
     """
     coords: route [[lng, lat], ...]; stages: [(lat, lng)];
     pings: [(driver_id, lat, lng, recorded_at)] sorted by driver then time.
 
-    A stretch is only shown when two or more buses agree, or when all of its
-    readings come from own_driver_id (the passenger's own bus, whose position
-    they already see). One other company's bus is never traceable.
+    company_of: {driver_id: company_id}; a driver missing from it counts as
+    its own company.
+
+    A stretch is only shown when MIN_COMPANIES companies have readings there,
+    or when all of its readings come from own_driver_id (the passenger's own
+    bus, whose position they already see). Each company gets one vote, its
+    median speed, so one company's fake drivers cannot outvote or expose a
+    lone rival bus.
     """
+    company_of = company_of or {}
     line = _Line(coords)
     total = line.cum[-1]
     stage_m = [m for m in (line.snap(line.project(lat, lng)) for lat, lng in stages) if m is not None]
@@ -208,10 +220,16 @@ def compute_traffic(coords, stages, pings, own_driver_id=None):
         newest = max(t for t, _, _ in readings)
         fresh = [(v, d) for t, v, d in readings if newest - t <= FRESH_S]
         drivers = {d for _, d in fresh}
-        if len(drivers) < 2 and drivers != {own_driver_id}:
-            continue
-        speeds = sorted(v for v, _ in fresh)
-        levels[b] = _level(speeds[len(speeds) // 2])
+        if drivers == {own_driver_id}:
+            speeds = sorted(v for v, _ in fresh)
+        else:
+            by_company = {}
+            for v, d in fresh:
+                by_company.setdefault(company_of.get(d, ('driver', d)), []).append(v)
+            if len(by_company) < MIN_COMPANIES:
+                continue
+            speeds = sorted(_median(v) for v in by_company.values())
+        levels[b] = _level(_median(speeds))
 
     segments = []
     for b in sorted(levels):
@@ -249,14 +267,15 @@ def route_traffic(route, own_driver_id=None):
             longitude__range=(min(lngs) - margin, max(lngs) + margin),
         )
         .order_by('-recorded_at')
-        .values_list('driver_id', 'latitude', 'longitude', 'recorded_at')[:MAX_PINGS]
+        .values_list('driver_id', 'latitude', 'longitude', 'recorded_at', 'driver__company_id')[:MAX_PINGS]
     )
-    pings = sorted(newest, key=lambda row: (row[0], row[3]))
+    company_of = {row[0]: row[4] for row in newest}
+    pings = sorted((row[:4] for row in newest), key=lambda row: (row[0], row[3]))
     stages = [
         (float(s.latitude), float(s.longitude))
         for s in route.pickup_stages.filter(is_active=True)
         if s.latitude is not None and s.longitude is not None
     ]
-    result = compute_traffic(coords, stages, pings, own_driver_id) if pings else []
+    result = compute_traffic(coords, stages, pings, own_driver_id, company_of) if pings else []
     cache.set(key, result, CACHE_S)
     return result
