@@ -2,6 +2,7 @@
 Work through charges (parcels / bus hire) that could not be applied.
 
 1. Retry transient failures (up to 5 attempts, then a human).
+   Then queue refunds for parcels whose trip is over (settle_stale_parcels).
 2. Send automatic refunds for business rejections (refund_due).
 3. Check refunds stuck in 'refunding' against Paystack. It never resends:
    if Paystack has no refund after the minimum age, a human takes over.
@@ -53,6 +54,10 @@ class Command(BaseCommand):
                         status='applied', attempts=attempts, updated_at=timezone.now()):
                     applied += 1
 
+        # 1b. parcels whose trip is over: queue their refunds before step 2
+        from deliveries.services import settle_stale_parcels
+        parcels_refunded, parcels_failed = settle_stale_parcels()
+
         # 2. automatic refunds (the claim is a conditional UPDATE: one winner)
         for row in UnappliedPayment.objects.filter(status='refund_due').order_by('pk'):
             if px.claim_refund(row):
@@ -82,7 +87,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f'process_unapplied: applied {applied}, escalated {escalated}, '
-            f'refunded {refunded}, reconciled {reconciled}'
+            f'refunded {refunded}, reconciled {reconciled}, '
+            f'parcels refunded {parcels_refunded}, parcels undelivered {parcels_failed}'
         )
         for row in UnappliedPayment.objects.filter(status='review').order_by('pk'):
             self.stdout.write(f'NEEDS A HUMAN: {row.reference} KES {row.amount}: {row.reason}')
