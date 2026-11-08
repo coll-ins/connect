@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
@@ -17,6 +18,8 @@ from bookings.services import (
 
 # Passengers are only treated as no-shows this long after departure.
 GRACE_PERIOD = timedelta(minutes=15)
+# A departed trip this old was never ended: settle everyone still unboarded.
+STALE_TRIP = timedelta(hours=getattr(settings, 'TRIP_AUTO_CLOSE_AFTER_HOURS', 12))
 
 
 class Command(BaseCommand):
@@ -68,8 +71,8 @@ class Command(BaseCommand):
                     unboarded = unboarded.none()
 
                 # Only the first stage has had its chance to board by now.
-                # Passengers further along are settled when the trip ends
-                # (driver end-trip or close_stale_trips), not at departure.
+                # Passengers further along are settled when the driver ends
+                # the trip, or here once the trip is stale and nobody did.
                 first_stage = (
                     trip.route.pickup_stages.filter(is_active=True)
                     .order_by('order').values_list('order', flat=True).first()
@@ -85,6 +88,7 @@ class Command(BaseCommand):
                         first_stage is not None
                         and stage is not None
                         and stage.order > first_stage
+                        and trip.departure_at > now - STALE_TRIP
                     ):
                         continue
 
