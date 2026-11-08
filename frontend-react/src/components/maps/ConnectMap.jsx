@@ -321,8 +321,8 @@ export default function ConnectMap({
       : routeMatch?.position ?? driverPosition;
   const gpsHeading = Number(driver?.heading);
   const matchedHeading =
-    routeMatch?.onRoute && routeMatch.heading != null
-      ? routeMatch.heading
+    routeMatch?.onRoute
+      ? rawDriverHeading
       : onNewRoad && newRoadMatch.heading != null
         ? newRoadMatch.heading
         : Number.isFinite(gpsHeading)

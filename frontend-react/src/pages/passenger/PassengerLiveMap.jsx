@@ -803,8 +803,8 @@ export default function PassengerLiveMap({
     : routeMatch?.position ?? driverPosition;
   const gpsHeading = Number(live?.driver?.heading);
   const matchedDriverHeading =
-    routeMatch?.onRoute && routeMatch.heading != null
-      ? routeMatch.heading
+    routeMatch?.onRoute
+      ? driverHeading
       : Number.isFinite(gpsHeading)
         ? gpsHeading
         : driverHeading;
@@ -1064,6 +1064,15 @@ export default function PassengerLiveMap({
         : [],
     [busTraffic, shownBusPosition],
   );
+  // Traffic right where the bus is: tells the passenger it is stuck, not lost.
+  const trafficAtBus = useMemo(() => {
+    if (!shownBusPosition) return null;
+    const near = nearbyTraffic.filter((segment) =>
+      segment.positions.some((point) => haversineKm(point, shownBusPosition) * 1000 <= 200),
+    );
+    if (near.some((segment) => segment.level === 'heavy')) return 'heavy';
+    return near.length ? 'slow' : null;
+  }, [nearbyTraffic, shownBusPosition]);
   const rerouteLine = useMemo(
     () => (reroute ? lineAheadOfBus(shownBusPosition, reroute.line) : null),
     [reroute, shownBusPosition],
@@ -1301,6 +1310,9 @@ export default function PassengerLiveMap({
     'your destination';
   const guide = tripGuide({
     bookingStatus: bookingDetails?.status,
+    cashOnBoard:
+      String(bookingDetails?.payment_method || '').toLowerCase() === 'cash' &&
+      String(bookingDetails?.payment_status || '').toLowerCase() === 'pending',
     tripIsLive,
     parked: Boolean(parkedBus),
     boarding: String(parkedTripStatus || '').toLowerCase() === 'boarding',
@@ -1740,7 +1752,13 @@ export default function PassengerLiveMap({
           >
             {busStatus}
             {etaMinutes != null ? ` · ${formatEta(etaMinutes)} to pickup` : ''}
-            {heavyTraffic ? ' · heavy traffic on the route' : ''}
+            {trafficAtBus === 'heavy'
+              ? ' · bus stuck in heavy traffic'
+              : trafficAtBus === 'slow'
+                ? ' · bus in slow traffic'
+                : heavyTraffic
+                  ? ' · heavy traffic on the route'
+                  : ''}
           </p>
         )}
 

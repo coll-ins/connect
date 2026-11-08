@@ -29,7 +29,7 @@ function smoothHeading(current, target) {
   return (current + diff * 0.15 + 360) % 360;
 }
 
-function buildCumulative(geometry) {
+export function buildCumulative(geometry) {
   if (!geometry || geometry.length < 2) return null;
   const cumulative = [0];
   for (let i = 1; i < geometry.length; i += 1) {
@@ -91,6 +91,20 @@ function pointAtDistance(geometry, cumulative, distance) {
   };
 }
 
+// Half the wheelbase used for steering, in km. The body points from a point
+// this far behind it on the road to one this far ahead, so it swings through
+// a bend the way a bus does instead of spinning on the spot at each corner.
+const STEER_KM = 0.025;
+
+export function bodyHeading(geometry, cumulative, distance) {
+  const rear = pointAtDistance(geometry, cumulative, distance - STEER_KM);
+  const front = pointAtDistance(geometry, cumulative, distance + STEER_KM);
+  if (haversineKm(rear.position, front.position) < 0.002) {
+    return pointAtDistance(geometry, cumulative, distance).heading;
+  }
+  return bearing(rear.position, front.position);
+}
+
 export function useRoadDriverPosition(target, geometry) {
   const cumulative = useMemo(() => buildCumulative(geometry), [geometry]);
 
@@ -150,6 +164,7 @@ export function useRoadDriverPosition(target, geometry) {
 
     const jumpTo = () => {
       const pt = pointAtDistance(g, c, d);
+      pt.heading = bodyHeading(g, c, d);
       segRef.current = { from: d, to: d, start: now, dur: 1 };
       shownRef.current = d;
       lastGoalAtRef.current = now;
@@ -210,7 +225,7 @@ export function useRoadDriverPosition(target, geometry) {
 
         shownRef.current = next;
         const pt = pointAtDistance(g, c, next);
-        headingRef.current = smoothHeading(headingRef.current, pt.heading);
+        headingRef.current = smoothHeading(headingRef.current, bodyHeading(g, c, next));
         lastPosRef.current = pt.position;
         setState({ position: pt.position, heading: headingRef.current });
       }

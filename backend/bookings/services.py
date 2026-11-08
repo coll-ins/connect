@@ -30,6 +30,24 @@ def trip_has_departed(trip):
     return True
 
 
+def cash_due_on_board(booking, payment):
+    """Cash passenger who pays the driver on boarding: seat held, PIN shown."""
+    return (
+        booking.status == 'pending'
+        and payment is not None
+        and payment.method == 'cash'
+        and payment.status == 'pending'
+    )
+
+
+def cash_still_payable(trip):
+    """Cash can be taken until the trip ends: passengers board at stages
+    along the way, after the bus has left the first one."""
+    if trip and trip.status in ('boarding', 'departed'):
+        return True
+    return not trip_has_departed(trip)
+
+
 def cancel_dead_pending_bookings(bookings):
     """
     Cancel unpaid bookings whose trip is gone (see trip_has_departed), so they
@@ -53,6 +71,12 @@ def cancel_dead_pending_bookings(bookings):
                 trip__status='boarding',
                 trip__departure_at__lte=now - BOARDING_BOOKABLE_WINDOW,
             )
+        )
+        # A cash passenger waiting at a later stage is still coming.
+        .exclude(
+            payment__method='cash',
+            payment__status='pending',
+            trip__status__in=['boarding', 'departed'],
         )
         .values_list('pk', flat=True)
     )

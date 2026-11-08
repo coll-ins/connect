@@ -264,8 +264,9 @@ export default function PassengerMapPage() {
             <div className="cn-notice-body">
               <strong>Cash payment selected</strong>
               <span>
-                Pay the driver to confirm. Live tracking will be available when
-                the trip is boarding and a driver is assigned.
+                Pay your fare in cash to the driver when you board and show
+                your boarding PIN. The bus appears here once the trip is
+                boarding and a driver is assigned.
               </span>
             </div>
           </div>

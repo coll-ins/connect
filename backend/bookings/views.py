@@ -38,6 +38,8 @@ from .models import Booking, BookingHold, Payment, BoardingEvent
 from .services import (
     settle_booking_fault,
     cancel_dead_pending_bookings,
+    cash_due_on_board,
+    cash_still_payable,
     trip_has_departed,
     create_booking_hold,
     release_booking_hold,
@@ -1531,7 +1533,7 @@ def confirm_cash_payment(request, booking_id):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            if trip_has_departed(booking.trip):
+            if not cash_still_payable(booking.trip):
                 return Response(
                     {
                         'error': (
@@ -1819,7 +1821,12 @@ def get_my_bookings(request):
         data.append({
             'booking_id': b.id,
             'booking_number': b.booking_number,
-            'verification_pin': b.verification_pin if b.status == 'confirmed' else None,
+            'verification_pin': (
+                b.verification_pin
+                if b.status == 'confirmed'
+                or cash_due_on_board(b, getattr(b, 'payment', None))
+                else None
+            ),
             'boarded': hasattr(b, 'boarding_event'),
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
@@ -3386,6 +3393,9 @@ def _passenger_can_track(booking):
     booking 'completed' for settlement, but the passenger is still riding.
     """
     if booking.status == 'confirmed':
+        return True
+    # Paying cash on boarding: they need to see the bus to meet it.
+    if cash_due_on_board(booking, getattr(booking, 'payment', None)):
         return True
     return (
         booking.status == 'completed'
@@ -5076,6 +5086,7 @@ def passenger_records(request):
                 'verification_pin': (
                     booking.verification_pin
                     if booking.status == 'confirmed'
+                    or cash_due_on_board(booking, payment)
                     else None
                 ),
             },

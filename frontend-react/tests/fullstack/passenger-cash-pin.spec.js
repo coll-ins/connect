@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 // Cash end to end on the real API: choosing cash opens the map with the seat
-// held; once the company confirms the cash, the boarding PIN appears on the
-// passenger's map by itself, without a reload.
-test('cash booking opens the map and shows the boarding PIN once cash is confirmed', async ({ page, browser }) => {
+// held and the boarding PIN already showing, because the fare is paid to the
+// driver on boarding. Confirming the cash keeps the same PIN.
+test('cash booking opens the map with the boarding PIN before the cash is paid', async ({ page, browser }) => {
   page.on('dialog', (d) => d.accept());
 
   await page.goto('/login');
@@ -37,9 +37,9 @@ test('cash booking opens the map and shows the boarding PIN once cash is confirm
   await expect(page).toHaveURL(/\/passenger\/map\?booking=\d+/);
   const bookingId = new URL(page.url()).searchParams.get('booking');
   await expect(page.getByText('Seat reserved · awaiting payment')).toBeVisible();
-  await expect(page.getByText('Your boarding PIN appears once your payment is confirmed.')).toBeVisible();
   const pin = page.locator('.passenger-live-map__guide-pin strong');
-  await expect(pin).toHaveCount(0);
+  await expect(pin).toHaveText(/^\d{4,8}$/, { timeout: 15000 });
+  const issuedPin = await pin.textContent();
 
   // The company manager takes the cash.
   const staff = await browser.newContext({ baseURL: 'http://127.0.0.1:5174' });
@@ -56,6 +56,5 @@ test('cash booking opens the map and shows the boarding PIN once cash is confirm
   expect(confirm.ok(), await confirm.text()).toBeTruthy();
   await staff.close();
 
-  // No reload: the map picks up the confirmed booking and shows the PIN.
-  await expect(pin).toHaveText(/^\d{4,8}$/, { timeout: 15000 });
+  await expect(pin).toHaveText(issuedPin);
 });
