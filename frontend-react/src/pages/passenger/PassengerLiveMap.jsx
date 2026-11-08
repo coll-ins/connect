@@ -1032,7 +1032,9 @@ export default function PassengerLiveMap({
       ? 'pickup'
       : 'destination';
   const reroute = useBusReroute({
-    bookingId,
+    url: bookingId
+      ? `/bookings/${bookingId}/reroute/?goal=${rerouteGoal}`
+      : null,
     offRoute: busIsOffRoute,
     goal: rerouteGoal,
     busPosition: driverTarget,

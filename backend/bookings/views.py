@@ -3635,8 +3635,10 @@ def _reroute_goal_point(booking, goal):
     if goal == 'pickup':
         stage = booking.pickup_stage
         return (float(stage.latitude), float(stage.longitude)) if stage else None
+    return _route_end_point(booking.route)
 
-    route = booking.route
+
+def _route_end_point(route):
     if route.end_latitude is not None and route.end_longitude is not None:
         return (float(route.end_latitude), float(route.end_longitude))
     last_stage = (
@@ -3722,6 +3724,61 @@ def booking_reroute(request, booking_id):
         cache.set(cache_key, payload, BUS_REROUTE_CACHE_SECONDS)
 
     return Response({**payload, 'goal': goal}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([BusRerouteThrottle])
+def driver_reroute(request, driver_id):
+    """Road from the driver's last fix to the end of their live trip's route.
+
+    The driver's map asks for this when the bus has left its planned route, so
+    the bus is drawn on a real road. Only the driver's own account may ask.
+    """
+    from django.core.cache import cache
+    from companies.routing import RoutingError, road_line
+    from .live_signals import location_freshness, trip_is_live
+
+    driver = Driver.objects.filter(id=driver_id).first()
+    if not driver:
+        return Response({'error': 'Driver not found'}, status=status.HTTP_404_NOT_FOUND)
+    user = request.user
+    if not (user.is_superuser or (user.role == 'driver' and is_driver_account_for(user, driver))):
+        return Response({'error': 'Not authorized for this driver.'}, status=status.HTTP_403_FORBIDDEN)
+
+    trip = (
+        Trip.objects.select_related('route')
+        .filter(driver_id=driver.id, status__in=('boarding', 'departed'))
+        .order_by('-departure_at', '-id')
+        .first()
+    )
+    if not trip_is_live(trip) or location_freshness(driver)['is_stale']:
+        return Response(
+            {'error': 'This bus has no live location to route from.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+    target = _route_end_point(trip.route)
+    if target is None:
+        return Response(
+            {'error': 'This trip has no location for that goal.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    bus = (float(driver.latitude), float(driver.longitude))
+    cache_key = (
+        f'bus-reroute:{target[0]:.5f},{target[1]:.5f}:'
+        f'{bus[0]:.3f},{bus[1]:.3f}'
+    )
+    payload = cache.get(cache_key)
+    if payload is None:
+        try:
+            geometry, distance_m = road_line([bus, target], timeout=8)
+        except RoutingError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        payload = {'geometry': geometry, 'distance_m': round(distance_m)}
+        cache.set(cache_key, payload, BUS_REROUTE_CACHE_SECONDS)
+
+    return Response({**payload, 'goal': 'destination'}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])

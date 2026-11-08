@@ -491,6 +491,7 @@ export default function DriverLiveLocation() {
           onMapReady={setLeafletMap}
           onDriverPositionChange={setBusPosition}
           onHeadingChange={setBusHeading}
+          rerouteUrl={driver ? `/bookings/driver/${driver.id}/reroute/` : null}
         />
 
         {Vehicle3D && (
