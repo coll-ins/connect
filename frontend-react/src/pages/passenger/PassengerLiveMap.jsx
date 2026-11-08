@@ -7,20 +7,10 @@ import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { API_HOST, apiRequest } from '../../api';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerLiveMap.css';
-import TiltedMapFrame, {
-  MAP_TILT_ENABLED,
-  MAP_TILT_ZOOM,
-} from '../../components/maps/TiltedMapFrame';
-import SmartFollow from '../../components/maps/SmartFollow';
-import {
-  MapZoomButtons,
-  NextStageBanner,
-} from '../../components/maps/MapNavOverlays';
 import RouteProgress from '../../components/maps/RouteProgress';
 import useBusReroute from '../../components/maps/useBusReroute';
 import useRouteMatch from '../../components/maps/useRouteMatch';
 import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPosition';
-import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
 import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '../../components/maps/route';
 import { stopIcon } from '../../components/maps/StopMarker';
 import {
@@ -767,10 +757,6 @@ export default function PassengerLiveMap({
       return { ...s, latitude: sn.lat, longitude: sn.lng, lat: sn.lat, lng: sn.lng };
     });
   }, [rawStages, geometry]);
-  const stagesOnRoute = useMemo(
-    () => stagesAlongRoute(routeMatch?.route, stages),
-    [routeMatch?.route, stages],
-  );
 
   const pickupStage = useMemo(() => {
     const candidates = [live?.pickup, bookingPickup].filter(Boolean);
@@ -1055,21 +1041,6 @@ export default function PassengerLiveMap({
     [driverHistory],
   );
 
-  const routeAlongM = routeMatch?.onRoute
-    ? routeMatch.alongM
-    : null;
-  const nextStage = useMemo(
-    () =>
-      routeAlongM != null && driverSpeedKmh != null
-        ? nextStageAhead(
-            stagesOnRoute,
-            routeAlongM,
-            driverSpeedKmh,
-          )
-        : null,
-    [routeAlongM, stagesOnRoute, driverSpeedKmh],
-  );
-
   const etaMinutes = useMemo(() => {
     if (
       remainingDistanceKm == null ||
@@ -1231,10 +1202,9 @@ export default function PassengerLiveMap({
       }}
     >
       <div className="passenger-live-map__canvas">
-        <TiltedMapFrame heading={matchedDriverHeading}>
           <MapContainer
             center={center}
-            zoom={MAP_TILT_ENABLED ? MAP_TILT_ZOOM : 15}
+            zoom={15}
             zoomSnap={0}
             zoomDelta={0.5}
             zoomControl={false}
@@ -1247,14 +1217,8 @@ export default function PassengerLiveMap({
           <BaseTileLayer />
 
           <MapResize />
-          <SmartFollow
-            enabled={MAP_TILT_ENABLED}
-            position={matchedDriverPosition}
-            nextStageM={nextStage?.distanceM ?? null}
-          />
 
-          {geometry.length > 1 &&
-            !(MAP_TILT_ENABLED && driverPosition) && (
+          {geometry.length > 1 && (
             <MapRoute positions={geometry} />
           )}
 
@@ -1381,7 +1345,7 @@ export default function PassengerLiveMap({
             </Marker>
           )}
 
-          {!MAP_TILT_ENABLED && following && passengerPosition && (
+          {following && passengerPosition && (
             <MapFollow position={passengerPosition} />
           )}
 
@@ -1428,24 +1392,7 @@ export default function PassengerLiveMap({
             </Marker>
           )}
           </MapContainer>
-        </TiltedMapFrame>
       </div>
-      {MAP_TILT_ENABLED && (
-        <>
-          <MapZoomButtons
-            style={{
-              top: '45%',
-              bottom: 'max(20px, env(safe-area-inset-bottom))',
-            }}
-          />
-          <NextStageBanner
-            next={nextStage}
-            style={{
-              top: 'max(88px, calc(env(safe-area-inset-top) + 78px))',
-            }}
-          />
-        </>
-      )}
 
       {(error && !loading) || locationError ? (
         <NoticeStack>

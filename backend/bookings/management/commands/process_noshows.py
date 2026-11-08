@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from companies.models import Trip
-from bookings.models import Booking, Payment
+from bookings.models import Payment
 from bookings.services import (
     claim_booking_refund,
     run_refund_claims,

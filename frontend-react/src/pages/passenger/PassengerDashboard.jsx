@@ -8,12 +8,12 @@ import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
 import PassengerLiveMap from './PassengerLiveMap';
-import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
-import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
-import bookBusImage from '../../assets/journeys/bookabus.jpeg';
+import bookSeatImage from '../../assets/journeys/bookaseat.webp';
+import deliveryImage from '../../assets/journeys/orderdelivery.webp';
+import bookBusImage from '../../assets/journeys/bookabus.webp';
 import supermetroImage from '../../assets/companies/supermetro.jpeg';
 import cityshuttleImage from '../../assets/companies/cityshuttle.jpeg';
-import latemaImage from '../../assets/companies/latema.jpeg';
+import latemaImage from '../../assets/companies/latema.webp';
 
 const money = (v) => `KES ${Number(v || 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const date = (v) => v ? new Date(v).toLocaleString('en-KE',{dateStyle:'medium',timeStyle:'short'}) : 'Not scheduled';
@@ -565,12 +565,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         <section className="passenger-home">
           <div className="passenger-welcome">
             <div>
-              <span className="glass-eyebrow">CONNECT matatu booking</span>
               <h1>Where are you<br />going today?</h1>
-              <p>
-                Choose how you want to travel and we'll guide you
-                through the journey.
-              </p>
             </div>
 
           </div>
@@ -589,10 +584,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
               <div className="journey-choice-content">
                 <h2>Book a seat</h2>
-                <p>
-                  Find an available departure and reserve your seat
-                  quickly.
-                </p>
+                <p>Pick a departure and reserve your seat.</p>
                 <span className="journey-arrow">Find a trip</span>
               </div>
             </button>
@@ -609,9 +601,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
               <div className="journey-choice-content">
                 <h2>Send a parcel</h2>
-                <p>
-                  Send a parcel safely through the CONNECT transport network.
-                </p>
+                <p>Send a parcel on a matatu route.</p>
                 <span className="journey-arrow">Send a parcel</span>
               </div>
             </button>
@@ -642,12 +632,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             style={{ marginTop: 28 }}
           >
             <div className="journey-heading">
-              <span className="glass-eyebrow">My trips</span>
-              <h2>Upcoming and active bookings</h2>
-              <p>
-                View your confirmed trips and track an assigned bus when live
-                location is available.
-              </p>
+              <h2>Your trips</h2>
             </div>
 
             {!bookings.some(isActiveBooking) ? (

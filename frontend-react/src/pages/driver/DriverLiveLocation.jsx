@@ -179,11 +179,6 @@ export default function DriverLiveLocation() {
         },
       );
 
-      console.info(
-        '[DRIVER LIVE] GPS sent successfully:',
-        position.coords.latitude,
-        position.coords.longitude,
-      );
 
       setLocation(updated);
 
@@ -212,10 +207,6 @@ export default function DriverLiveLocation() {
   useEffect(() => {
     const driverId = driver?.id ?? null;
 
-    console.info('[DRIVER LIVE] GPS effect state:', {
-      driverId,
-      hasGeolocation: !!navigator.geolocation,
-    });
 
     if (!driverId || !navigator.geolocation) {
       console.warn('[DRIVER LIVE] GPS watcher NOT started:', {
@@ -233,20 +224,11 @@ export default function DriverLiveLocation() {
       maximumAge: 5000,
     };
 
-    console.info(
-      '[DRIVER LIVE] Starting GPS watcher for driver:',
-      driverId,
-    );
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
         if (!active) return;
 
-        console.info(
-          '[DRIVER LIVE] Initial GPS:',
-          position.coords.latitude,
-          position.coords.longitude,
-        );
 
         sendLocation(position, true);
       },
@@ -275,11 +257,6 @@ export default function DriverLiveLocation() {
       (position) => {
         if (!active) return;
 
-        console.info(
-          '[DRIVER LIVE] GPS update:',
-          position.coords.latitude,
-          position.coords.longitude,
-        );
 
         sendLocation(position);
       },
@@ -308,7 +285,6 @@ export default function DriverLiveLocation() {
       navigator.geolocation.clearWatch(watchId);
       watchRef.current = null;
 
-      console.info('[DRIVER LIVE] GPS watcher stopped');
     };
   }, [driver?.id, sendLocation]);
 

@@ -17,7 +17,7 @@
 
 .records-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 .records-layout:has(.record-detail-panel) { grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); }
-.records-list { display: grid; gap: 10px; min-width: 0; }
+.records-list { display: grid; min-width: 0; }
 
 .record-card-icon {
   width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center;

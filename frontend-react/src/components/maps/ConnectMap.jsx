@@ -4,12 +4,7 @@ import BaseTileLayer from './BaseTileLayer';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../../pages/passenger/PassengerLiveMap.css';
-import TiltedMapFrame, {
-  MAP_TILT_ENABLED,
-  MAP_TILT_ZOOM,
-} from './TiltedMapFrame';
-import SmartFollow from './SmartFollow';
-import { MapZoomButtons, NextStageBanner } from './MapNavOverlays';
+import { NextStageBanner } from './MapNavOverlays';
 import RouteProgress from './RouteProgress';
 import useRouteMatch from './useRouteMatch';
 import { useRoadDriverPosition } from './useRoadDriverPosition';
@@ -244,7 +239,6 @@ export default function ConnectMap({
   zoom = 14,
   showDriver = true,
   showPassenger = true,
-  tilt = MAP_TILT_ENABLED,
   onMapReady,
   onDriverPositionChange,
   onHeadingChange,
@@ -451,13 +445,12 @@ export default function ConnectMap({
       className="connect-map-wrapper"
       style={{ height }}
     >
-      <TiltedMapFrame enabled={tilt} heading={matchedHeading}>
         <MapContainer
           center={center}
-          zoom={tilt ? MAP_TILT_ZOOM : zoom}
+          zoom={zoom}
           zoomSnap={0}
           zoomDelta={0.5}
-          zoomControl={!tilt}
+          zoomControl
           scrollWheelZoom="center"
           touchZoom="center"
           doubleClickZoom="center"
@@ -476,12 +469,7 @@ export default function ConnectMap({
 
         <MapResize height={height} />
 
-        {!tilt && <MapCenter routePositions={routePositions} />}
-        <SmartFollow
-          enabled={tilt}
-          position={matchedPosition}
-          nextStageM={nextStage?.distanceM ?? null}
-        />
+        <MapCenter routePositions={routePositions} />
 
         {routePositions.length > 1 && (
           <>
@@ -764,8 +752,6 @@ export default function ConnectMap({
           showStops={false}
         />
 </MapContainer>
-      </TiltedMapFrame>
-      {tilt && <MapZoomButtons />}
       <NextStageBanner next={nextStage} />
     </div>
   );

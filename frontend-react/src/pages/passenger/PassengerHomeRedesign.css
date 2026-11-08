@@ -19,7 +19,6 @@
 .passenger-home *, .passenger-home *::before, .passenger-home *::after { box-sizing: border-box; }
 
 .passenger-home .passenger-welcome { margin-bottom: 28px; }
-.passenger-home .welcome-orb { display: none; }
 .passenger-home .glass-eyebrow { color: var(--ph-accent); font-size: 11px; font-weight: 600; letter-spacing: 0; }
 .passenger-home .passenger-welcome h1 {
   margin: 10px 0; color: var(--text); font-size: clamp(30px, 3.6vw, 42px);
@@ -40,8 +39,7 @@
 .passenger-home .journey-choice:focus-visible { outline: 2px solid var(--ph-accent); outline-offset: 3px; }
 
 .passenger-home .journey-choice-image {
-  position: relative; inset: auto; width: 100%; height: 130px; flex: 0 0 130px;
-  background-size: cover; background-position: center; transition: none;
+  position: relative; inset: auto; width: 100%; transition: none;
 }
 .passenger-home .journey-choice:hover .journey-choice-image { transform: none; }
 .passenger-home .journey-image-overlay { background: linear-gradient(180deg, rgba(3,12,21,.0), rgba(3,12,21,.35)); }
@@ -50,7 +48,6 @@
   background: var(--surface); border: 1px solid rgba(255,255,255,.18); box-shadow: none;
 }
 .passenger-home .journey-choice-content { position: static; display: flex; flex: 1; flex-direction: column; align-items: flex-start; padding: 16px 18px 18px; }
-.passenger-home .journey-number { color: var(--ph-muted); font-size: 11px; font-weight: 600; letter-spacing: 0; }
 .passenger-home .journey-choice h2 { margin: 6px 0; color: var(--text); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
 .passenger-home .journey-choice p { margin: 0; color: var(--ph-muted); font-size: 12px; line-height: 1.55; }
 .passenger-home .journey-arrow { margin-top: auto; padding-top: 14px; color: var(--ph-accent); font-size: 12px; font-weight: 600; }
@@ -94,7 +91,7 @@
   .passenger-home { padding-top: 20px; }
   .passenger-home .journey-choice-grid { grid-template-columns: 1fr; gap: 12px; }
   .passenger-home .journey-choice { display: grid; grid-template-columns: 110px minmax(0,1fr); }
-  .passenger-home .journey-choice-image { width: 110px; height: 100%; min-height: 150px; }
+  .passenger-home .journey-choice-image { width: 110px; }
   .passenger-home .modern-trip-card { grid-template-columns: 1fr; gap: 12px; }
   .passenger-home .trip-action { justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--ph-line); }
 }

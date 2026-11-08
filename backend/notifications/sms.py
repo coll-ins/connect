@@ -48,17 +48,6 @@ def send_booking_sms(phone_number, booking_number):
     return _send(message, [phone_number], 'booking')
 
 
-def send_driver_sms(phone_number, booking_number, driver_name, driver_phone, bus_number):
-    message = (
-        f"Connect App: Booking {booking_number} confirmed!\n"
-        f"Driver: {driver_name}\n"
-        f"Bus: {bus_number}\n"
-        f"Call driver: {driver_phone}\n"
-        f"Safe journey!"
-    )
-    return _send(message, [phone_number], 'driver')
-
-
 def send_admin_alert_sms(message):
     """Send an alert SMS to all configured admin phone numbers."""
     numbers = getattr(settings, 'ADMIN_ALERT_PHONE_NUMBERS', [])

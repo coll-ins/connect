@@ -490,44 +490,6 @@ def release_booking_hold(booking):
         return hold
 
 
-def refund_booking_hold(booking):
-    """
-    Mark a booking's financial hold as refunded.
-
-    The actual Paystack refund remains responsible for moving
-    real money. This function records the internal hold state.
-
-    Idempotent:
-    - Already refunded → return the existing hold.
-    """
-    with transaction.atomic():
-        hold = (
-            BookingHold.objects
-            .select_for_update()
-            .get(booking=booking)
-        )
-
-        if hold.status == 'refunded':
-            return hold
-
-        if hold.status != 'held':
-            raise ValueError(
-                f'Cannot refund hold in status "{hold.status}".'
-            )
-
-        hold.status = 'refunded'
-        hold.refunded_at = timezone.now()
-        hold.save(
-            update_fields=[
-                'status',
-                'refunded_at',
-                'updated_at',
-            ]
-        )
-
-        return hold
-
-
 def cancel_trip_bookings(trip, claims):
     """
     Called when the company cancels a trip. It is the company's fault, so each

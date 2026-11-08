@@ -6,7 +6,7 @@ import json
 import requests
 import uuid
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 
 from django.conf import settings
 from django.http import HttpResponse
@@ -22,16 +22,15 @@ from rest_framework.decorators import (
     permission_classes,
     throttle_classes,
 )
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 
 from companies.models import Trip, PickupStage
 from .models import Incident, IncidentResolution
-from users.permissions import can_manage_company, can_access_company
+from users.permissions import can_access_company
 from notifications.sms import send_admin_alert_sms
 from drivers.models import Driver
-from wallets.models import Wallet, WalletTransaction
 
 from .models import Booking, BookingHold, Payment, BoardingEvent
 from .services import (
@@ -2000,7 +1999,8 @@ def get_all_bookings(request):
     bookings = bookings.select_related(
         'user',
         'route__company',
-        'trip__driver',
+        'trip',
+        'driver',
         'payment'
     ).order_by('-created_at')
 

@@ -37,8 +37,7 @@
   }
 
   .driver-timetable-link,
-  .company-panel-header a,
-  .company-section-head a {
+  .company-panel-header a {
     display: inline-flex;
     align-items: center;
     min-height: 44px;

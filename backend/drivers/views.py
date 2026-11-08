@@ -10,10 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from companies.models import Company, Trip, TripSimulation
 from users.models import CustomUser
-from users.permissions import (
-    can_manage_company,
-    can_access_company,
-)
+from users.permissions import can_manage_company
 from .models import Driver
 from .serializers import DriverSerializer
 from rest_framework.decorators import throttle_classes

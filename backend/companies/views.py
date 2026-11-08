@@ -1,5 +1,4 @@
 from datetime import timedelta
-from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from decimal import Decimal
 from django.db import transaction
@@ -12,7 +11,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from bookings.models import Booking, Payment, BoardingEvent
+from bookings.models import Booking
 from users.permissions import (
     can_manage_company,
     can_access_company,
@@ -1166,7 +1165,6 @@ def deactivate_pickup_stage(request, stage_id):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def route_map_data(request, route_id):
-    from django.db.models import Count, Sum
     from .models import Route, Trip
     from bookings.models import Booking
 
@@ -1622,7 +1620,6 @@ def route_health(request):
 @permission_classes([IsAuthenticated])
 def update_trip_capacity(request, trip_id, *args, **kwargs):
     """Change a trip's seat capacity without recreating the trip."""
-    from django.db.models import Sum
 
     trip = (
         Trip.objects.select_related('route__company')

@@ -462,10 +462,6 @@
 }
 
 /* Vehicle marker */
-.passenger-vehicle-marker {
-  background: transparent !important;
-  border: 0 !important;
-}
 
 .passenger-vehicle-marker__outer {
   position: relative;
@@ -495,45 +491,6 @@
   box-shadow:
     0 7px 18px rgba(15,23,42,.3),
     0 0 0 4px rgba(17,24,39,.12);
-}
-
-.vehicle-window {
-  position: absolute;
-  background: #dbeafe;
-  border-radius: 5px;
-}
-
-.vehicle-window--front {
-  left: 6px;
-  right: 6px;
-  top: 5px;
-  height: 12px;
-}
-
-.vehicle-window--back {
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
-  height: 9px;
-  opacity: .7;
-}
-
-.vehicle-light {
-  position: absolute;
-  top: 1px;
-  width: 5px;
-  height: 3px;
-  border-radius: 3px;
-  background: #fffbeb;
-  box-shadow: 0 0 6px 2px rgba(255,251,235,.9);
-}
-
-.vehicle-light--left {
-  left: 5px;
-}
-
-.vehicle-light--right {
-  right: 5px;
 }
 
 /* Passenger location pin */
@@ -874,16 +831,6 @@
   border-radius: 50%;
 }
 
-.passenger-live-map__progress-line .is-bus {
-  background: var(--accent);
-  box-shadow: none;
-}
-
-.passenger-live-map__progress-line .is-pickup {
-  background: var(--surface);
-  box-shadow: 0 0 0 4px #e2e8f0;
-}
-
 .passenger-live-map__progress-line > div {
   height: 5px;
   flex: 1;
@@ -992,10 +939,6 @@
   .passenger-live-map__arrival h1 {
     font-size: 25px;
   }
-}
-
-.connect-labels-hidden .connect-stage-label {
-  visibility: hidden;
 }
 
 .passenger-vehicle-marker.is-parked .passenger-vehicle-marker__glow {

@@ -129,10 +129,6 @@ export default function CompanyManagerOverview() {
                 <div>
                   <p className="company-eyebrow">Company overview</p>
                   <h2>{company?.name || user?.company_name || 'Your company'}</h2>
-                  <p>
-                    Manage your company's routes, departures, drivers,
-                    operators, bookings and revenue from one workspace.
-                  </p>
                 </div>
 
                 <div className="company-live-pill">

@@ -32,7 +32,7 @@ const nav = [
 ];
 
 const PAGE_DESCRIPTIONS = {
-  Overview: "Your next departure and today's numbers at a glance.",
+  Overview: "Your next departure and today's numbers.",
   "My timetable": "Trips assigned to you for the next seven days, in Nairobi time.",
   Passengers: "Everyone booked on your trips and where they board.",
   "Live location": "Share your position so passengers can see the bus coming.",

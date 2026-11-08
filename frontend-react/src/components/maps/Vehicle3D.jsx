@@ -11,7 +11,6 @@ import {
 import { useThree } from '@react-three/fiber';
 import { createPortal } from 'react-dom';
 
-const log = (...args) => console.info('[Vehicle3D]', ...args);
 const DEBUG =
   typeof window !== 'undefined' && window.location.search.includes('debug3d=1');
 
@@ -51,7 +50,6 @@ function VehicleModel({ heading, stale, onReady }) {
   const handleAfterRender = useCallback(() => {
     if (ready.current) return;
     ready.current = true;
-    log('first frame rendered');
     onReady?.();
   }, [onReady]);
 
@@ -149,27 +147,22 @@ export default function Vehicle3D({
   const vehicleHeading = Number.isFinite(direction) ? direction : 0;
 
   const mapContainer = map?.getContainer?.() ?? null;
-  const tiltViewport = mapContainer?.closest('.tilt-stage')?.parentElement ?? null;
-  const overlay = tiltViewport || mapContainer;
-  const tilted = !!tiltViewport;
+  const overlay = mapContainer;
 
   const measure = useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor || !overlay || !map) return;
-    if (!tilted) {
-      const position = snappedPosition;
-      const point =
-        position?.length === 2 &&
-        Number.isFinite(position[0]) &&
-        Number.isFinite(position[1])
-          ? map.latLngToContainerPoint(position)
-          : Number.isFinite(lat) && Number.isFinite(lng)
-            ? map.latLngToContainerPoint([lat, lng])
-            : null;
-      if (!point) return;
-      anchor.style.left = `${point.x}px`;
-      anchor.style.top = `${point.y}px`;
-    }
+    const point =
+      snappedPosition?.length === 2 &&
+      Number.isFinite(snappedPosition[0]) &&
+      Number.isFinite(snappedPosition[1])
+        ? map.latLngToContainerPoint(snappedPosition)
+        : Number.isFinite(lat) && Number.isFinite(lng)
+          ? map.latLngToContainerPoint([lat, lng])
+          : null;
+    if (!point) return;
+    anchor.style.left = `${point.x}px`;
+    anchor.style.top = `${point.y}px`;
     const anchorBounds = anchor.getBoundingClientRect();
     const overlayBounds = overlay.getBoundingClientRect();
     const x = anchorBounds.left - overlayBounds.left;
@@ -180,11 +173,10 @@ export default function Vehicle3D({
         ? previous
         : { x, y },
     );
-  }, [map, overlay, tilted, lat, lng, snappedPosition]);
+  }, [map, overlay, lat, lng, snappedPosition]);
 
   useEffect(() => {
     if (!map || !overlay) return undefined;
-    log('mounted', { tilted, hasAnchor: !!anchorRef.current });
     measure();
     const animationFrame = requestAnimationFrame(measure);
     const timeout = setTimeout(measure, 400);
@@ -200,7 +192,7 @@ export default function Vehicle3D({
       map.off('move zoom resize viewreset', measure);
       window.removeEventListener('resize', measure);
     };
-  }, [map, overlay, measure, tilted]);
+  }, [map, overlay, measure]);
 
   if (!map || !mapContainer || !overlay) return null;
 
@@ -209,7 +201,8 @@ export default function Vehicle3D({
     width: 0,
     height: 0,
     pointerEvents: 'none',
-    ...(tilted ? { left: '50%', top: '50%' } : { left: 0, top: 0 }),
+    left: 0,
+    top: 0,
   };
 
   return (
@@ -229,7 +222,6 @@ export default function Vehicle3D({
               }}
               dpr={[1, 2]}
               gl={{ alpha: true, antialias: true }}
-              onCreated={() => log('canvas created at', position)}
               style={{
                 position: 'absolute',
                 left: position.x - 130,
@@ -242,7 +234,7 @@ export default function Vehicle3D({
               }}
             >
               <VehicleScene
-                heading={tilted ? 0 : vehicleHeading}
+                heading={vehicleHeading}
                 stale={stale}
                 onReady={onReady}
               />

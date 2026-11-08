@@ -144,11 +144,6 @@
   color: var(--text-3);
 }
 
-.driver-nav-arrow {
-  margin-left: auto;
-  opacity: .35;
-}
-
 /* =========================================================
    SIDEBAR BOTTOM
    ========================================================= */
@@ -415,21 +410,6 @@
 /* =========================================================
    RESPONSIVE
    ========================================================= */
-
-@media (max-width: 900px) {
-  .driver-sidebar {
-    width: 230px;
-    min-width: 230px;
-  }
-
-  .driver-topbar {
-    padding: 0 20px;
-  }
-
-  .driver-content {
-    padding: 24px 20px;
-  }
-}
 
 /* Tablets get the drawer too: index.css slides the sidebar away at 820px,
    so a fixed sidebar here left an empty column with no menu button. */

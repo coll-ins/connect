@@ -1,6 +1,3 @@
-from rest_framework.permissions import BasePermission
-
-
 COMPANY_ROLES = {
     'company_manager',
     'company_auditor',
@@ -51,72 +48,3 @@ def can_access_company(user, company_id):
         return False
 
     return user.company_id == company_id
-
-
-class IsCompanyManager(BasePermission):
-    """
-    Allows only a company manager or Django superuser.
-    """
-
-    def has_permission(self, request, view):
-        return can_manage_company(request.user)
-
-
-class IsCompanyAuditor(BasePermission):
-    """
-    Allows only a company auditor or Django superuser.
-    """
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        if not user or not user.is_authenticated:
-            return False
-
-        if user.is_superuser:
-            return True
-
-        return (
-            user.role == 'company_auditor'
-            and user.company_id is not None
-        )
-
-
-class IsCompanyOperator(BasePermission):
-    """
-    Allows only a company operator or Django superuser.
-    """
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        if not user or not user.is_authenticated:
-            return False
-
-        if user.is_superuser:
-            return True
-
-        return (
-            user.role == 'company_operator'
-            and user.company_id is not None
-        )
-
-
-class IsCompanyStaff(BasePermission):
-    """
-    Allows any company Manager, Auditor, or Operator.
-    """
-
-    def has_permission(self, request, view):
-        user = request.user
-
-        if not user or not user.is_authenticated:
-            return False
-
-        if user.is_superuser:
-            return True
-
-        return (
-            user.role in COMPANY_ROLES
-            and user.company_id is not None
-        )

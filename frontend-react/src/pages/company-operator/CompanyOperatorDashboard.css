@@ -474,8 +474,7 @@
   margin-bottom: 0;
 }
 
-.operator-panel-heading,
-.operator-section-heading {
+.operator-panel-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -483,8 +482,7 @@
   margin-bottom: 18px;
 }
 
-.operator-panel-heading h2,
-.operator-section-heading h2 {
+.operator-panel-heading h2 {
   margin: 6px 0 0;
   font-size: 17px;
   color: var(--text);
@@ -1234,15 +1232,6 @@
   cursor: pointer;
 }
 
-.operator-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 15px;
-  padding: 20px 3px 4px;
-  color: #45546a;
-  font-size: 11px;
-}
-
 .operator-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1513,10 +1502,6 @@
 
   .operator-operation-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .operator-footer {
-    flex-direction: column;
   }
 }
 

@@ -1,12 +1,3 @@
-export const ALL_ROLES = [
-  'platform_admin',
-  'company_manager',
-  'company_auditor',
-  'company_operator',
-  'driver',
-  'passenger',
-];
-
 export function dashboardPath(user) {
   if (!user) return '/login';
 
