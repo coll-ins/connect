@@ -3548,6 +3548,12 @@ def booking_live_location(request, booking_id):
          and (
              booking.status in ('pending', 'confirmed')
              or _passenger_can_track(booking)
+         )
+         # Unpaid cash holds last the whole trip and cost nothing, so they
+         # see the bus but not the driver's phone number.
+         and not (
+             is_passenger
+             and cash_due_on_board(booking, getattr(booking, 'payment', None))
          ))
         or is_company_staff
         or is_platform_admin

@@ -67,11 +67,27 @@ class Command(BaseCommand):
                 if trip.departure_at > now - GRACE_PERIOD:
                     unboarded = unboarded.none()
 
+                # Only the first stage has had its chance to board by now.
+                # Passengers further along are settled when the trip ends
+                # (driver end-trip or close_stale_trips), not at departure.
+                first_stage = (
+                    trip.route.pickup_stages.filter(is_active=True)
+                    .order_by('order').values_list('order', flat=True).first()
+                )
+
                 active_incident_exists = trip.incidents.filter(
                     status__in=["reported", "investigating"],
                 ).exists()
 
                 for booking in unboarded:
+                    stage = booking.pickup_stage
+                    if (
+                        first_stage is not None
+                        and stage is not None
+                        and stage.order > first_stage
+                    ):
+                        continue
+
                     # An active trip incident means the passenger was
                     # prevented from boarding by a company/trip event.
                     # Do not classify the passenger as a no-show or
