@@ -105,6 +105,42 @@ export function bodyHeading(geometry, cumulative, distance) {
   return bearing(rear.position, front.position);
 }
 
+// Distance along a glide at progress p (0..1). A cubic that starts at the
+// speed the bus already has and ends at the average speed of the glide, so the
+// bus pulls away and slows like a vehicle instead of jumping between speeds.
+// m0 <= 2.8 x the gap keeps it from ever rolling backwards.
+export function glideAt(seg, p) {
+  const p2 = p * p;
+  const p3 = p2 * p;
+  return (
+    (2 * p3 - 3 * p2 + 1) * seg.from +
+    (p3 - 2 * p2 + p) * seg.m0 +
+    (-2 * p3 + 3 * p2) * seg.to +
+    (p3 - p2) * seg.m1
+  );
+}
+
+// Speed along a glide in km per ms; 0 once it has arrived.
+function glideSpeed(seg, time) {
+  if (!seg || seg.dur <= 0) return 0;
+  const p = (time - seg.start) / seg.dur;
+  if (p < 0 || p >= 1) return 0;
+  const p2 = p * p;
+  return (
+    ((6 * p2 - 6 * p) * seg.from +
+      (3 * p2 - 4 * p + 1) * seg.m0 +
+      (-6 * p2 + 6 * p) * seg.to +
+      (3 * p2 - 2 * p) * seg.m1) /
+    seg.dur
+  );
+}
+
+export function planGlide(previous, shown, goal, now, dur) {
+  const gap = goal - shown;
+  const carried = Math.max(0, glideSpeed(previous, now) * dur);
+  return { from: shown, to: goal, start: now, dur, m0: Math.min(carried, gap * 2.8), m1: gap };
+}
+
 export function useRoadDriverPosition(target, geometry) {
   const cumulative = useMemo(() => buildCumulative(geometry), [geometry]);
 
@@ -165,7 +201,7 @@ export function useRoadDriverPosition(target, geometry) {
     const jumpTo = () => {
       const pt = pointAtDistance(g, c, d);
       pt.heading = bodyHeading(g, c, d);
-      segRef.current = { from: d, to: d, start: now, dur: 1 };
+      segRef.current = { from: d, to: d, start: now, dur: 1, m0: 0, m1: 0 };
       shownRef.current = d;
       lastGoalAtRef.current = now;
       backCountRef.current = 0;
@@ -199,7 +235,7 @@ export function useRoadDriverPosition(target, geometry) {
       // 10 s poll never leaves the bus standing still).
       const dur = Math.min(Math.max(now - lastGoalAtRef.current, 1000), 15000);
       lastGoalAtRef.current = now;
-      segRef.current = { from: shown, to: d, start: now, dur };
+      segRef.current = planGlide(segRef.current, shown, d, now, dur);
       return;
     }
 
@@ -221,7 +257,7 @@ export function useRoadDriverPosition(target, geometry) {
 
       if (seg && g && c && shownRef.current !== seg.to) {
         const p = Math.min(1, Math.max(0, (time - seg.start) / seg.dur));
-        const next = p >= 1 ? seg.to : seg.from + (seg.to - seg.from) * p;
+        const next = p >= 1 ? seg.to : glideAt(seg, p);
 
         shownRef.current = next;
         const pt = pointAtDistance(g, c, next);
