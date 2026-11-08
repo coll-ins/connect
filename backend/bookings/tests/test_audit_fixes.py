@@ -108,3 +108,16 @@ class AuditFixTests(APITestCase):
         self.assertTrue(_currency_ok(None))
         self.assertFalse(_currency_ok('USD'))
         self.assertFalse(_currency_ok('NGN'))
+
+
+class PassengerCannotClaimCompanyFaultTests(AuditFixTests):
+    """A passenger cannot cancel their own booking as company fault (100%)."""
+
+    def test_passenger_sending_company_fault_is_refused(self):
+        from bookings.models import Payment
+        Payment.objects.create(booking=self.booking, amount=Decimal('100'), method='cash',
+                               status='confirmed')
+        self.client.force_authenticate(self.pax)
+        r = self.client.post(self._url() + 'cancel/', {'fault_party': 'company'}, format='json')
+        self.assertEqual(r.status_code, 403, r.data)
+        self.assertIsNone(Payment.objects.get(booking=self.booking).refund_amount)
