@@ -164,3 +164,15 @@ test('login ignores a return path outside the user role area', async ({ page }) 
 
   await expect(page).toHaveURL(/\/passenger$/);
 });
+
+test('opening the app while signed in on this device goes straight to the account', async ({ page }) => {
+  await stubApi(page, { profileRole: 'passenger' });
+  await page.addInitScript((user) => {
+    window.localStorage.setItem('user_session', JSON.stringify(user));
+  }, baseUser('passenger'));
+
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/passenger$/);
+  await page.goto('/login');
+  await expect(page).toHaveURL(/\/passenger$/);
+});
