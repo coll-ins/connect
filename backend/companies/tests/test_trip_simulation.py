@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -6,6 +7,9 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from companies.geo import locate_on_line
+from companies.routing import RoutingError
+from companies.simulation import DIVERT_LEAD
 from companies.models import Company, PickupStage, Route, Trip, TripSimulation
 from drivers.models import Driver
 
@@ -99,18 +103,44 @@ class TripSimulationApiTests(TestCase):
         self.trip.refresh_from_db()
         self.assertEqual(self.trip.status, 'boarding')
 
-    def test_divert_sends_the_bus_off_the_route_and_back(self):
+    def test_divert_puts_the_bus_on_a_real_road_and_back(self):
         sim_id = self.start().json()['simulation']['id']
         before = TripSimulation.objects.get(pk=sim_id).path
 
-        resp = self.client.post(f'/api/system/trip-simulations/{sim_id}/divert/')
+        def side_road(points, timeout=20):
+            # The road service's answer: straight to the via point and on.
+            return {'type': 'LineString',
+                    'coordinates': [[lng, lat] for lat, lng in points]}, 1.0
+
+        with patch('companies.routing.road_alternatives', side_effect=RoutingError('down')), \
+                patch('companies.routing.road_line', side_effect=side_road) as road:
+            resp = self.client.post(f'/api/system/trip-simulations/{sim_id}/divert/')
 
         self.assertEqual(resp.status_code, 200, resp.content)
         after = TripSimulation.objects.get(pk=sim_id).path
-        self.assertEqual(len(after), len(before))
-        self.assertEqual(after[0], before[0])
+        self.assertEqual(after[:DIVERT_LEAD + 1], before[:DIVERT_LEAD + 1])
         self.assertEqual(after[-1], before[-1])
-        self.assertNotEqual(after, before)
+        # Every detour point lies on the line the road service returned.
+        a, via, b = road.call_args_list[0].args[0]
+        road_geo = {'type': 'LineString', 'coordinates': [[p[1], p[0]] for p in (a, via, b)]}
+        detour = [p for p in after if p not in before]
+        self.assertTrue(detour)
+        for lat, lng in detour:
+            self.assertLess(locate_on_line(road_geo, lat, lng)[0], 1)
+        planned = {'type': 'LineString', 'coordinates': [[p[1], p[0]] for p in before]}
+        self.assertGreater(max(locate_on_line(planned, *p)[0] for p in detour), 120)
+
+    def test_divert_refuses_without_a_different_road(self):
+        sim_id = self.start().json()['simulation']['id']
+        before = TripSimulation.objects.get(pk=sim_id).path
+        same_road = ({'type': 'LineString', 'coordinates': LINE['coordinates']}, 1.0)
+
+        with patch('companies.routing.road_alternatives', return_value=[same_road]), \
+                patch('companies.routing.road_line', side_effect=RoutingError('down')):
+            resp = self.client.post(f'/api/system/trip-simulations/{sim_id}/divert/')
+
+        self.assertEqual(resp.status_code, 409, resp.content)
+        self.assertEqual(TripSimulation.objects.get(pk=sim_id).path, before)
 
     def test_finish_ends_the_trip_and_stops_the_bus(self):
         sim_id = self.start().json()['simulation']['id']

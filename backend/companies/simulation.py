@@ -19,7 +19,10 @@ from drivers.views import record_driver_fix
 
 STEP_METERS = 75
 DIVERT_POINTS = 40
-DIVERT_OFFSET_M = 300
+DIVERT_OFFSET_M = 400
+DIVERT_LEAD = 2
+DIVERT_MIN_GAP_M = 120
+DIVERT_MAX_STRETCH = 2.5
 SESSION_TTL = timedelta(minutes=30)
 REAL_GPS_WINDOW = timedelta(seconds=60)
 SIMULATABLE = ('scheduled', 'boarding', 'departed')
@@ -200,31 +203,76 @@ def stop_trip_simulation(request, simulation_id):
     return Response({'simulation': _serialize(sim)}, status=status.HTTP_200_OK)
 
 
-def diverted_path(path, index):
-    """The path with the next stretch bowed out sideways, as if on another road.
-
-    Starts and ends on the route so the bus leaves it and comes back.
-    """
-    end = min(index + DIVERT_POINTS, len(path) - 1)
-    if end - index < 4:
-        return None
-    (from_lat, from_lng), (to_lat, to_lng) = path[index], path[end]
+def _side_via(path, start, end, side):
+    """A point DIVERT_OFFSET_M to one side of the middle of path[start..end]."""
+    (from_lat, from_lng), (to_lat, to_lng) = path[start], path[end]
     metres_per_lng = 111320 * math.cos(math.radians(from_lat))
     east = (to_lng - from_lng) * metres_per_lng
     north = (to_lat - from_lat) * 110574
     length = math.hypot(east, north)
     if length < 1:
         return None
-    side_east, side_north = -north / length, east / length
+    mid_lat, mid_lng = path[(start + end) // 2]
+    offset = side * DIVERT_OFFSET_M
+    return (
+        mid_lat + (east / length) * offset / 110574,
+        mid_lng + (-north / length) * offset / metres_per_lng,
+    )
 
-    bent = [list(point) for point in path]
-    for i in range(index + 1, end):
-        bow = math.sin(math.pi * (i - index) / (end - index)) * DIVERT_OFFSET_M
-        bent[i] = [
-            round(path[i][0] + side_north * bow / 110574, 6),
-            round(path[i][1] + side_east * bow / metres_per_lng, 6),
-        ]
-    return bent
+
+def diverted_path(path, index):
+    """The path with the next stretch replaced by a different real road.
+
+    The bus keeps to the planned road for DIVERT_LEAD points, turns onto
+    another road the road service knows, and rejoins the route further on,
+    so every simulated fix sits on a road. None when no such road exists.
+    """
+    from companies.geo import line_health, locate_on_line
+    from companies.routing import RoutingError, road_alternatives, road_line
+
+    start = index + DIVERT_LEAD
+    end = min(start + DIVERT_POINTS, len(path) - 1)
+    if end - start < 4:
+        return None
+    a, b = tuple(path[start]), tuple(path[end])
+    planned = {
+        'type': 'LineString',
+        'coordinates': [[lng, lat] for lat, lng in path],
+    }
+
+    max_km = DIVERT_MAX_STRETCH * (end - start) * STEP_METERS / 1000
+    candidates = []
+    try:
+        candidates += [line for line, _metres in road_alternatives([a, b])]
+    except RoutingError:
+        pass
+    for side in (1, -1):
+        via = _side_via(path, start, end, side)
+        if via is None:
+            continue
+        try:
+            candidates.append(road_line([a, via, b], timeout=10)[0])
+        except RoutingError:
+            pass
+
+    best, best_gap = None, DIVERT_MIN_GAP_M
+    for line in candidates:
+        if line_health(line, [])['spurs']:
+            continue  # doubles back on itself: not a road a bus would take
+        gap = max(
+            (locate_on_line(planned, lat, lng) or (0, 0))[0]
+            for lng, lat in line['coordinates']
+        )
+        if line_health(line, [])['length_km'] > max_km:
+            continue  # a long way round, not a shortcut or side road
+        if gap > best_gap:
+            best, best_gap = line, gap
+    if best is None:
+        return None
+
+    road = [(lat, lng) for lng, lat in best['coordinates']]
+    detour = [[round(lat, 6), round(lng, 6)] for lat, lng in resample_evenly(road, STEP_METERS)]
+    return [list(p) for p in path[:start]] + detour + [list(p) for p in path[end + 1:]]
 
 
 @api_view(['POST'])
@@ -234,20 +282,28 @@ def divert_trip_simulation(request, simulation_id):
     denied = _superuser_only(request)
     if denied:
         return denied
-    with transaction.atomic():
-        sim = (
-            TripSimulation.objects.select_for_update()
-            .filter(pk=simulation_id)
-            .first()
+    sim = TripSimulation.objects.filter(pk=simulation_id).first()
+    if sim is None:
+        return _error('Simulation not found.', status.HTTP_404_NOT_FOUND)
+    if sim.status != 'running':
+        return _error(f'Simulation is {sim.status}.', status.HTTP_409_CONFLICT)
+    # The road service is slow; ask it before locking so the bus keeps moving.
+    seen_index, seen_path = sim.position_index, sim.path
+    bent = diverted_path(sim.path, seen_index)
+    if bent is None:
+        return _error(
+            'No other road was found from here. Let the bus move on and try again.',
+            status.HTTP_409_CONFLICT,
         )
-        if sim is None:
-            return _error('Simulation not found.', status.HTTP_404_NOT_FOUND)
+    with transaction.atomic():
+        sim = TripSimulation.objects.select_for_update().get(pk=simulation_id)
         if sim.status != 'running':
             return _error(f'Simulation is {sim.status}.', status.HTTP_409_CONFLICT)
-        bent = diverted_path(sim.path, sim.position_index)
-        if bent is None:
+        if sim.path != seen_path:
+            return _error('The bus was already diverted.', status.HTTP_409_CONFLICT)
+        if sim.position_index >= seen_index + DIVERT_LEAD:
             return _error(
-                'The bus is too close to the end of the route to divert.',
+                'The bus passed the turn while the road was found. Try again.',
                 status.HTTP_409_CONFLICT,
             )
         sim.path = bent

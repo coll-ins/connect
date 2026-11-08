@@ -1,7 +1,7 @@
 import 'leaflet/dist/leaflet.css';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import BaseTileLayer, { LIVE_TRAFFIC } from '../../components/maps/BaseTileLayer';
+import BaseTileLayer, { LIVE_TRAFFIC, TRAFFIC_RADIUS_M } from '../../components/maps/BaseTileLayer';
 import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { API_HOST, apiRequest } from '../../api';
@@ -809,26 +809,6 @@ export default function PassengerLiveMap({
         ? gpsHeading
         : driverHeading;
 
-  useEffect(() => {
-    if (!Number.isFinite(matchedDriverHeading)) return;
-
-    const markerElement =
-      vehicleMarkerRef.current?.getElement?.();
-    const vehicle = markerElement?.querySelector(
-      '.passenger-vehicle-marker__bus',
-    );
-    if (!vehicle) return;
-
-    const previous = vehicleHeadingRef.current;
-    const diff =
-      ((matchedDriverHeading - previous + 540) % 360) - 180;
-    const next = previous + diff;
-
-    vehicleHeadingRef.current = next;
-    vehicle.style.transformOrigin = 'center center';
-    vehicle.style.transition = 'transform 0.35s ease-out';
-    vehicle.style.transform = `rotate(${next}deg)`;
-  }, [matchedDriverHeading, matchedDriverPosition]);
 
 
   // Road speed measured from CONNECT buses (backend drivers/traffic.py).
@@ -1057,10 +1037,57 @@ export default function PassengerLiveMap({
     goal: rerouteGoal,
     busPosition: driverTarget,
   });
-  const rerouteLine = useMemo(
-    () => (reroute ? lineAheadOfBus(matchedDriverPosition, reroute.line) : null),
-    [reroute, matchedDriverPosition],
+  // On a new road the bus is drawn on that road, not at the raw GPS point
+  // a few metres beside it.
+  const newRoadMatch = useRouteMatch(reroute?.line, driverTarget);
+  const busOnNewRoad = Boolean(reroute && newRoadMatch?.onRoute);
+  const shownBusPosition = busOnNewRoad
+    ? newRoadMatch.position
+    : matchedDriverPosition;
+  const shownBusHeading =
+    busOnNewRoad && newRoadMatch.heading != null
+      ? newRoadMatch.heading
+      : matchedDriverHeading;
+  const nearbyTraffic = useMemo(
+    () =>
+      shownBusPosition
+        ? busTraffic
+            .map((segment) => ({
+              ...segment,
+              positions: segment.positions.filter(
+                (point) => haversineKm(point, shownBusPosition) * 1000 <= TRAFFIC_RADIUS_M,
+              ),
+            }))
+            .filter((segment) => segment.positions.length > 1)
+        : [],
+    [busTraffic, shownBusPosition],
   );
+  const rerouteLine = useMemo(
+    () => (reroute ? lineAheadOfBus(shownBusPosition, reroute.line) : null),
+    [reroute, shownBusPosition],
+  );
+
+  useEffect(() => {
+    if (!Number.isFinite(shownBusHeading)) return;
+
+    const markerElement =
+      vehicleMarkerRef.current?.getElement?.();
+    const vehicle = markerElement?.querySelector(
+      '.passenger-vehicle-marker__bus',
+    );
+    if (!vehicle) return;
+
+    const previous = vehicleHeadingRef.current;
+    const diff =
+      ((shownBusHeading - previous + 540) % 360) - 180;
+    const next = previous + diff;
+
+    vehicleHeadingRef.current = next;
+    vehicle.style.transformOrigin = 'center center';
+    vehicle.style.transition = 'transform 0.35s ease-out';
+    vehicle.style.transform = `rotate(${next}deg)`;
+  }, [shownBusHeading, shownBusPosition]);
+
   const rerouteToPickupKm =
     rerouteLine && reroute.goal === 'pickup' ? lineLengthKm(rerouteLine) : null;
 
@@ -1345,7 +1372,7 @@ export default function PassengerLiveMap({
       }}
     >
       <div className="passenger-live-map__canvas">
-        <TiltedMapFrame heading={matchedDriverHeading}>
+        <TiltedMapFrame heading={shownBusHeading}>
           <MapContainer
             center={center}
             zoom={MAP_TILT_ENABLED ? MAP_TILT_ZOOM : 15}
@@ -1358,12 +1385,12 @@ export default function PassengerLiveMap({
             attributionControl
             className="passenger-live-map__leaflet"
           >
-          <BaseTileLayer traffic />
+          <BaseTileLayer traffic trafficAround={tripIsLive ? shownBusPosition : null} />
 
           <MapResize />
           <SmartFollow
             enabled={MAP_TILT_ENABLED}
-            position={matchedDriverPosition}
+            position={shownBusPosition}
             nextStageM={nextStage?.distanceM ?? null}
           />
 
@@ -1375,7 +1402,7 @@ export default function PassengerLiveMap({
 
           {approachCamera && (
             <ApproachCamera
-              bus={matchedDriverPosition}
+              bus={shownBusPosition}
               pickup={busPastPickup || boarded ? null : pickupPosition}
             />
           )}
@@ -1442,7 +1469,7 @@ export default function PassengerLiveMap({
             opacity={0.95}
           />
 
-          {busTraffic.map((segment, index) => (
+          {nearbyTraffic.map((segment, index) => (
             <Polyline
               key={`traffic-${index}-${segment.level}`}
               positions={segment.positions}
@@ -1538,10 +1565,10 @@ export default function PassengerLiveMap({
             </Marker>
           )}
 
-          {tripIsLive && matchedDriverPosition && (
+          {tripIsLive && shownBusPosition && (
             <Marker
               ref={vehicleMarkerRef}
-              position={matchedDriverPosition}
+              position={shownBusPosition}
               icon={vehicleIcon}
               opacity={bus3DReady ? 0 : 1}
             >
@@ -1553,10 +1580,10 @@ export default function PassengerLiveMap({
             </Marker>
           )}
 
-          {Vehicle3D && tripIsLive && matchedDriverPosition && (
+          {Vehicle3D && tripIsLive && shownBusPosition && (
             <Bus3D
-              position={matchedDriverPosition}
-              heading={matchedDriverHeading}
+              position={shownBusPosition}
+              heading={shownBusHeading}
               stale={busStale}
               zoom={1.35}
               onReady={markBus3DReady}
