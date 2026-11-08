@@ -177,7 +177,7 @@ def advance_trip_simulation(request, simulation_id):
         if sim.position_index >= last:
             sim.status = 'completed'
         lat, lng = sim.path[sim.position_index]
-        record_driver_fix(driver, lat, lng)
+        record_driver_fix(driver, lat, lng, simulated=True)
         # Saved after the fix so our own GPS write never counts as "newer".
         sim.save(update_fields=['position_index', 'status', 'updated_at'])
     return Response({'simulation': _serialize(sim)}, status=status.HTTP_200_OK)
