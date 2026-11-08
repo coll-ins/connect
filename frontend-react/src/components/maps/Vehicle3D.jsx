@@ -38,7 +38,10 @@ class Boundary extends Component {
 }
 
 // Camera sits due south of the bus so map north stays screen-up and headings line up.
-const CAMERA_POSITION = [0, -90, 78];
+// 62 degrees above the ground matches a top-down map; aiming at mid-body height
+// puts the bus on the road line instead of hovering above it.
+const CAMERA_POSITION = [0, -55, 105];
+const CAMERA_TARGET = [0, 0, 8];
 
 function AimVehicleCamera() {
   const camera = useThree((state) => state.camera);
@@ -46,7 +49,7 @@ function AimVehicleCamera() {
   useLayoutEffect(() => {
     camera.position.set(...CAMERA_POSITION);
     camera.up.set(0, 0, 1);
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(...CAMERA_TARGET);
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
   }, [camera]);

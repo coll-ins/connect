@@ -3403,6 +3403,19 @@ def _passenger_can_track(booking):
     )
 
 
+
+def _route_traffic_payload(route, own_driver_id):
+    """Traffic is a nice-to-have: never let it break live tracking."""
+    if route is None:
+        return []
+    try:
+        from drivers.traffic import route_traffic
+        return route_traffic(route, own_driver_id)
+    except Exception:
+        logging.getLogger(__name__).exception('route traffic failed for route %s', route.id)
+        return []
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def booking_live_location(request, booking_id):
@@ -3586,6 +3599,7 @@ def booking_live_location(request, booking_id):
             'contacts_visible': can_see_contacts,
             'route': route_payload,
             'stages': stage_payload,
+            'traffic': _route_traffic_payload(route_obj, booking.driver_id),
             'pickup': pickup_payload,
             'departure_at': booking.trip.departure_at if booking.trip else None,
             'trip_status': booking.trip.status if booking.trip else None,

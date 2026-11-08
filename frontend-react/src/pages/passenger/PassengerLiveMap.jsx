@@ -831,6 +831,24 @@ export default function PassengerLiveMap({
   }, [matchedDriverHeading, matchedDriverPosition]);
 
 
+  // Road speed measured from CONNECT buses (backend drivers/traffic.py).
+  const liveTraffic = live?.traffic;
+  const busTraffic = useMemo(
+    () =>
+      (Array.isArray(liveTraffic) ? liveTraffic : [])
+        .filter((segment) => segment?.level === 'heavy' || segment?.level === 'slow')
+        .map((segment) => ({
+          level: segment.level,
+          positions: (segment.coordinates || [])
+            .map((point) => normalizePosition({ longitude: point?.[0], latitude: point?.[1] }))
+            .filter(Boolean),
+        }))
+        .filter((segment) => segment.positions.length > 1),
+    [liveTraffic],
+  );
+  const trafficKnown = Array.isArray(liveTraffic) && liveTraffic.length > 0;
+  const heavyTraffic = busTraffic.some((segment) => segment.level === 'heavy');
+
   const liveStages = live?.stages;
   const rawStages = useMemo(
     () => (Array.isArray(liveStages) ? liveStages : []),
@@ -1424,6 +1442,21 @@ export default function PassengerLiveMap({
             opacity={0.95}
           />
 
+          {busTraffic.map((segment, index) => (
+            <Polyline
+              key={`traffic-${index}-${segment.level}`}
+              positions={segment.positions}
+              pathOptions={{
+                color: segment.level === 'heavy' ? '#d93025' : '#f29900',
+                weight: 7,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round',
+                interactive: false,
+              }}
+            />
+          ))}
+
           {busOffRoute &&
             !reroute &&
             matchedDriverPosition &&
@@ -1678,6 +1711,7 @@ export default function PassengerLiveMap({
           >
             {busStatus}
             {etaMinutes != null ? ` · ${formatEta(etaMinutes)} to pickup` : ''}
+            {heavyTraffic ? ' · heavy traffic on the route' : ''}
           </p>
         )}
 
@@ -1874,7 +1908,9 @@ export default function PassengerLiveMap({
         <div className="passenger-live-map__traffic-note" role="status">
           <strong>Traffic information</strong>
           <span>
-            {LIVE_TRAFFIC
+            {trafficKnown
+              ? `${heavyTraffic ? 'Heavy traffic on this route. ' : busTraffic.length ? 'Some slow traffic on this route. ' : 'Traffic is moving on this route. '}Red is heavy, orange is slow, from CONNECT buses on this road in the last 20 minutes.`
+              : LIVE_TRAFFIC
               ? 'Live traffic is on the map: green is moving, orange is slow, red is jammed.'
               : driverSpeedKmh != null && !busUnreliable && tripLifecycleLive
               ? `Recent bus GPS speed: about ${driverSpeedKmh} km/h. This is a bus-speed estimate, not live city traffic.`
