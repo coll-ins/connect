@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import ConnectMap from '../../components/maps/ConnectMap';
 import './DriverLiveLocation.css';
+import { webglOk } from '../../components/maps/webgl';
 
 const formatDate = (value) =>
   value
@@ -20,14 +21,6 @@ const formatDate = (value) =>
       })
     : '—';
 
-const webglOk = (() => {
-  try {
-    const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
-  } catch {
-    return false;
-  }
-})();
 
 // CONNECT-FIX: stable fallbacks so props do not change every render
 const EMPTY_GEOMETRY = { type: 'LineString', coordinates: [] };
