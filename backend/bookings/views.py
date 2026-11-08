@@ -312,7 +312,7 @@ def initialize_paystack_payment(request, booking_id):
     if response.status_code != 200:
         # Paystack answered and refused, so no checkout exists: release the
         # attempt so the passenger can retry. A 5xx stays "in progress".
-        if response.status_code < 500:
+        if response.status_code < 500 and response.status_code != 429:
             Payment.objects.filter(pk=payment.pk, status='pending').update(
                 status='failed')
         return Response(
@@ -1045,8 +1045,21 @@ def paystack_webhook(request):
 
     except Payment.DoesNotExist:
         # Unknown references must not cause endless Paystack retries, but a
-        # signed successful charge we cannot match is real money.
-        _alert_payment_problem(reference, 'charge.success for an unknown reference')
+        # signed successful charge we cannot match is real money. A booking
+        # reference lands here when the passenger paid an old checkout after
+        # starting a new attempt or switching to cash: give the money back.
+        outcome = 'needs a manual refund'
+        if str(reference).startswith('CONNECT-'):
+            from connect.paystack_extra import refund_charge, to_kes
+            try:
+                refund_status, _ = refund_charge(reference, to_kes(data.get('amount')))
+                outcome = f'refund requested ({refund_status})'
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    'Refund for unmatched charge %s failed', reference)
+        _alert_payment_problem(
+            reference, f'charge.success for an unknown reference: {outcome}')
         return HttpResponse(status=200)
 
     if refund_after_commit:
