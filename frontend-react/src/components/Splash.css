@@ -19,7 +19,7 @@
   max-width: none;
   object-fit: cover;
   object-position: center center;
-  animation: splash-in .65s ease-out both, splash-zoom 2.8s ease-out both;
+  animation: splash-in .5s ease-out both, splash-zoom 2.3s ease-out both;
   will-change: transform, opacity;
 }
 .splash-bar {
@@ -29,7 +29,7 @@
   width: 0;
   height: 3px;
   background: var(--accent);
-  animation: splash-bar 2.6s linear forwards;
+  animation: splash-bar 1.8s linear forwards;
 }
 .splash-skip {
   position: absolute;
@@ -50,9 +50,10 @@
 @keyframes splash-zoom { from { transform: scale(1.025); } to { transform: scale(1); } }
 @keyframes splash-bar { to { width: 100%; } }
 
-/* Portrait artwork is a separate crop composed for phone proportions. */
-@media (max-width: 640px) and (orientation: portrait) {
-  .splash img { object-position: center center; }
+/* Portrait screens get splash-mobile.jpg (1080x2340, composed for tall
+   phones); keep its wordmark centred when cover trims the edges. */
+@media (max-aspect-ratio: 4/5) {
+  .splash img { object-position: center 42%; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   .splash img { object-position: center 52%; }

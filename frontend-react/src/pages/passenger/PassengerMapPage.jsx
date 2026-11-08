@@ -304,7 +304,13 @@ export default function PassengerMapPage() {
             booking.pickup_stage?.id ??
             null,
         }}
-        onBack={() => navigate('/passenger', { replace: true })}
+        onBack={() =>
+          // Opened from the overview (directly or after paying): step back to
+          // it, so one press leaves the map and history has no duplicate.
+          location.state?.backToOverview
+            ? navigate(-1)
+            : navigate('/passenger', { replace: true })
+        }
       />
     </>
   );
