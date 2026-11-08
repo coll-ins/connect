@@ -39,10 +39,10 @@ export default function Splash() {
   if (!visible) return null;
 
   return (
-    <div className={`splash${leaving ? " leaving" : ""}`} aria-hidden="true">
+    <div className={`splash${leaving ? " leaving" : ""}`} role="presentation">
       <picture className="splash-picture">
         <source media="(max-aspect-ratio: 4/5)" srcSet="/splash-mobile.jpg" />
-        <img src="/splash.jpg" alt="" />
+        <img src="/splash.jpg" alt="CONNECT" />
       </picture>
       <div className="splash-bar" />
       <button type="button" className="splash-skip" onClick={() => setLeaving(true)}>

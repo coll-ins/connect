@@ -5,7 +5,10 @@ const AuthContext = createContext(null);
 
 function getStoredUser() {
   try {
-    return JSON.parse(localStorage.getItem('user_session') || 'null');
+    const stored = JSON.parse(localStorage.getItem('user_session') || 'null');
+    // A saved session must name a role this build routes, or the login page
+    // and the role guards would send it back and forth forever.
+    return stored && KNOWN_ROLES.includes(stored.role) ? stored : null;
   } catch {
     return null;
   }

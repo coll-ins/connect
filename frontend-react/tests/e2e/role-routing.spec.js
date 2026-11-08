@@ -176,3 +176,14 @@ test('opening the app while signed in on this device goes straight to the accoun
   await page.goto('/login');
   await expect(page).toHaveURL(/\/passenger$/);
 });
+
+test('a saved session with an unknown role shows the login form, not a redirect loop', async ({ page }) => {
+  await page.route('**/api/users/profile/', (route) => route.abort());
+  await page.addInitScript(() => {
+    window.localStorage.setItem('user_session', JSON.stringify({ id: 1, role: 'conductor' }));
+  });
+
+  await page.goto('/login');
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+});
