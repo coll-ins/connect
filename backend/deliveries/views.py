@@ -204,7 +204,7 @@ def driver_parcels(request):
     driver = _driver_for(request.user)
     if driver is None:
         return Response({'error': 'Only drivers can do this.'}, status=403)
-    parcels = _qs().filter(trip__driver=driver, status__in=['paid', 'picked_up'])[:200]
+    parcels = _qs().filter(trip__driver=driver, status__in=['paid', 'picked_up', 'failed_delivery'])[:200]
     return Response([payload(p, request.user) for p in parcels])
 
 
