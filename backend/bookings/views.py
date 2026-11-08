@@ -695,6 +695,12 @@ def _mark_payment_confirmed(payment, paystack_amount, currency):
     if int(paystack_amount) != expected_amount or not _currency_ok(currency):
         payment.status = 'failed'
         payment.save(update_fields=['status'])
+        _queue_charge_refund(
+            payment.provider_reference,
+            {'amount': paystack_amount, 'currency': currency},
+            f'amount/currency mismatch: paid {paystack_amount} {currency}, '
+            f'expected {expected_amount}',
+        )
         return False
 
     booking = payment.booking
@@ -877,13 +883,14 @@ def verify_paystack_payment(request, booking_id):
 # PAYSTACK WEBHOOK
 # ============================================================
 
-def _queue_unmatched_booking_refund(reference, data):
+def _queue_charge_refund(reference, data, reason):
     """
-    A booking charge whose reference was replaced: the passenger paid an old
-    checkout after retrying or switching to cash. Record it durably as a
-    refund for process_unapplied (one-winner claim, reconcile, no resend)
-    instead of calling Paystack here, so a slow refund can never make Paystack
-    resend the webhook. Replays hit the unique reference and do nothing.
+    Durably queue a full refund of a successful charge CONNECT will not apply
+    (replaced reference, wrong amount or currency). process_unapplied sends it
+    (one-winner claim, reconcile, never resends). A charge whose amount or
+    currency is unusable goes to a human instead. Replays hit the unique
+    reference and do nothing. Raises if the row cannot be written, so the
+    caller can make Paystack resend.
     """
     from bookings.models import UnappliedPayment
     from connect.paystack_extra import GatewayError, to_kes
@@ -893,31 +900,22 @@ def _queue_unmatched_booking_refund(reference, data):
     except GatewayError:
         amount = None
     refundable = amount is not None and amount > 0 and _currency_ok(data.get('currency'))
-    try:
-        _, created = UnappliedPayment.objects.get_or_create(
-            reference=reference,
-            defaults={
-                'kind': 'booking',
-                'amount': amount,
-                'currency': str(data.get('currency') or '')[:10],
-                'reason': 'paid a replaced booking checkout',
-                'payload': data,
-                'status': 'refund_due' if refundable else 'review',
-            },
-        )
-    except Exception:
-        # Not recorded: tell the caller to answer non-200 so Paystack resends
-        # (the unique reference makes the resend safe).
-        logging.getLogger(__name__).exception('Could not record unmatched charge %s', reference)
-        _alert_payment_problem(reference, 'unmatched booking charge NOT recorded yet')
-        return False
+    _, created = UnappliedPayment.objects.get_or_create(
+        reference=reference,
+        defaults={
+            'kind': 'booking',
+            'amount': amount,
+            'currency': str(data.get('currency') or '')[:10],
+            'reason': reason[:255],
+            'payload': data,
+            'status': 'refund_due' if refundable else 'review',
+        },
+    )
     if created:
-        _alert_payment_problem(
-            reference,
-            'unmatched booking charge: automatic refund queued' if refundable
-            else 'unmatched booking charge with a bad amount/currency: refund manually',
-        )
-    return True
+        tail = ('automatic refund queued' if refundable
+                else 'amount/currency unusable: refund manually')
+        transaction.on_commit(
+            lambda: _alert_payment_problem(reference, f'{reason}: {tail}'))
 
 
 def _alert_payment_problem(reference, reason):
@@ -1003,9 +1001,7 @@ def paystack_webhook(request):
             if paystack_amount is None:
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
-                transaction.on_commit(
-                    lambda: _alert_payment_problem(reference, 'amount missing in webhook')
-                )
+                _queue_charge_refund(reference, data, 'amount missing in webhook')
                 return HttpResponse(status=200)
 
             expected_amount = int(
@@ -1017,9 +1013,7 @@ def paystack_webhook(request):
             except (TypeError, ValueError):
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
-                transaction.on_commit(
-                    lambda: _alert_payment_problem(reference, 'amount unreadable in webhook')
-                )
+                _queue_charge_refund(reference, data, 'amount unreadable in webhook')
                 return HttpResponse(status=200)
 
             # Never trust the gateway response blindly.
@@ -1030,12 +1024,10 @@ def paystack_webhook(request):
             ):
                 payment.status = 'failed'
                 payment.save(update_fields=['status'])
-                transaction.on_commit(
-                    lambda: _alert_payment_problem(
-                        reference,
-                        f'amount/currency mismatch: paid {paystack_amount} '
-                        f'{data.get("currency")}, expected {expected_amount}',
-                    )
+                _queue_charge_refund(
+                    reference, data,
+                    f'amount/currency mismatch: paid {paystack_amount} '
+                    f'{data.get("currency")}, expected {expected_amount}',
                 )
                 return HttpResponse(status=200)
 
@@ -1091,7 +1083,15 @@ def paystack_webhook(request):
         # Unknown references must not cause endless Paystack retries, but a
         # signed successful charge we cannot match is real money.
         if str(reference).startswith('CONNECT-'):
-            if not _queue_unmatched_booking_refund(reference, data):
+            try:
+                with transaction.atomic():
+                    _queue_charge_refund(reference, data, 'paid a replaced booking checkout')
+            except Exception:
+                # Not recorded: answer non-200 so Paystack resends (safe:
+                # the reference is unique).
+                logging.getLogger(__name__).exception(
+                    'Could not record unmatched charge %s', reference)
+                _alert_payment_problem(reference, 'unmatched booking charge NOT recorded yet')
                 return HttpResponse(status=500)
         else:
             _alert_payment_problem(reference, 'charge.success for an unknown reference')
@@ -1101,7 +1101,6 @@ def paystack_webhook(request):
         try:
             settle_booking_fault(booking, fault_party='company')
         except Exception:
-            import logging
             logging.getLogger(__name__).exception(
                 'Refund for late payment %s failed; needs follow-up', reference)
             try:
@@ -1162,6 +1161,18 @@ def paystack_refund_webhook(request):
 
     if not transaction_reference:
         return HttpResponse(status=400)
+
+    # A refund process_unapplied sent may still fail later: hand it to a
+    # human instead of leaving it marked refunded.
+    if new_refund_status == 'failed':
+        from bookings.models import UnappliedPayment
+        if UnappliedPayment.objects.filter(
+            reference=transaction_reference,
+            status__in=('refunding', 'refunded'),
+        ).update(status='review', refund_status='failed',
+                 reason='Paystack refund failed', updated_at=timezone.now()):
+            _alert_payment_problem(
+                transaction_reference, 'automatic refund FAILED: refund manually')
 
     try:
         with transaction.atomic():
@@ -1261,18 +1272,7 @@ def paystack_refund_webhook(request):
                         )
 
     except Payment.DoesNotExist:
-        # Unknown transaction reference should not cause retries. A refund
-        # process_unapplied sent may still fail later: hand it to a human
-        # instead of leaving it marked refunded.
-        if new_refund_status == 'failed':
-            from bookings.models import UnappliedPayment
-            if UnappliedPayment.objects.filter(
-                reference=transaction_reference,
-                status__in=('refunding', 'refunded'),
-            ).update(status='review', refund_status='failed',
-                     reason='Paystack refund failed', updated_at=timezone.now()):
-                _alert_payment_problem(
-                    transaction_reference, 'automatic refund FAILED: refund manually')
+        # Unknown transaction reference should not cause retries.
         return HttpResponse(status=200)
 
     return HttpResponse(status=200)

@@ -938,8 +938,9 @@ class DeadDigitalAttemptTests(TestCase):
     def test_paying_the_old_checkout_after_switching_is_refunded(self, refund, sms):
         from bookings.models import UnappliedPayment
         self._switch_to_cash()
-        self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
-        self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)  # Paystack replay
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)
+            self.assertEqual(self._webhook('CONNECT-OLD').status_code, 200)  # Paystack replay
         refund.assert_not_called()  # never inline: the webhook stays fast
         row = UnappliedPayment.objects.get(reference='CONNECT-OLD')
         self.assertEqual((row.kind, row.status, row.amount),
@@ -986,3 +987,51 @@ class DeadDigitalAttemptTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-GONE').status, 'review')
         sms.assert_called_once()
+
+
+class WrongAmountChargeTests(DeadDigitalAttemptTests):
+    """A real charge that does not match the booking is refunded, never kept."""
+
+    def _signed(self, payload):
+        body = json.dumps(payload).encode()
+        sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body, hashlib.sha512).hexdigest()
+        return self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                                content_type='application/json', HTTP_X_PAYSTACK_SIGNATURE=sig)
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_webhook_underpayment_is_queued_for_refund(self, sms):
+        from bookings.models import UnappliedPayment
+        with self.captureOnCommitCallbacks(execute=True):
+            self._signed({'event': 'charge.success', 'data': {
+                'reference': 'CONNECT-OLD', 'amount': 5000, 'currency': 'KES'}})
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'failed')
+        row = UnappliedPayment.objects.get(reference='CONNECT-OLD')
+        self.assertEqual((row.status, row.amount), ('refund_due', Decimal('50.00')))
+        sms.assert_called_once()
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_webhook_missing_amount_goes_to_a_human(self, sms):
+        from bookings.models import UnappliedPayment
+        self._signed({'event': 'charge.success', 'data': {'reference': 'CONNECT-OLD'}})
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    @patch('bookings.views.requests.get')
+    def test_verify_wrong_currency_is_queued_for_human_review(self, mock_get, sms):
+        from bookings.models import UnappliedPayment
+        self._verify_says(mock_get, 200, {'status': True, 'data': {
+            'status': 'success', 'amount': 20000, 'currency': 'USD'}})
+        self.client.post(reverse('bookings:verify-paystack-payment',
+                                 kwargs={'booking_id': self.booking.id}))
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'failed')
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
+
+    @patch('bookings.views.send_admin_alert_sms')
+    def test_failed_refund_on_a_tracked_reference_reopens_it(self, sms):
+        from bookings.models import UnappliedPayment
+        UnappliedPayment.objects.create(reference='CONNECT-OLD', kind='booking',
+                                        amount=Decimal('50.00'), status='refunded')
+        self._signed({'event': 'refund.failed', 'data': {'transaction_reference': 'CONNECT-OLD'}})
+        self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-OLD').status, 'review')
