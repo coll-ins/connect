@@ -7,6 +7,9 @@ import AppShell from '../../components/layout/AppShell';
 import { label, localInput, localToIso, money, when } from '../shared/serviceUtils';
 import '../shared/Services.css';
 
+const FREE_CANCEL_MS = 48 * 60 * 60 * 1000; // matches FREE_CANCEL_BEFORE in charters/services.py
+const canCancelPaid = (c) => new Date(c.depart_at).getTime() - Date.now() >= FREE_CANCEL_MS;
+
 const Badge = ({ status }) => (
   <span className={`svc-badge svc-st-${status}`}>{label(status)}</span>
 );
@@ -210,6 +213,9 @@ export function CharterDetail() {
   };
 
   const cancel = async () => {
+    if (c?.status === 'confirmed' && !window.confirm(
+      `Cancel this hire? ${money(c.quote_price)} will be refunded in full to the account you paid from.`,
+    )) return;
     setBusy(true); setError('');
     try { setC(await apiRequest(`/charters/${id}/cancel/`, { method: 'POST' })); }
     catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -268,7 +274,23 @@ export function CharterDetail() {
                   <div><span>Driver phone</span><strong>{c.driver.phone_number}</strong></div>
                   <div><span>Bus</span><strong>{c.driver.bus_number}</strong></div>
                 </dl>
-                {c.status === 'confirmed' && <p className="svc-muted" style={{ marginTop: 14 }}>Paid hires cannot be cancelled in the app yet. Contact support if you need a refund.</p>}
+                {c.status === 'confirmed' && (canCancelPaid(c) ? (
+                  <div className="svc-actions">
+                    <button className="btn btn-ghost" onClick={cancel} disabled={busy}>Cancel hire and get a full refund</button>
+                  </div>
+                ) : (
+                  <p className="svc-muted" style={{ marginTop: 14 }}>
+                    This hire departs within 48 hours, so it can no longer be cancelled online. Call {c.company} to discuss a refund.
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {c.status === 'cancelled' && c.paid_at && (
+              <div className="svc-card">
+                <h3>Hire cancelled</h3>
+                {c.decline_reason && <p className="svc-muted">{c.company}: {c.decline_reason}</p>}
+                <p className="svc-muted">A full refund of {money(c.quote_price)} is on its way to the account you paid from. Banks and M-PESA usually show it within 5 to 10 working days.</p>
               </div>
             )}
 

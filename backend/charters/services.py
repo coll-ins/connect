@@ -17,6 +17,9 @@ MAX_TRIP_LENGTH = timedelta(days=14)
 MAX_OPEN_REQUESTS = 5
 MAX_PASSENGERS = 200
 MAX_PRICE = Decimal('1000000.00')
+# A paid hire cancelled by the passenger at least this long before departure
+# is refunded in full; later cancellations are for the company to decide.
+FREE_CANCEL_BEFORE = timedelta(hours=48)
 
 
 class CharterError(Exception):
@@ -70,6 +73,14 @@ def _lock_driver_and_check(driver_id, charter):
     for other in others:
         if start < other.end_at() and end > other.depart_at:
             raise CharterError('That bus is already booked for those dates.', 409)
+    from companies.models import Trip
+    if Trip.objects.filter(
+        driver=driver, status__in=('scheduled', 'boarding', 'departed'),
+        departure_at__gte=start, departure_at__lt=end,
+    ).exists():
+        raise CharterError(
+            'That driver has scheduled trips during this hire. Choose another driver '
+            'or move the trips first.', 409)
     return driver
 
 
@@ -130,9 +141,52 @@ def cancel_charter(*, charter_id, user):
             charter.save(update_fields=['status', 'cancelled_at', 'updated_at'])
             return charter
         if charter.status == 'confirmed':
-            raise CharterError(
-                'This hire is already paid. Refunds are not automated yet; contact support.', 409)
+            if charter.depart_at - timezone.now() < FREE_CANCEL_BEFORE:
+                raise CharterError(
+                    'This hire departs in less than 48 hours, so it cannot be cancelled '
+                    f'online. Contact {charter.company.name} to discuss a refund.', 409)
+            _cancel_paid(charter, 'Cancelled by the customer 48h+ before departure; full refund.')
+            return charter
         raise CharterError('This request can no longer be cancelled.', 409)
+
+
+def company_cancel_charter(*, charter_id, manager, reason):
+    """The company cannot run a paid hire: cancel it and refund in full."""
+    reason = (reason or '').strip()
+    if not reason or len(reason) > 300:
+        raise CharterError('Give a reason (up to 300 characters).')
+    with transaction.atomic():
+        charter = CharterRequest.objects.select_for_update().get(id=charter_id)
+        if not can_manage_company(manager, charter.company_id):
+            raise CharterError('Only a manager of this company can cancel.', 403)
+        if charter.status != 'confirmed':
+            raise CharterError('Only paid hires can be cancelled here; decline open requests instead.', 409)
+        charter.decline_reason = reason
+        _cancel_paid(charter, f'Cancelled by the company: {reason}')
+        return charter
+
+
+def _cancel_paid(charter, reason):
+    """Cancel a locked, confirmed hire and queue a full refund for process_unapplied."""
+    from bookings.models import UnappliedPayment
+
+    if not charter.provider_reference or not charter.quote_price:
+        raise CharterError('This hire has no payment on record; contact support for a refund.', 409)
+    charter.status = 'cancelled'
+    charter.cancelled_at = timezone.now()
+    charter.save(update_fields=['status', 'cancelled_at', 'decline_reason', 'updated_at'])
+    row, created = UnappliedPayment.objects.select_for_update().get_or_create(
+        reference=charter.provider_reference,
+        defaults={
+            'kind': 'charter', 'amount': charter.quote_price, 'currency': 'KES',
+            'reason': reason[:255], 'payload': {}, 'status': 'refund_due',
+        },
+    )
+    # A row left by an earlier failed-then-applied charge must not swallow
+    # this refund; one already refunding/refunded is final.
+    if not created and row.status in ('retry', 'review', 'applied'):
+        row.status, row.amount, row.reason = 'refund_due', charter.quote_price, reason[:255]
+        row.save(update_fields=['status', 'amount', 'reason'])
 
 
 def mark_charter_paid(*, charter_id, amount, reference):
