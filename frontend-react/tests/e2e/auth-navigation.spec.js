@@ -183,6 +183,32 @@ test.describe('CONNECT public entry and access guards', () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test('a 403 shows the reason the backend gave', async ({ page, context }) => {
+    await page.goto('/login');
+
+    await context.addCookies([{
+      name: 'csrftoken',
+      value: 'playwright-test-csrf',
+      url: 'http://127.0.0.1:4173',
+    }]);
+
+    await page.route('**/api/users/login/', async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Authentication credentials were not provided.' }),
+      });
+    });
+
+    await page.getByLabel('Phone number').fill('0712345678');
+    await page.getByRole('textbox', { name: 'Password' }).fill('any-password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    await expect(
+      page.getByRole('alert').getByText('Authentication credentials were not provided.'),
+    ).toBeVisible();
+  });
+
   test('unavailable login action is explained in plain language', async ({ page, context }) => {
     await page.goto('/login');
 

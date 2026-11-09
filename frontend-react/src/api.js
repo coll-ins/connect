@@ -24,6 +24,8 @@ function getErrorMessage(status, data) {
     return 'Your session may have expired. Please sign in and try again.';
   }
   if (status === 403) {
+    if (typeof data?.error === 'string') return data.error;
+    if (typeof data?.detail === 'string') return data.detail;
     return 'You don’t have permission to do that. Please check your account and try again.';
   }
   if (status === 404) {
