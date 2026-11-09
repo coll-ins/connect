@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from bookings.seats import OTHER, VEHICLES
+
 from .models import Bus
 
 
@@ -8,6 +10,24 @@ class BusSerializer(serializers.ModelSerializer):
         source='company.name',
         read_only=True,
     )
+    vehicle_label = serializers.CharField(source='get_vehicle_type_display', read_only=True)
+    plan_verified = serializers.SerializerMethodField()
+    capacity = serializers.IntegerField(required=False)
+
+    def get_plan_verified(self, obj):
+        v = VEHICLES.get(obj.vehicle_type)
+        return bool(v and v.get('verified', True))
+
+    def validate(self, attrs):
+        vehicle_type = attrs.get('vehicle_type', getattr(self.instance, 'vehicle_type', OTHER))
+        if vehicle_type in VEHICLES:
+            # The published plan decides the seat count, not the form.
+            attrs['capacity'] = VEHICLES[vehicle_type]['seats']
+        elif 'capacity' not in attrs and self.instance is None:
+            raise serializers.ValidationError(
+                {'capacity': 'Enter the number of passenger seats.'}
+            )
+        return attrs
 
     class Meta:
         model = Bus
@@ -17,6 +37,9 @@ class BusSerializer(serializers.ModelSerializer):
             'company_name',
             'registration_number',
             'bus_number',
+            'vehicle_type',
+            'vehicle_label',
+            'plan_verified',
             'capacity',
             'is_active',
             'is_available',

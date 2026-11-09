@@ -115,3 +115,18 @@
 }
 
 .booking-seat-pick { display: grid; gap: 12px; }
+.booking-seat-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.booking-seat-mode button {
+  min-height: 44px; padding: 0 12px; border-radius: 10px; font-weight: 600;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  transition: background-color var(--dur-fast, 150ms) var(--ease, ease-out);
+}
+.booking-seat-mode button[aria-checked="true"] { border-color: var(--accent); background: var(--surface-3); }
+.booking-seat-mode button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.booking-seat-count { display: inline-flex; align-items: center; gap: 12px; }
+.booking-seat-count strong { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+.booking-seat-count button {
+  width: 44px; height: 44px; border-radius: 10px; font-size: 18px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+}
+.booking-seat-note { margin: 0; font-size: 14px; color: var(--text-2); }

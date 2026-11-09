@@ -273,7 +273,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
   const [bookingTrip,setBookingTrip]=useState(null);
   const [pickedSeats,setPickedSeats]=useState([]),[seatMapKey,setSeatMapKey]=useState(0);
-  const seats=pickedSeats.length;
+  // autoCount > 0: the passenger let us choose; the server picks random free seats.
+  const [autoCount,setAutoCount]=useState(0);
+  const seats=autoCount||pickedSeats.length;
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
@@ -382,7 +384,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if(t.status==='boarding') return 'Boarding at first stage only';
     return 'Unavailable';
   };
-  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setPickedSeats([])};
+  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setPickedSeats([]);setAutoCount(0)};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
 
@@ -390,8 +392,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       setError('Select a pickup stage or choose Other and enter your pickup location.');
       return;
     }
-    if (!pickedSeats.length) {
-      setError('Tap a free seat on the bus to choose where you sit.');
+    if (!seats) {
+      setError('Tap a free seat on the bus, or let us choose for you.');
       return;
     }
 
@@ -401,8 +403,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     try {
       const body = {
         trip_id: bookingTrip.id,
-        seats: pickedSeats.length,
-        seat_numbers: pickedSeats,
+        seats,
+        ...(autoCount ? {} : { seat_numbers: pickedSeats }),
       };
 
       if (selectedStage) {
@@ -1249,17 +1251,41 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
             <div className="booking-modal-footer">
               <div className="booking-seat-pick">
-                <div className="booking-seat-row">
-                  <span>Choose your seat{seats === 1 ? '' : 's'}</span>
-                  <strong aria-live="polite">
-                    {seats ? `Seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Tap a free seat'}
-                  </strong>
+                <div className="booking-seat-mode" role="radiogroup" aria-label="How to choose seats">
+                  <button type="button" role="radio" aria-checked={!autoCount}
+                    onClick={() => setAutoCount(0)}>I'll pick my seats</button>
+                  <button type="button" role="radio" aria-checked={!!autoCount}
+                    disabled={seatsLeft(bookingTrip) < 1}
+                    onClick={() => { setPickedSeats([]); setAutoCount(autoCount || 1); }}>Choose for me</button>
                 </div>
+                {autoCount ? (
+                  <div className="booking-seat-row">
+                    <span>How many seats?</span>
+                    <span className="booking-seat-count">
+                      <button type="button" aria-label="One seat fewer" disabled={autoCount <= 1}
+                        onClick={() => setAutoCount(autoCount - 1)}>−</button>
+                      <strong aria-live="polite">{autoCount}</strong>
+                      <button type="button" aria-label="One seat more"
+                        disabled={autoCount >= Math.min(20, seatsLeft(bookingTrip))}
+                        onClick={() => setAutoCount(autoCount + 1)}>+</button>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="booking-seat-row">
+                    <span>Choose your seat{seats === 1 ? '' : 's'}</span>
+                    <strong aria-live="polite">
+                      {seats ? `Seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Tap a free seat'}
+                    </strong>
+                  </div>
+                )}
+                {autoCount ? (
+                  <p className="booking-seat-note">Free seats are picked at random when you book. Your seat numbers show on your ticket.</p>
+                ) : null}
                 <SeatMap
                   tripId={bookingTrip.id}
                   mode="pick"
                   selected={pickedSeats}
-                  onChange={setPickedSeats}
+                  onChange={(next) => { setAutoCount(0); setPickedSeats(next); }}
                   max={Math.min(20, seatsLeft(bookingTrip))}
                   refreshKey={seatMapKey}
                 />
@@ -1283,6 +1309,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               >
                 {loading
                   ? 'Creating booking…'
+                  : autoCount ? `Book ${autoCount} seat${autoCount === 1 ? '' : 's'}`
                   : seats ? `Book seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Pick a seat first'}
               </button>
             </div>

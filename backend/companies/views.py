@@ -18,6 +18,7 @@ from users.permissions import (
     can_access_company,
 )
 from wallets.models import Wallet
+from .fleet import lock_bus
 from .models import Company, Route, Trip, PickupStage
 from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
 from users.identity import is_driver_account_for
@@ -399,6 +400,7 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     queryset = Trip.objects.select_related(
         'route',
         'driver',
+        'bus',
         'route__company',
     ).annotate(
         booked_annot=_Coalesce(
@@ -819,14 +821,14 @@ def create_trip(request):
     route_id = request.data.get('route_id')
     driver_id = request.data.get('driver_id')
     departure_at = request.data.get('departure_at')
-    capacity = request.data.get('capacity')
+    bus_id = request.data.get('bus_id')
 
-    if not all([company_id, route_id, driver_id, departure_at, capacity]):
+    if not all([company_id, route_id, driver_id, departure_at, bus_id]):
         return Response(
             {
                 'error': (
                     'company_id, route_id, driver_id, '
-                    'departure_at and capacity are required.'
+                    'departure_at and bus_id are required.'
                 )
             },
             status=status.HTTP_400_BAD_REQUEST
@@ -854,26 +856,6 @@ def create_trip(request):
         id=route_id,
         company=company
     )
-
-    try:
-        capacity = int(capacity)
-    except (TypeError, ValueError):
-        return Response(
-            {'error': 'capacity must be a positive integer.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    if capacity <= 0:
-        return Response(
-            {'error': 'capacity must be greater than zero.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    if capacity > 100:
-        return Response(
-            {'error': 'capacity cannot exceed 100.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
 
     departure = parse_datetime(str(departure_at))
     if departure is None:
@@ -932,11 +914,19 @@ def create_trip(request):
                 status=status.HTTP_409_CONFLICT
             )
 
+        # Seats come from the bus, never from the request: a trip cannot
+        # sell more seats than the vehicle has. More demand = another trip
+        # with another bus.
+        bus, problem = lock_bus(bus_id, company, departure)
+        if problem:
+            return Response({'error': problem}, status=status.HTTP_409_CONFLICT)
+
         trip = Trip.objects.create(
             route=route,
             driver=driver,
+            bus=bus,
             departure_at=departure,
-            capacity=capacity,
+            capacity=bus.capacity,
             status='scheduled',
         )
 
@@ -1630,10 +1620,9 @@ def route_health(request):
 
 @api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
-def update_trip_capacity(request, trip_id, *args, **kwargs):
-    """Change a trip's seat capacity without recreating the trip."""
-    from django.db.models import Sum
-
+def update_trip_bus(request, trip_id, *args, **kwargs):
+    """Put a bus on a trip (or swap it). Seats come from the bus; a smaller
+    bus is refused when more seats are already sold or numbered."""
     trip = (
         Trip.objects.select_related('route__company')
         .filter(pk=trip_id).first()
@@ -1657,49 +1646,45 @@ def update_trip_capacity(request, trip_id, *args, **kwargs):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    raw = request.data.get('capacity')
-    try:
-        if isinstance(raw, bool) or raw is None:
-            raise ValueError
-        text = str(raw).strip()
-        capacity = int(text)
-        if str(capacity) != text.lstrip('+'):
-            raise ValueError
-    except (TypeError, ValueError):
-        return Response({'error': 'capacity must be a whole number.'},
-                        status=status.HTTP_400_BAD_REQUEST)
-    if capacity < 1 or capacity > 100:
-        return Response({'error': 'capacity must be between 1 and 100.'},
+    bus_id = request.data.get('bus_id')
+    if not bus_id or isinstance(bus_id, bool):
+        return Response({'error': 'bus_id is required.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
     with transaction.atomic():
         locked = Trip.objects.select_for_update().get(pk=trip.pk)
         if locked.status not in ('scheduled', 'boarding'):
             return Response(
-                {'error': f'Capacity cannot be changed on a {locked.status} trip.'},
+                {'error': f'The bus cannot be changed on a {locked.status} trip.'},
                 status=status.HTTP_409_CONFLICT,
             )
+        bus, problem = lock_bus(
+            bus_id, trip.route.company, locked.departure_at, exclude_trip_id=locked.id,
+        )
+        if problem:
+            return Response({'error': problem}, status=status.HTTP_409_CONFLICT)
         from bookings.seats import seats_taken
         taken = seats_taken(locked)
         top_seat = (
             locked.seat_assignments.exclude(booking__status='cancelled')
             .order_by('-seat_no').values_list('seat_no', flat=True).first()
         ) or 0
-        if capacity < max(taken, top_seat):
+        if bus.capacity < max(taken, top_seat):
             return Response(
                 {
-                    'error': f'{taken} seats are already booked; '
-                             'capacity cannot be lower.',
+                    'error': f'{max(taken, top_seat)} seats are already booked; '
+                             f'bus {bus.bus_number} has only {bus.capacity}. '
+                             'Add another trip with a second bus instead.',
                     'seats_taken': taken,
                 },
                 status=status.HTTP_409_CONFLICT,
             )
-        locked.capacity = capacity
-        locked.save(update_fields=['capacity'])
+        locked.bus = bus
+        locked.save(update_fields=['bus', 'capacity'])
 
     return Response({
-        'message': 'Trip capacity updated.',
-        'trip_id': locked.id,
+        'message': 'Bus assigned.',
+        'trip': TripSerializer(locked).data,
         'capacity': locked.capacity,
         'seats_taken': taken,
         'seats_available': locked.capacity - taken,

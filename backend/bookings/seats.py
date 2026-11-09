@@ -1,26 +1,120 @@
 """
-Seat maps drawn as the real vehicles Kenyan operators run, picked by capacity.
-Seen from above, front at the top. Kenya drives on the left: the driver ('D')
-sits front right and passengers board on the left ('door').
-  14  Toyota HiAce matatu: 2 beside the driver, sliding door on the left
-      beside row 2, rows of 3 with no aisle (the door-side seat folds),
-      back bench of 3.
-  29  Rosa/Liesse minibus: door front left, 2+2 with an aisle, back row of 5.
-  33  Isuzu NQR minibus: door front left, 2+2 with an aisle, back row of 5.
-  51  Coach: door front left, 2 seats behind the driver, 2+2, back row of 5.
-  anything else: the same 2+2 bus plan, filled to its capacity.
-Every row has the same number of columns. Cells: seat number, None (aisle or
-empty floor), 'D' driver, 'door'.
+Seat maps of real vehicles, seen from above, front at the top. Kenya drives on
+the left: the driver ('D') sits front right, passengers board on the left.
+Cells: seat number, None (aisle or empty floor), 'D' driver, 'door'.
+
+VEHICLES holds only plans copied from a published diagram (source on each).
+The ACMG drawings are right-hand drive with numbered seats; their numbers are
+kept as printed. Toyota publishes the HiAce plan for left-hand drive without
+numbers, so it is mirrored and numbered front to back, left to right.
+A bus whose plan is not published ('other') gets a plain 2+2 plan sized to
+its seat count, and the app says the plan is not verified.
 
 Every function that writes assumes the caller holds the Trip row lock
 (select_for_update), like the rest of the booking code.
 """
+import random
+
 from django.db.models import Q, Sum
 
 AISLE = None
+_ = AISLE
 
 
-def layout_for(capacity):
+def _rows(first, last_row_start, left=2, right=3):
+    """Repeating rows after the door: `left` seats, aisle, `right` seats."""
+    out, n = [], first
+    while n < last_row_start:
+        out.append(list(range(n, n + left)) + [_] + list(range(n + left, n + left + right)))
+        n += left + right
+    return out
+
+
+VEHICLES = {
+    'matatu_14': {
+        'label': '14-seater matatu (Toyota HiAce Commuter)',
+        'seats': 14,
+        # https://global.toyota/en/newsroom/toyota/26716528.html Commuter No. 6
+        # (capacity 15 = driver + 14): 2 beside the driver, a bench of 3 by the
+        # sliding door, then 3 rows of 1 + aisle + 2.
+        'layout': [
+            [1, 2, _, 'D'],
+            ['door', 3, 4, 5],
+            [6, _, 7, 8],
+            [9, _, 10, 11],
+            [12, _, 13, 14],
+        ],
+    },
+    'minibus_27': {
+        'label': '27-seater minibus (Isuzu NMR85)',
+        'seats': 27,
+        # https://www.acmgl.com/isuzu/bus/nmr85 seat layout drawing (2+2, door
+        # behind the first row, back row of 5).
+        'layout': [
+            [2, 1, _, _, 'D'],
+            [6, 5, _, 4, 3],
+            ['door', 'door', _, 8, 7],
+            [12, 11, _, 10, 9],
+            [16, 15, _, 14, 13],
+            [_, _, _, 18, 17],
+            [20, 19, _, 22, 21],
+            [27, 26, 25, 24, 23],
+        ],
+    },
+    'minibus_33': {
+        'label': '33-seater minibus (Isuzu NQR81M)',
+        'seats': 33,
+        # Seat count, length 7,815 mm and the 2 seats beside the driver
+        # ("Driver & Assistant Seat ... Centre Seat") are from Isuzu East
+        # Africa's N-series brochure (isuzu.co.ke). No 33-seat drawing is
+        # published, so the rows follow the same maker's 27-seat drawing above,
+        # two rows longer; seat positions are approximate.
+        'verified': False,
+        'layout': [
+            [2, 1, _, _, 'D'],
+            [6, 5, _, 4, 3],
+            ['door', 'door', _, 8, 7],
+        ] + [
+            [n + 3, n + 2, _, n + 1, n] for n in range(9, 26, 4)
+        ] + [
+            [33, 32, 31, 30, 29],
+        ],
+    },
+    'bus_51': {
+        'label': '51-seater bus (Isuzu FTR90)',
+        'seats': 51,
+        # https://www.acmgl.com/isuzu/bus/ftr90 seat layout drawing (3+2, the 3
+        # on the driver side, back row of 6).
+        'layout': [
+            [2, 1, _, _, _, 'D'],
+            [4, 3, _, 7, 6, 5],
+            ['door', 'door', _, 10, 9, 8],
+        ] + [
+            [n + 4, n + 3, _, n + 2, n + 1, n] for n in range(11, 42, 5)
+        ] + [
+            [51, 50, 49, 48, 47, 46],
+        ],
+    },
+    'bus_67': {
+        'label': '67-seater bus (Isuzu FVR34S)',
+        'seats': 67,
+        # https://www.acmgl.com/isuzu/bus/fvr34s seat layout drawing (3+2, the 3
+        # on the driver side, back row of 6; the drawing prints 28 as "38").
+        'layout': [
+            [1, _, _, _, _, 'D'],
+            [2, 3, _, _, _, _],
+            [4, 5, _, 8, 7, 6],
+            ['door', 'door', _, 9, 10, 11],
+        ] + _rows(12, 62) + [
+            [62, 63, 64, 65, 66, 67],
+        ],
+    },
+}
+OTHER = 'other'
+
+
+def _generic(capacity):
+    """2+2 rows behind a front-left door, back bench of 5, numbered in order."""
     n = 0
 
     def seats(k):
@@ -29,27 +123,35 @@ def layout_for(capacity):
         n += k
         return row
 
-    if capacity == 14:
-        # First column is the left wall: the sliding door opens beside row 2.
-        rows = [[AISLE] + seats(2) + ['D'], ['door'] + seats(3)]
-        rows += [[AISLE] + seats(3) for _ in range(3)]
-        return rows
-
-    # Buses: 5 columns = 2 seats, aisle, 2 seats; the back bench spans the
-    # aisle. Seats that don't fill a 2+2 row sit behind the driver, opposite
-    # the door, as on real coaches (a 51-seater: 2 there, 11 rows, bench of 5).
-    rows = [['door', AISLE, AISLE, AISLE, 'D']]
+    rows = [['door', _, _, _, 'D']]
     if capacity < 5:
-        rows.append(seats(capacity) + [AISLE] * (5 - capacity))
+        rows.append(seats(capacity) + [_] * (5 - capacity))
         return rows
     extra = (capacity - 5) % 4
     if extra:
-        front = seats(extra)
-        rows.append(['door'] + [AISLE] * (4 - extra) + front)
+        rows.append(['door'] + [_] * (4 - extra) + seats(extra))
     while capacity - n > 5:
-        rows.append(seats(2) + [AISLE] + seats(2))
+        rows.append(seats(2) + [_] + seats(2))
     rows.append(seats(5))
     return rows
+
+
+def vehicle_for(capacity, vehicle_type=None):
+    """The published plan for this bus type, else the one whose seat count
+    matches (trips made before buses had a type), else None."""
+    if vehicle_type in VEHICLES:
+        return VEHICLES[vehicle_type]
+    # Exact plans only: a bare seat count is not proof of the approximate one.
+    if vehicle_type in (None, ''):
+        for v in VEHICLES.values():
+            if v['seats'] == capacity and v.get('verified', True):
+                return v
+    return None
+
+
+def layout_for(capacity, vehicle_type=None):
+    v = vehicle_for(capacity, vehicle_type)
+    return v['layout'] if v else _generic(capacity)
 
 
 def _active():
@@ -105,7 +207,7 @@ def assign_seats(trip, booking, wanted=None):
         free = [s for s in range(1, trip.capacity + 1) if s not in taken]
         # Not enough numbered seats left (older bookings without numbers):
         # give what exists; the count check already guaranteed capacity.
-        numbers = free[:count]
+        numbers = random.sample(free, min(count, len(free)))
 
     SeatAssignment.objects.bulk_create(
         [SeatAssignment(trip=trip, seat_no=s, booking=booking) for s in numbers]
@@ -154,10 +256,22 @@ def seat_map(trip, viewer_booking_ids=(), show_names=False):
         trip.bookings.exclude(status='cancelled')
         .aggregate(total=Sum('seats'))['total'] or 0
     )
+    bus = trip.bus
+    vehicle_type = bus.vehicle_type if bus else None
+    vehicle = vehicle_for(trip.capacity, vehicle_type)
     return {
         'trip_id': trip.id,
         'capacity': trip.capacity,
-        'layout': layout_for(trip.capacity),
+        'bus': {
+            'fleet_number': bus.bus_number,
+            'plate': bus.registration_number,
+            'vehicle_type': bus.vehicle_type,
+        } if bus else None,
+        'vehicle_label': vehicle['label'] if vehicle else f'{trip.capacity}-seater',
+        # False: seat positions are approximate, the seat numbers still hold.
+        'plan_verified': bool(vehicle and vehicle.get('verified', True)),
+        'driver_name': trip.driver.name,
+        'layout': vehicle['layout'] if vehicle else _generic(trip.capacity),
         'seats': seats,
         # Seats sold before seat numbers existed: real but not on the map.
         'unassigned': max(0, live_seats - numbered),

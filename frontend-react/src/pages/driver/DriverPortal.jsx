@@ -97,7 +97,7 @@ function TimetableTrip({ trip }) {
       <div className="driver-timetable-details">
         <strong>{trip.route_name}</strong>
         <span>
-          Bus {trip.bus_number} · {trip.start_point} to {trip.end_point} · {trip.capacity} seats
+          Bus {trip.bus_number}{trip.bus_plate ? ` (${trip.bus_plate})` : ''} · {trip.start_point} to {trip.end_point} · {trip.capacity} seats
         </span>
       </div>
       <span className={`driver-timetable-status driver-timetable-status-${trip.status}`}>

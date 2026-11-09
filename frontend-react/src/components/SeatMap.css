@@ -61,6 +61,26 @@
   border-radius: 0 6px 6px 0;
 }
 
+/* Door wider than one seat: the rest of the step well. */
+.seat-door-step {
+  margin-left: -8px;
+  background: repeating-linear-gradient(0deg, transparent 0 6px, rgb(255 255 255 / 0.05) 6px 8px);
+  border-radius: 0 6px 6px 0;
+}
+
+/* The bus you are boarding, like the top of a ticket. */
+.seatmap-ticket {
+  width: 100%; max-width: 420px; margin: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px;
+  padding: 12px 16px; border: 1px dashed var(--border-strong); border-radius: 12px;
+  background: var(--surface);
+}
+.seatmap-ticket div { display: grid; gap: 2px; min-width: 0; }
+.seatmap-ticket dt { font-size: 12px; color: var(--text-3); }
+.seatmap-ticket dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.seatmap-ticket .seatmap-ticket-wide { grid-column: 1 / -1; }
+.seatmap-ticket .seatmap-ticket-wide dd { font-weight: 400; color: var(--text-2); }
+
 .seatmap-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--text-2); }
 .seatmap-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .seatmap-legend i { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border-strong); }

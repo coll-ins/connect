@@ -140,6 +140,16 @@ class Trip(models.Model):
         related_name="trips"
     )
     departure_at = models.DateTimeField()
+    # The vehicle that runs this trip. Null only on trips made before trips
+    # named a bus; every write path now requires one.
+    bus = models.ForeignKey(
+        "buses.Bus",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="trips",
+    )
+    # Seats for sale: always the bus's seat count when a bus is set.
     capacity = models.PositiveIntegerField()
     schedule = models.ForeignKey(
         "TripSchedule",
@@ -171,6 +181,11 @@ class Trip(models.Model):
             )
         ]
 
+    def save(self, *args, **kwargs):
+        if self.bus_id:
+            self.capacity = self.bus.capacity
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.route.name} - {self.departure_at}"
 
@@ -179,6 +194,9 @@ class TripSchedule(models.Model):
     """A weekly service template expanded into Trips by generate_scheduled_trips."""
     route = models.ForeignKey(Route, on_delete=models.CASCADE, related_name="schedules")
     driver = models.ForeignKey("drivers.Driver", on_delete=models.CASCADE, related_name="trip_schedules")
+    bus = models.ForeignKey(
+        "buses.Bus", null=True, blank=True, on_delete=models.PROTECT, related_name="trip_schedules",
+    )
     capacity = models.PositiveIntegerField(default=30)
     # Comma-separated weekdays, Monday=0 ... Sunday=6, e.g. "0,1,2,3,4"
     days_of_week = models.CharField(max_length=13)
@@ -196,6 +214,11 @@ class TripSchedule(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.bus_id:
+            self.capacity = self.bus.capacity
+        super().save(*args, **kwargs)
 
     def weekdays(self):
         return {int(x) for x in self.days_of_week.split(",") if x.strip() != ""}

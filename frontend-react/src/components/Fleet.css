@@ -1,0 +1,35 @@
+.fleet { display: grid; gap: 16px; margin-bottom: 32px; }
+.fleet-head h2 { margin: 0 0 4px; font-size: 20px; }
+.fleet-head p { margin: 0; max-width: 70ch; color: var(--text-2); line-height: 1.5; }
+.fleet-empty { margin: 0; color: var(--text-2); }
+.fleet-warn { display: block; color: var(--warn); }
+.fleet-link {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 8px;
+  border: 0; background: none; color: var(--accent-text); font-weight: 600;
+}
+.fleet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.fleet-row {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+}
+.fleet-row-main { display: grid; gap: 4px; min-width: 0; }
+.fleet-row-main strong { font-variant-numeric: tabular-nums; }
+.fleet-row-main span, .fleet-status { color: var(--text-2); font-size: 14px; }
+.fleet-row-main small { color: var(--warn); font-size: 12px; }
+.fleet-row select, .op-routes-capacity select {
+  min-height: 44px; padding: 0 12px; color: inherit; max-width: 100%;
+  border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface);
+}
+.fleet-form { align-items: end; }
+.fleet-seats { margin: 0; align-self: center; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.fleet-add {
+  min-height: 44px; padding: 0 20px; border: 0; border-radius: 10px;
+  font-weight: 600; color: #03120d; background: var(--accent);
+}
+.fleet-trip-bus { display: grid; gap: 4px; }
+.fleet-trip-bus .op-routes-capacity { flex-wrap: wrap; }
+.fleet-trip-bus .op-routes-capacity select { flex: 1 1 200px; min-width: 0; }
+@media (max-width: 600px) {
+  .fleet-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .fleet-row select, .fleet-row .fleet-status { grid-column: 2; }
+}

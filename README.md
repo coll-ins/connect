@@ -12,6 +12,8 @@ Connect is a seat-booking platform for Nairobi's organised bus SACCOs. Passenger
 - Sign up with name, phone number and location
 - Browse bus companies and routes serving your area
 - Book a seat and get a unique booking number instantly
+- Pick each seat on a drawing of the real bus, or let the app choose free seats at random
+- See the bus fleet number, number plate, vehicle and driver's name before booking
 - Track your driver's live location on a map
 - Receive driver name, phone number and bus number via SMS
 - Trip auto-completes when you arrive at your pickup point
@@ -21,6 +23,9 @@ Connect is a seat-booking platform for Nairobi's organised bus SACCOs. Passenger
 - Assign a driver to a booking with one tap
 - Set stage departure time so passengers know when the bus is leaving
 - Add and manage drivers for your company
+- Add buses by type; every trip runs on one bus and sells exactly its seats (more demand: add a second bus at the same time)
+
+**Seat plans** (`backend/bookings/seats.py`): 14-seater matatu from Toyota's HiAce Commuter plan; Isuzu NMR85 (27), FTR90 (51) and FVR34S (67) from ACMG's numbered drawings. The Isuzu NQR81M 33-seater's count and front row are from Isuzu East Africa's brochure, but no drawing is published, so its seat positions are marked approximate. Any other bus is entered with its seat count and gets a plain 2+2 plan, marked unverified.
 
 **Driver app**
 - Select your driver profile

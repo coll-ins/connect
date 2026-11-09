@@ -1809,6 +1809,14 @@ def create_booking(request):
 # MY BOOKINGS & DETAILS
 # ============================================================
 
+def _bus_number(trip, driver):
+    """The trip's own bus; trips made before buses were linked use the
+    number typed on the driver."""
+    if trip is not None and trip.bus_id:
+        return trip.bus.bus_number
+    return driver.bus_number if driver else None
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_bookings(request):
@@ -1828,6 +1836,7 @@ def get_my_bookings(request):
         .select_related(
             'trip__route__company',
             'trip__driver',
+            'trip__bus',
             'pickup_stage',
             'payment',
             'boarding_event',
@@ -1923,11 +1932,8 @@ def get_my_bookings(request):
 
             'driver_id': driver.id if driver else None,
             'driver_name': driver.name if driver else None,
-            'driver_bus_number': (
-                driver.bus_number
-                if driver
-                else None
-            ),
+            'driver_bus_number': _bus_number(trip, driver),
+            'bus_plate': trip.bus.registration_number if trip and trip.bus_id else None,
             'driver_latitude': (
                 float(driver.latitude)
                 if driver and driver.latitude is not None
@@ -3712,7 +3718,7 @@ def booking_live_location(request, booking_id):
                     driver.phone_number
                     if driver and can_see_contacts else None
                 ),
-                'bus_number': driver.bus_number if driver else None,
+                'bus_number': _bus_number(booking.trip, driver),
                 'latitude': d_lat,
                 'longitude': d_lng,
                 'location_updated_at': (
@@ -5184,7 +5190,11 @@ def passenger_records(request):
                 'phone_number': (
                     driver.phone_number if show_driver_phone else None
                 ),
-                'bus_number': driver.bus_number,
+                'bus_number': _bus_number(booking.trip, driver),
+                'bus_plate': (
+                    booking.trip.bus.registration_number
+                    if booking.trip and booking.trip.bus_id else None
+                ),
             } if driver else None,
 
             'booking': {
@@ -5684,7 +5694,7 @@ def _seat_staff(user, trip):
 @permission_classes([IsAuthenticated])
 def trip_seat_map(request, trip_id):
     try:
-        trip = Trip.objects.select_related('route', 'driver').get(pk=trip_id)
+        trip = Trip.objects.select_related('route', 'driver', 'bus').get(pk=trip_id)
     except Trip.DoesNotExist:
         return Response({'error': 'Trip not found.'}, status=status.HTTP_404_NOT_FOUND)
     user = request.user

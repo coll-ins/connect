@@ -104,10 +104,17 @@ class TripSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
-    driver_bus_number = serializers.CharField(
-        source='driver.bus_number',
-        read_only=True
-    )
+    # The trip's own bus when it has one; older trips fall back to the
+    # number typed on the driver.
+    driver_bus_number = serializers.SerializerMethodField()
+    bus_plate = serializers.CharField(source='bus.registration_number', read_only=True, default=None)
+    vehicle_label = serializers.SerializerMethodField()
+
+    def get_driver_bus_number(self, obj):
+        return obj.bus.bus_number if obj.bus_id else obj.driver.bus_number
+
+    def get_vehicle_label(self, obj):
+        return obj.bus.get_vehicle_type_display() if obj.bus_id else None
 
     company_name = serializers.CharField(
         source='route.company.name',
@@ -132,6 +139,9 @@ class TripSerializer(serializers.ModelSerializer):
             'driver',
             'driver_name',
             'driver_bus_number',
+            'bus',
+            'bus_plate',
+            'vehicle_label',
             'company_name',
             'departure_at',
             'capacity',
@@ -142,5 +152,9 @@ class TripSerializer(serializers.ModelSerializer):
             'id',
             'driver_name',
             'driver_bus_number',
+            'bus',
+            'bus_plate',
+            'vehicle_label',
+            'capacity',
             'company_name',
         ]

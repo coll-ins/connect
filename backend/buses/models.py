@@ -1,5 +1,7 @@
 from django.db import models
 
+from bookings.seats import OTHER, VEHICLES
+
 from companies.models import Company
 
 
@@ -22,6 +24,11 @@ class Bus(models.Model):
     bus_number = models.CharField(
         max_length=20,
     )
+    VEHICLE_TYPE_CHOICES = [(k, v['label']) for k, v in VEHICLES.items()] + [
+        (OTHER, 'Other (enter the seat count)'),
+    ]
+    vehicle_type = models.CharField(max_length=20, choices=VEHICLE_TYPE_CHOICES, default=OTHER)
+    # Passenger seats. Fixed by vehicle_type except for 'other'.
     capacity = models.PositiveIntegerField()
     is_active = models.BooleanField(default=True)
     is_available = models.BooleanField(default=True)
@@ -41,6 +48,11 @@ class Bus(models.Model):
                 name='unique_bus_number_per_company',
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.vehicle_type in VEHICLES:
+            self.capacity = VEHICLES[self.vehicle_type]['seats']
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.company.name} - {self.bus_number} ({self.registration_number})"

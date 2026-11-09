@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from bookings.models import Booking, Incident
+from buses.models import Bus
 from companies.models import Company, PickupStage, Route, Trip
 from drivers.models import Driver
 
@@ -74,28 +75,54 @@ class Base(TestCase):
         )
 
 
-class TripCapacityEditTests(Base):
-    def _patch(self, value, user=None):
+class TripBusTests(Base):
+    """A trip's seats come from its bus; the request can never set a count."""
+
+    def _bus(self, vehicle_type='matatu_14', company=None, n=[0], **extra):
+        n[0] += 1
+        return Bus.objects.create(
+            company=company or self.company, registration_number=f'KDA {n[0]:03d}T',
+            bus_number=f'F{n[0]}', vehicle_type=vehicle_type, capacity=extra.pop('capacity', 1),
+            **extra,
+        )
+
+    def _patch(self, bus, user=None, body=None):
         self.client.force_authenticate(user=user or self.manager)
-        url = _company_url('update_trip_capacity', trip_id=self.trip.id)
-        return self.client.patch(url, {'capacity': value}, format='json')
+        url = _company_url('update_trip_bus', trip_id=self.trip.id)
+        return self.client.patch(url, body if body is not None else {'bus_id': bus.id}, format='json')
 
-    def test_manager_can_raise_capacity(self):
-        self.assertEqual(self._patch(14).status_code, 200)
+    def test_seats_follow_the_bus_not_the_request(self):
+        r = self._patch(self._bus('bus_51'), body=None)
+        self.assertEqual(r.status_code, 200)
         self.trip.refresh_from_db()
-        self.assertEqual(self.trip.capacity, 14)
+        self.assertEqual(self.trip.capacity, 51)
+        r = self.client.patch(_company_url('update_trip_bus', trip_id=self.trip.id),
+                              {'bus_id': self._bus('matatu_14').id, 'capacity': 60}, format='json')
+        self.trip.refresh_from_db()
+        self.assertEqual((r.status_code, self.trip.capacity), (200, 14))
 
-    def test_cannot_drop_below_taken_seats(self):
-        self._booking(4)
-        self.assertEqual(self._patch(3).status_code, 409)
+    def test_smaller_bus_refused_when_seats_sold(self):
+        self.assertEqual(self._patch(self._bus('bus_51')).status_code, 200)
+        self._booking(15)
+        self.assertEqual(self._patch(self._bus('matatu_14')).status_code, 409)
         self.trip.refresh_from_db()
-        self.assertEqual(self.trip.capacity, 10)
-        self.assertEqual(self._patch(4).status_code, 200)
+        self.assertEqual(self.trip.capacity, 51)
+        self.assertEqual(self._patch(self._bus('minibus_27')).status_code, 200)
 
     def test_cancelled_bookings_do_not_block(self):
-        self._booking(8, status='cancelled')
+        self._booking(20, status='cancelled')
         self._booking(2)
-        self.assertEqual(self._patch(2).status_code, 200)
+        self.assertEqual(self._patch(self._bus('matatu_14')).status_code, 200)
+
+    def test_bus_out_of_service_other_company_or_double_booked(self):
+        other = Company.objects.create(name='Other SACCO bus')
+        self.assertEqual(self._patch(self._bus(company=other)).status_code, 409)
+        self.assertEqual(self._patch(self._bus(maintenance_status='maintenance')).status_code, 409)
+        self.assertEqual(self._patch(self._bus(is_active=False)).status_code, 409)
+        busy = self._bus()
+        Trip.objects.create(route=self.route, driver=self.driver, bus=busy,
+                            departure_at=self.trip.departure_at, capacity=1)
+        self.assertEqual(self._patch(busy).status_code, 409)
 
     def test_other_company_manager_forbidden(self):
         other = Company.objects.create(name='Other SACCO r25')
@@ -104,14 +131,16 @@ class TripCapacityEditTests(Base):
             phone_number='+254700000904', company=other,
             role='company_manager',
         )
-        self.assertEqual(self._patch(12, user=stranger).status_code, 403)
+        self.assertEqual(self._patch(self._bus(company=other), user=stranger).status_code, 403)
 
     def test_rejects_finished_trip_and_bad_values(self):
-        for bad in (0, -1, 101, 'abc', 2.5, None):
-            self.assertEqual(self._patch(bad).status_code, 400, bad)
+        for bad in ({}, {'bus_id': None}, {'bus_id': True}):
+            self.assertEqual(self._patch(None, body=bad).status_code, 400, bad)
+        for bad in ('abc', 999999, 2.5):
+            self.assertEqual(self._patch(None, body={'bus_id': bad}).status_code, 409, bad)
         self.trip.status = 'completed'
         self.trip.save(update_fields=['status'])
-        self.assertEqual(self._patch(12).status_code, 409)
+        self.assertEqual(self._patch(self._bus()).status_code, 409)
 
 
 class BoardingStageBookingTests(Base):
@@ -504,11 +533,11 @@ class OperatorRouteScopeTests(Base):
         self._assign(False, [self.route.id])
         self._as_operator()
         s2 = _company_url('update_trip_status', trip_id=self.trip2.id)
-        c2 = _company_url('update_trip_capacity', trip_id=self.trip2.id)
+        c2 = _company_url('update_trip_bus', trip_id=self.trip2.id)
         self.assertEqual(
             self.client.post(s2, {'status': 'boarding'}, format='json').status_code, 403)
         self.assertEqual(
-            self.client.patch(c2, {'capacity': 12}, format='json').status_code, 403)
+            self.client.patch(c2, {'bus_id': 1}, format='json').status_code, 403)
         s1 = _company_url('update_trip_status', trip_id=self.trip.id)
         self.assertEqual(
             self.client.post(s1, {'status': 'boarding'}, format='json').status_code, 200)

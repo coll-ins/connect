@@ -4,6 +4,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient, APITestCase
 
+from buses.models import Bus
 from companies.models import Company, Route, Trip, TripSchedule
 from drivers.models import Driver
 
@@ -18,13 +19,19 @@ class ScheduleApiTests(APITestCase):
         self.orow = Route.objects.create(company=self.other, name='R2', start_point='A', end_point='B', price=100)
         self.drv = Driver.objects.create(name='D', phone_number='0700000001', bus_number='K1', company=self.co)
         self.odrv = Driver.objects.create(name='E', phone_number='0700000002', bus_number='K2', company=self.other)
+        self.bus = Bus.objects.create(company=self.co, registration_number='KDA 001A', bus_number='1',
+                                      vehicle_type='minibus_33', capacity=1)
+        self.bus14 = Bus.objects.create(company=self.co, registration_number='KDA 002A', bus_number='2',
+                                        vehicle_type='matatu_14', capacity=1)
+        self.obus = Bus.objects.create(company=self.other, registration_number='KDB 001B', bus_number='1',
+                                       vehicle_type='matatu_14', capacity=1)
         self.c = APIClient()
         self._gen = mock.patch('companies.schedule_views._generate_on_create', return_value=0)
         self._gen.start()
         self.addCleanup(self._gen.stop)
         self.c.force_authenticate(user=get_user_model()(username='mgr'))
         self.body = {'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': self.drv.id,
-                     'capacity': 30, 'days_of_week': [0, 1, 2], 'departure_time': '06:30',
+                     'bus_id': self.bus.id, 'days_of_week': [0, 1, 2], 'departure_time': '06:30',
                      'auto_renew': True}
 
     def post(self, **over):
@@ -125,11 +132,16 @@ class ScheduleApiTests(APITestCase):
     def test_other_company_route_or_driver_rejected(self, _):
         self.assertEqual(self.post(route_id=self.orow.id).status_code, 404)
         self.assertEqual(self.post(driver_id=self.odrv.id).status_code, 404)
+        self.assertEqual(self.post(bus_id=self.obus.id).status_code, 404)
+        self.assertEqual(self.post(bus_id=None).status_code, 404)
+        self.assertEqual(self.post(bus_id=self.bus.id + 0.5).status_code, 404)
+        Bus.objects.filter(pk=self.bus14.pk).update(maintenance_status='maintenance')
+        self.assertEqual(self.post(bus_id=self.bus14.id).status_code, 404)
         self.assertEqual(TripSchedule.objects.count(), 0)
 
     @mock.patch(CAN, return_value=True)
     def test_bad_input_is_400(self, _):
-        for over in ({'capacity': 0}, {'capacity': 101}, {'days_of_week': []}, {'days_of_week': [7]},
+        for over in ({'days_of_week': []}, {'days_of_week': [7]},
                      {'days_of_week': 'mon'}, {'departure_time': '25:99'}, {'departure_time': ''},
                      {'start_date': '2030-02-01', 'end_date': '2030-01-01'},
                      {'normal_interval_minutes': 10},
@@ -171,7 +183,7 @@ class ScheduleApiTests(APITestCase):
     @mock.patch(CAN, return_value=True)
     def test_pause_and_edit(self, _):
         sid = self.post().json()['id']
-        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'is_active': False, 'capacity': 14}, format='json')
+        r = self.c.patch(f'/api/companies/schedules/{sid}/', {'is_active': False, 'bus_id': self.bus14.id, 'capacity': 60}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         s = TripSchedule.objects.get(pk=sid)
         self.assertFalse(s.is_active)
@@ -286,12 +298,12 @@ class ScheduleApiTests(APITestCase):
         s = TripSchedule.objects.get(pk=sid)
         t = self._trip(s, '2030-01-01T06:30:00+03:00')
         r = self.c.patch(f'/api/companies/schedules/{sid}/',
-                         {'end_date': '2031-01-01', 'capacity': 20}, format='json')
+                         {'end_date': '2031-01-01', 'bus_id': self.bus14.id}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertNotIn('cancelled_trips', r.json())
         t.refresh_from_db()
         self.assertEqual(t.status, 'scheduled')
-        self.assertEqual(t.capacity, 20)
+        self.assertEqual((t.bus_id, t.capacity), (self.bus14.id, 14))
 
     @mock.patch(CAN, return_value=True)
     def test_booked_trip_is_kept_and_counted(self, _):
@@ -375,7 +387,7 @@ class ScheduleApiTests(APITestCase):
     def test_cosmetic_edit_generates_nothing(self, _):
         sid = self.post(days_of_week=[0, 1, 2, 3, 4, 5, 6]).json()['id']
         n0 = self._seed(sid)
-        r = self._patch(sid, capacity=20)
+        r = self._patch(sid, bus_id=self.bus14.id)
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('generated_trips', r.json())
         self.assertEqual(Trip.objects.filter(schedule_id=sid).count(), n0)

@@ -38,6 +38,13 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
   await modal.getByRole('button', { name: 'Add Driver' }).click();
   await expect(page.getByText(`Wanjiru ${tag}`)).toBeVisible();
 
+  await page.goto('/company-manager/capacity');
+  await page.getByLabel('Number plate').fill(`KDT ${tag}`);
+  await page.getByLabel('Fleet number').fill(`F${tag}`);
+  await page.getByLabel('Vehicle').selectOption('matatu_14');
+  await page.getByRole('button', { name: 'Add bus' }).click();
+  await expect(page.getByText(`F${tag} · KDT ${tag}`)).toBeVisible();
+
   await page.goto('/company-manager/trips');
   await page.getByRole('button', { name: 'Create Trip' }).first().click();
   await modal.getByLabel('Route').selectOption({ label: `Test ${tag} - Rongai` });
@@ -46,7 +53,7 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
   const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000)
     .toISOString().slice(0, 16);
   await modal.getByLabel('Departure').fill(local);
-  await modal.getByLabel('Seat capacity').fill('14');
+  await modal.getByLabel(/^Bus/).selectOption({ label: `F${tag} · KDT ${tag} · 14 seats` });
   await modal.getByRole('button', { name: 'Create Trip' }).click();
   await expect(modal).toHaveCount(0);
   await expect(page.getByText(`Test ${tag} - Rongai`).first()).toBeVisible();

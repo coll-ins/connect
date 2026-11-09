@@ -1,4 +1,6 @@
+import random
 from datetime import timedelta
+from unittest import mock
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -7,32 +9,50 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from bookings.models import Booking, SeatAssignment
-from bookings.seats import layout_for
+from bookings.seats import VEHICLES, layout_for
 from companies.models import Company, Route, Trip
 from drivers.models import Driver
 
 User = get_user_model()
 
 
+def _nums(rows):
+    return sorted(x for row in rows for x in row if isinstance(x, int))
+
+
 class LayoutTests(APITestCase):
-    def test_every_layout_numbers_each_seat_once(self):
-        for cap in (14, 29, 33, 51, 62, 10, 3):
-            nums = [x for row in layout_for(cap) for x in row if isinstance(x, int)]
-            self.assertEqual(nums, list(range(1, cap + 1)), cap)
+    def test_every_plan_numbers_each_seat_once_in_even_rows(self):
+        for key, v in VEHICLES.items():
+            self.assertEqual(_nums(v['layout']), list(range(1, v['seats'] + 1)), key)
+            self.assertEqual(len({len(r) for r in v['layout']}), 1, key)
+            self.assertEqual(sum(r.count('D') for r in v['layout']), 1, key)
+        for cap in (10, 3, 36, 62):
+            self.assertEqual(_nums(layout_for(cap)), list(range(1, cap + 1)), cap)
 
-    def test_matatu_is_a_real_hiace(self):
-        rows = layout_for(14)
-        self.assertEqual(rows[0], [None, 1, 2, 'D'])      # 2 beside the driver, front right
-        self.assertEqual(rows[1], ['door', 3, 4, 5])      # sliding door on the left by row 2
-        self.assertEqual(rows[-1], [None, 12, 13, 14])    # back bench of 3
+    def test_published_plans(self):
+        # Toyota HiAce Commuter No. 6, mirrored for right-hand drive.
+        hiace = layout_for(14, 'matatu_14')
+        self.assertEqual(hiace[0], [1, 2, None, 'D'])
+        self.assertEqual(hiace[1], ['door', 3, 4, 5])
+        self.assertEqual(hiace[2:], [[6, None, 7, 8], [9, None, 10, 11], [12, None, 13, 14]])
+        # ACMG drawings: seat numbers exactly as printed.
+        nmr = layout_for(27, 'minibus_27')
+        self.assertEqual((nmr[0], nmr[2], nmr[-1]),
+                         ([2, 1, None, None, 'D'], ['door', 'door', None, 8, 7], [27, 26, 25, 24, 23]))
+        ftr = layout_for(51, 'bus_51')
+        self.assertEqual((ftr[1], ftr[3], ftr[-1]),
+                         ([4, 3, None, 7, 6, 5], [15, 14, None, 13, 12, 11], [51, 50, 49, 48, 47, 46]))
+        fvr = layout_for(67, 'bus_67')
+        self.assertEqual((fvr[0], fvr[2], fvr[4], fvr[-2], fvr[-1]),
+                         ([1, None, None, None, None, 'D'], [4, 5, None, 8, 7, 6],
+                          [12, 13, None, 14, 15, 16], [57, 58, None, 59, 60, 61], [62, 63, 64, 65, 66, 67]))
 
-    def test_bus_has_front_left_door_and_back_bench_of_five(self):
-        for cap in (29, 33, 51):
-            rows = layout_for(cap)
-            self.assertEqual(rows[0], ['door', None, None, None, 'D'])
-            self.assertEqual(len(rows[-1]), 5)
-            self.assertTrue(all(isinstance(x, int) for x in rows[-1]))
-        self.assertEqual(layout_for(51)[1], ['door', None, None, 1, 2])  # 2 behind the driver
+    def test_seat_count_picks_only_an_exact_plan(self):
+        self.assertIs(layout_for(51), VEHICLES['bus_51']['layout'])
+        # 33 has only an approximate plan: a bare count must not claim it.
+        self.assertIsNot(layout_for(33), VEHICLES['minibus_33']['layout'])
+        self.assertIs(layout_for(33, 'minibus_33'), VEHICLES['minibus_33']['layout'])
+        self.assertIsNot(layout_for(51, 'other'), VEHICLES['bus_51']['layout'])
 
 
 class SeatBookingTests(APITestCase):
@@ -66,10 +86,12 @@ class SeatBookingTests(APITestCase):
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()["seat_numbers"], [7, 8])
 
-    def test_without_numbers_lowest_free_seats_are_given(self):
-        self._book(self.pax, 1, [1])
-        r = self._book(self.other, 2)
-        self.assertEqual(r.json()["seat_numbers"], [2, 3])
+    def test_without_numbers_random_free_seats_are_given(self):
+        self._book(self.pax, 13, list(range(1, 14)))
+        with mock.patch("bookings.seats.random.sample", wraps=random.sample) as pick:
+            r = self._book(self.other, 1)
+        self.assertEqual(r.json()["seat_numbers"], [14])  # the only free seat
+        pick.assert_called_once_with([14], 1)
 
     def test_same_seat_twice_is_refused_and_nothing_is_saved(self):
         self._book(self.pax, 1, [5])

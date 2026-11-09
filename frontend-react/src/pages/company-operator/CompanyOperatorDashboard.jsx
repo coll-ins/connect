@@ -22,6 +22,7 @@ import { confirmTripCancel } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import './CompanyOperatorDashboard.css';
 import SeatMap from '../../components/SeatMap';
+import { TripBusPicker, useCompanyBuses } from '../../components/Fleet';
 
 const sectionByPath = {
   '/company-operator': 'overview',
@@ -554,52 +555,6 @@ function TripCard({ trip, onStatusChange, updating }) {
   );
 }
 
-function CapacityEditor({ trip, bookedSeats, onSaved }) {
-  const [value, setValue] = useState(String(trip.capacity || ''));
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  const status = String(trip.status || '').toLowerCase();
-  if (!['scheduled', 'boarding'].includes(status)) return null;
-  const dirty = Number(value) !== Number(trip.capacity);
-
-  const save = async () => {
-    setBusy(true);
-    setMsg('');
-    try {
-      const res = await apiRequest(`/companies/trips/${trip.id}/capacity/`, {
-        method: 'PATCH',
-        body: { capacity: Number(value) },
-      });
-      onSaved(res?.capacity ?? Number(value));
-      setMsg('Saved');
-    } catch (e) {
-      setMsg(e?.message || 'Could not save');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="operator-capacity-edit">
-      <label>
-        <span>Seats</span>
-        <input
-          type="number"
-          min={Math.max(1, bookedSeats)}
-          max={100}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-      </label>
-      <button type="button" onClick={save} disabled={!dirty || busy}>
-        {busy ? 'Saving…' : 'Save'}
-      </button>
-      {msg && <small role="status">{msg}</small>}
-    </div>
-  );
-}
-
-
 // Who sits where, and blocking seats for walk-ins or staff (loads on demand).
 function TripSeats({ trip }) {
   const [open, setOpen] = useState(false);
@@ -718,6 +673,7 @@ export default function CompanyOperatorDashboard() {
 
   const companyId =
     user?.company_id || user?.company?.id || user?.company;
+  const { buses } = useCompanyBuses(companyId);
 
   const loadOperations = useCallback(
     async (showRefresh = false) => {
@@ -1632,14 +1588,17 @@ export default function CompanyOperatorDashboard() {
                   />
                 </div>
 
-                <CapacityEditor
+                <span className="operator-capacity-bus">
+                  {trip.bus_plate
+                    ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate} · ${trip.vehicle_label}`
+                    : 'No bus assigned'}
+                </span>
+                <TripBusPicker
                   trip={trip}
-                  bookedSeats={bookedSeats}
-                  onSaved={(cap) =>
-                    setTrips((cur) =>
-                      cur.map((t) =>
-                        t.id === trip.id ? { ...t, capacity: cap } : t
-                      )
+                  buses={buses}
+                  onSaved={(updated) =>
+                    updated && setTrips((cur) =>
+                      cur.map((t) => (t.id === trip.id ? { ...t, ...updated } : t))
                     )
                   }
                 />

@@ -98,14 +98,25 @@ export default function SeatMap({ tripId, mode = 'view', selected = [], onChange
 
   return (
     <div className="seatmap">
+      <dl className="seatmap-ticket">
+        <div><dt>Bus</dt><dd>{data.bus?.fleet_number || 'Not assigned yet'}</dd></div>
+        <div><dt>Plate</dt><dd>{data.bus?.plate || '—'}</dd></div>
+        <div><dt>Driver</dt><dd>{data.driver_name || '—'}</dd></div>
+        <div className="seatmap-ticket-wide"><dt>Vehicle</dt><dd>{data.vehicle_label}</dd></div>
+      </dl>
+      {!data.plan_verified && (
+        <p className="seatmap-note">
+          No published seat plan for this bus: seat numbers are real, their positions may differ slightly.
+        </p>
+      )}
       <div className="seatmap-bus" style={{ '--cols': cols }} role="group"
-        aria-label={`Seat map of a ${data.capacity}-seater, front at the top. Driver front right, door on the left.`}>
+        aria-label={`Seat map of the ${data.vehicle_label}, front at the top. Driver front right, door on the left.`}>
         <div className="seatmap-windscreen" aria-hidden="true">Front</div>
         <div className="seatmap-grid">
           {data.layout.map((row, i) => row.map((cell, j) => {
             const key = `${i}-${j}`;
             if (cell === 'D') return <div key={key} className="seat-driver" title="Driver" aria-hidden="true"><i /></div>;
-            if (cell === 'door') return <div key={key} className="seat-door" aria-hidden="true" />;
+            if (cell === 'door') return <div key={key} className={j === 0 ? 'seat-door' : 'seat-door-step'} aria-hidden="true" />;
             if (cell == null) return <div key={key} className="seat-gap" aria-hidden="true" />;
             return tile(cell);
           }))}

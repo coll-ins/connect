@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from bookings.models import Booking, Payment
+from buses.models import Bus
 from companies.models import Company, Route, Trip
 from drivers.models import Driver
 
@@ -40,7 +41,16 @@ class ReceiptDriverTests(APITestCase):
 
     def test_paid_trip_shows_driver_name_bus_and_phone(self):
         d = self._driver_of(self._book("confirmed"))
-        self.assertEqual(d, {"name": "Peter Kamau", "phone_number": "+254700000009", "bus_number": "KDH 112E"})
+        self.assertEqual(d, {"name": "Peter Kamau", "phone_number": "+254700000009",
+                             "bus_number": "KDH 112E", "bus_plate": None})
+
+    def test_receipt_names_the_trips_own_bus(self):
+        bus = Bus.objects.create(company=self.route.company, registration_number="KDK 404M",
+                                 bus_number="SM-12", vehicle_type="minibus_33", capacity=1)
+        self.trip.bus = bus
+        self.trip.save()
+        d = self._driver_of(self._book("confirmed"))
+        self.assertEqual((d["bus_number"], d["bus_plate"]), ("SM-12", "KDK 404M"))
 
     def test_cancelled_trip_hides_driver_phone(self):
         d = self._driver_of(self._book("cancelled", pay_status="failed"))

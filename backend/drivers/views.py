@@ -662,7 +662,7 @@ def my_driver_timetable(request):
             departure_at__gte=start_at,
             departure_at__lt=end_at,
         )
-        .select_related('driver', 'route')
+        .select_related('driver', 'route', 'bus')
         .order_by('departure_at', 'id')
     )
 
@@ -678,7 +678,8 @@ def my_driver_timetable(request):
                     'route_name': trip.route.name,
                     'start_point': trip.route.start_point,
                     'end_point': trip.route.end_point,
-                    'bus_number': trip.driver.bus_number,
+                    'bus_number': trip.bus.bus_number if trip.bus_id else trip.driver.bus_number,
+                    'bus_plate': trip.bus.registration_number if trip.bus_id else None,
                     'capacity': trip.capacity,
                 }
                 for trip in trips

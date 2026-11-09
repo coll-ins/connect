@@ -33,6 +33,7 @@ import {
 import { apiRequest } from '../../api';
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
+import { BusOptions, useCompanyBuses } from '../../components/Fleet';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -80,7 +81,7 @@ const emptyTrip = {
   route_id: '',
   driver_id: '',
   departure_at: '',
-  capacity: 14,
+  bus_id: '',
   company_id: '',
 };
 
@@ -1389,6 +1390,7 @@ export default function PlatformAdminDashboard() {
 
   const [tripModal, setTripModal] = useState(false);
   const [tripForm, setTripForm] = useState(emptyTrip);
+  const { buses: tripBuses } = useCompanyBuses(tripForm.company_id);
   const [tripSaving, setTripSaving] = useState(false);
 
   const [operatorModal, setOperatorModal] = useState(false);
@@ -2121,7 +2123,7 @@ export default function PlatformAdminDashboard() {
         driver_id: tripForm.driver_id,
         driver: tripForm.driver_id,
         departure_at: tripForm.departure_at,
-        capacity: Number(tripForm.capacity),
+        bus_id: Number(tripForm.bus_id),
         company_id: tripForm.company_id,
       };
 
@@ -4802,6 +4804,7 @@ export default function PlatformAdminDashboard() {
                           event.target.value,
                         route_id: '',
                         driver_id: '',
+                        bus_id: '',
                       })
                     }
                     required
@@ -4935,25 +4938,24 @@ export default function PlatformAdminDashboard() {
                 </div>
 
                 <div className="pa-field">
-                  <label>
-                    Capacity
+                  <label htmlFor="pa-trip-bus">
+                    Bus (its seats are the trip's seats)
                   </label>
 
-                  <input
-                    type="number"
-                    min="1"
-                    value={
-                      tripForm.capacity
-                    }
+                  <select
+                    id="pa-trip-bus"
+                    value={tripForm.bus_id}
+                    disabled={!tripForm.company_id}
                     onChange={(event) =>
                       setTripForm({
                         ...tripForm,
-                        capacity:
-                          event.target.value,
+                        bus_id: event.target.value,
                       })
                     }
                     required
-                  />
+                  >
+                    <BusOptions buses={tripBuses} />
+                  </select>
                 </div>
               </div>
 

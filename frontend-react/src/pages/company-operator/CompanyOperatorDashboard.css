@@ -1612,3 +1612,4 @@
 }
 .operator-seats-toggle:hover { background: var(--surface-2); }
 .operator-seats-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.operator-capacity-bus { display: block; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
