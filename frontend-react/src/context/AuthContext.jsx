@@ -117,7 +117,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials }));
-  const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials }));
+  // Signup renders its own role="alert" error; a global toast would say it twice.
+  const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials, silent: true }));
 
   const logout = async () => {
     try { await apiRequest('/users/logout/', { method: 'POST' }); } finally {

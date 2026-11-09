@@ -7,7 +7,32 @@ const passenger = {
   role: 'passenger',
 };
 
+// Shape of GET /api/bookings/trips/<id>/seat-map/ (backend bookings/seats.py
+// seat_map) for a 14-seat HiAce with seat 3 already sold.
+const seatMap = {
+  trip_id: 22,
+  capacity: 14,
+  bus: { fleet_number: 'EXL-01', plate: 'KDA 123A', vehicle_type: 'matatu_14' },
+  vehicle_label: '14-seater matatu (Toyota HiAce Commuter)',
+  plan_verified: true,
+  driver_name: 'Maria Njeri',
+  layout: [
+    [1, 2, null, 'D'],
+    ['door', 3, 4, 5],
+    [6, null, 7, 8],
+    [9, null, 10, 11],
+    [12, null, 13, 14],
+  ],
+  seats: Array.from({ length: 14 }, (_, i) => (
+    i + 1 === 3 ? { no: 3, state: 'booked', mine: false } : { no: i + 1, state: 'free' }
+  )),
+  unassigned: 0,
+};
+
 test('cash reservation opens its trip map without confirming payment', async ({ page }) => {
+  // Cash is off at launch (CASH_ENABLED); this rider is on a cash-enabled
+  // deployment and has earned it.
+  const cashPassenger = { ...passenger, cash_enabled: true, can_pay_cash: true };
   let selectedDate;
   let createdBooking;
   let cashSelected = false;
@@ -42,7 +67,7 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
     if (path === '/api/users/csrf/') {
       body = { csrfToken: 'e2e-csrf-token' };
     } else if (path === '/api/users/profile/') {
-      body = { user: passenger };
+      body = { user: cashPassenger };
     } else if (path === '/api/companies/') {
       body = [{ id: 1, name: 'Express Line' }];
     } else if (path === '/api/companies/1/routes/') {
@@ -60,12 +85,14 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
         id: 22,
         departure_at: `${selectedDate}T09:00:00+03:00`,
         status: 'scheduled',
-        capacity: 10,
+        capacity: 14,
         route_details: {
           name: 'Nairobi to Mombasa',
           price: '800.00',
         },
       }];
+    } else if (path === '/api/bookings/trips/22/seat-map/') {
+      body = seatMap;
     } else if (path === '/api/bookings/create/' && method === 'POST') {
       createdBooking = route.request().postDataJSON();
       body = {
@@ -95,7 +122,7 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
 
   await page.addInitScript((user) => {
     localStorage.setItem('user_session', JSON.stringify(user));
-  }, passenger);
+  }, cashPassenger);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/passenger');
 
@@ -113,8 +140,8 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
   expect(modalBounds.y).toBeGreaterThanOrEqual(0);
   expect(modalBounds.y + modalBounds.height).toBeLessThanOrEqual(844);
 
-  // On a short phone, the seat buttons, Confirm and the payment choices must
-  // all be on screen without scrolling.
+  // On a short phone, the seat choice, the book button and the payment
+  // choices must all be on screen without scrolling.
   // 540 is what a small phone has left once its browser bars are showing.
   await page.setViewportSize({ width: 360, height: 540 });
   const expectOnScreen = async (locator) => {
@@ -131,29 +158,38 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
     });
     expect(onTop).toBe(true);
   };
-  await expectOnScreen(page.getByRole('button', { name: 'Add a seat' }));
-  await expectOnScreen(page.getByRole('button', { name: 'Remove a seat' }));
-  await expectOnScreen(page.getByRole('button', { name: 'Confirm booking' }));
+  await expect(page.getByRole('button', { name: 'Seat 3, booked' })).toBeDisabled();
+  await expectOnScreen(page.getByRole('radio', { name: 'Choose for me' }));
+  await expectOnScreen(page.getByRole('button', { name: 'Pick a seat first' }));
+  await expect(page.getByRole('button', { name: 'Pick a seat first' })).toBeDisabled();
 
-  await page.getByRole('button', { name: 'Add a seat' }).click();
-  await expect(page.locator('.booking-seat-stepper strong')).toHaveText('2');
-  await page.getByRole('button', { name: 'Remove a seat' }).click();
-  await expect(page.locator('.booking-seat-stepper strong')).toHaveText('1');
+  await page.getByRole('radio', { name: 'Choose for me' }).click();
+  const seatCount = page.locator('.booking-seat-count strong');
+  await expect(seatCount).toHaveText('1');
+  await page.getByRole('button', { name: 'One seat more' }).click();
+  await expect(seatCount).toHaveText('2');
+  await page.getByRole('button', { name: 'One seat fewer' }).click();
+  await expect(seatCount).toHaveText('1');
 
-  await page.getByRole('button', { name: 'Confirm booking' }).click();
-  await expectOnScreen(page.getByRole('button', { name: /Pay with cash/ }));
+  await page.getByRole('radio', { name: "I'll pick my seats" }).click();
+  await page.getByRole('button', { name: 'Seat 5, free' }).click();
+  await expectOnScreen(page.getByRole('button', { name: 'Book seat 5' }));
+  await page.getByRole('button', { name: 'Book seat 5' }).click();
+  await expectOnScreen(page.getByRole('button', { name: /Pay cash on board/ }));
   await expectOnScreen(page.getByRole('button', { name: /Pay online/ }));
-  await page.getByRole('button', { name: /Pay with cash/ }).click();
+  await page.getByRole('button', { name: /Pay cash on board/ }).click();
 
   await expect(page).toHaveURL(/\/passenger\/map\?booking=42$/);
   const paymentNotice = page.locator('.cn-notice-info');
   await expect(paymentNotice).toContainText('Cash payment selected', { timeout: 15000 });
-  await expect(paymentNotice).toContainText('Pay the driver to confirm');
+  await expect(paymentNotice).toContainText('Pay your fare in cash to the driver');
   await expect.poll(() => bookingsAfterCash, { timeout: 15000 }).toBeGreaterThanOrEqual(3);
   await expect(
     page.locator('.leaflet-overlay-pane path').first(),
   ).toBeVisible();
-  expect(createdBooking).toEqual({ trip_id: 22, seats: 1, pickup_stage_id: 5 });
+  expect(createdBooking).toEqual({
+    trip_id: 22, seats: 1, seat_numbers: [5], pickup_stage_id: 5,
+  });
   expect(selectedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 });
 
@@ -205,9 +241,11 @@ test('confirmed M-PESA payment enters the selected trip map automatically', asyn
         id: 22,
         departure_at: '2026-11-06T09:00:00+03:00',
         status: 'scheduled',
-        capacity: 10,
+        capacity: 14,
         route_details: { name: 'Nairobi to Mombasa', price: '800.00' },
       }];
+    } else if (path === '/api/bookings/trips/22/seat-map/') {
+      body = seatMap;
     } else if (path === '/api/bookings/create/' && request.method() === 'POST') {
       createdBooking = request.postDataJSON();
       body = {
@@ -243,7 +281,11 @@ test('confirmed M-PESA payment enters the selected trip map automatically', asyn
   await page.getByRole('button', { name: /Nairobi.*Mombasa/ }).click();
   await page.getByRole('button', { name: /Westlands/ }).click();
   await page.getByRole('button', { name: /Select trip/ }).click();
-  await page.getByRole('button', { name: 'Confirm booking' }).click();
+  await expect(page.getByRole('button', { name: /Pay cash on board/ })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Choose for me' }).click();
+  await page.getByRole('button', { name: 'Book 1 seat' }).click();
+  // Cash is off at launch: online payment is the only choice.
+  await expect(page.getByRole('button', { name: /Pay cash on board/ })).toHaveCount(0);
   await page.getByRole('button', { name: /Pay online/ }).click();
   await page.getByRole('button', { name: 'M-PESA' }).click();
   await page.getByRole('button', { name: 'Pay with my number' }).click();

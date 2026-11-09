@@ -45,13 +45,14 @@ test.describe('CONNECT public entry and access guards', () => {
     }
   });
 
-  test('unknown URL redirects to login', async ({ page }) => {
+  test('unknown URL redirects to the landing page', async ({ page }) => {
     await page.goto('/this-route-does-not-exist');
 
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL('/');
     await expect(
-      page.getByRole('heading', { name: 'Welcome back' }),
+      page.getByRole('heading', { name: /Your matatu seat, booked/ }),
     ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   });
 
   test('signup link opens account creation route', async ({ page }) => {
@@ -98,7 +99,8 @@ test.describe('CONNECT public entry and access guards', () => {
     });
 
     await page.goto('/signup');
-    await page.getByLabel('First and last name').fill('New Passenger');
+    await page.getByLabel('First name').fill('New');
+    await page.getByLabel('Last name').fill('Passenger');
     await page.getByLabel('Phone number').fill('0712345678');
     await page.getByLabel('Usual location').fill('CBD');
     await page.getByRole('textbox', { name: 'Password' }).fill('StrongPassword123!');
@@ -131,7 +133,8 @@ test.describe('CONNECT public entry and access guards', () => {
     });
 
     await page.goto('/signup');
-    await page.getByLabel('First and last name').fill('Existing Passenger');
+    await page.getByLabel('First name').fill('Existing');
+    await page.getByLabel('Last name').fill('Passenger');
     await page.getByLabel('Phone number').fill('0712345678');
     await page.getByRole('textbox', { name: 'Password' }).fill('StrongPassword123!');
     await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();

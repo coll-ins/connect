@@ -1247,6 +1247,17 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
               </div>
             </div>
+
+            {/* In the scrolling part: a 51-seat coach is taller than a phone,
+                and the footer below must keep Book on screen. */}
+            <SeatMap
+              tripId={bookingTrip.id}
+              mode="pick"
+              selected={pickedSeats}
+              onChange={(next) => { setAutoCount(0); setPickedSeats(next); }}
+              max={Math.min(20, seatsLeft(bookingTrip))}
+              refreshKey={seatMapKey}
+            />
             </div>
 
             <div className="booking-modal-footer">
@@ -1281,14 +1292,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 {autoCount ? (
                   <p className="booking-seat-note">Free seats are picked at random when you book. Your seat numbers show on your ticket.</p>
                 ) : null}
-                <SeatMap
-                  tripId={bookingTrip.id}
-                  mode="pick"
-                  selected={pickedSeats}
-                  onChange={(next) => { setAutoCount(0); setPickedSeats(next); }}
-                  max={Math.min(20, seatsLeft(bookingTrip))}
-                  refreshKey={seatMapKey}
-                />
               </div>
 
               <div className="booking-total-glass">
