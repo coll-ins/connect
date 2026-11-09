@@ -18,10 +18,19 @@ export function clearRequestError() {
   latestRequestError = '';
 }
 
+// DRF answers an expired session with 403 + this detail, not 401.
+const NOT_SIGNED_IN = 'Authentication credentials were not provided.';
+function sessionGone(status, data) {
+  return status === 403 && data?.detail === NOT_SIGNED_IN;
+}
+
 function getErrorMessage(status, data) {
   if (status === 401) {
     if (typeof data?.error === 'string') return data.error;
     return 'Your session may have expired. Please sign in and try again.';
+  }
+  if (sessionGone(status, data)) {
+    return 'You were signed out. Please sign in again.';
   }
   if (status === 403) {
     return 'You don’t have permission to do that. Please check your account and try again.';
@@ -132,6 +141,12 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   if (!response.ok) {
+    // Session ended on the server (expired, or the account was closed): end it
+    // here too, so the guards send the user to sign in instead of leaving them
+    // on a screen where every action fails. A wrong password on login is not this.
+    if ((response.status === 401 && !endpoint.includes('/users/login')) || sessionGone(response.status, data)) {
+      window.dispatchEvent(new Event('connect:signed-out'));
+    }
     const message = getErrorMessage(response.status, data);
     if (!options.silent) notifyRequestError(message);
     const error = new Error(message);

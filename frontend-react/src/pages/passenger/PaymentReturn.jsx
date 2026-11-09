@@ -25,7 +25,8 @@ export default function PaymentReturn() {
             `/bookings/payments/${bookingId}/verify/`,
             { method: 'POST', body: { reference } },
           ),
-          apiRequest('/bookings/my/'),
+          // Only used to pre-fill the map; its failure must not hide a confirmed payment.
+          apiRequest('/bookings/my/', { silent: true }).catch(() => null),
         ]);
         if (!active) return;
 
@@ -78,6 +79,13 @@ export default function PaymentReturn() {
     };
   }, [attempt, bookingId, navigate, reference]);
 
+  // Paystack usually confirms within seconds: check again on our own for about a minute.
+  useEffect(() => {
+    if (status !== 'pending' || attempt >= 15) return undefined;
+    const t = setTimeout(() => setAttempt((value) => value + 1), 4000);
+    return () => clearTimeout(t);
+  }, [status, attempt]);
+
   return (
     <div className="auth-page">
       {(status === 'error' || status === 'map-error') && (
@@ -108,7 +116,7 @@ export default function PaymentReturn() {
               : 'Checking payment'}
         </h1>
         <p className="muted">{message}</p>
-        {status === 'error' || status === 'map-error' ? (
+        {status === 'error' || status === 'map-error' || status === 'pending' ? (
           <button
             type="button"
             className="btn btn-primary"
@@ -124,6 +132,9 @@ export default function PaymentReturn() {
           <Link className="btn btn-primary" to="/passenger">
             Back to passenger dashboard
           </Link>
+        )}
+        {status === 'pending' && (
+          <Link className="btn btn-ghost" to="/passenger/bookings">See my bookings</Link>
         )}
       </div>
     </div>

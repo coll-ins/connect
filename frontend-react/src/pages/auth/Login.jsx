@@ -4,6 +4,10 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
 import PasswordInput from '../../components/PasswordInput';
+import FieldNote from '../../components/FieldNote';
+import { checkPhone, PHONE_HINT } from '../../utils/inputRules';
+import AuthTopBar from './AuthTopBar';
+import './Auth.css';
 
 // Only return to a page inside this user's own area.
 function returnPath(user, from) {
@@ -35,6 +39,7 @@ export default function Login() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setLoading(true);
 
@@ -52,6 +57,8 @@ export default function Login() {
     }
   };
 
+  const phoneError = checkPhone(phone);
+
   // Already signed in on this device: go straight in.
   if (signedInUser) {
     return <Navigate to={returnPath(signedInUser, location.state?.from)} replace />;
@@ -60,14 +67,12 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="brand-mark">C</div>
+        <AuthTopBar mode="signin" />
 
-        <p className="eyebrow">CONNECT matatu booking</p>
-
-        <h1>Welcome back</h1>
+        <h1>Sign in</h1>
 
         <p className="muted">
-          Sign in to manage trips, bookings and payments.
+          Use the phone number and password you signed up with.
         </p>
 
         {error && <div className="error">{error}</div>}
@@ -77,14 +82,19 @@ export default function Login() {
             Phone number
             <input
               type="tel"
+              inputMode="tel"
+              maxLength={16}
               className="input"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="07XX XXX XXX or +2547XX XXX XXX"
+              placeholder="07XX XXX XXX"
               autoComplete="tel"
+              aria-describedby="li-phone"
+              aria-invalid={Boolean(phone.trim() && phoneError)}
               required
             />
           </label>
+          <FieldNote id="li-phone" value={phone} error={phoneError} hint={PHONE_HINT} />
 
           <label>
             Password
@@ -109,9 +119,6 @@ export default function Login() {
           )}
         </form>
 
-        <p className="auth-footer">
-          New to CONNECT? <Link to="/signup">Create an account</Link>
-        </p>
         <nav className="auth-legal" aria-label="Legal">
           <Link to="/legal/terms">Terms</Link>
           <Link to="/legal/privacy">Privacy</Link>

@@ -116,6 +116,15 @@ export function AuthProvider({ children }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const end = () => {
+      setUser(null);
+      localStorage.removeItem('user_session');
+    };
+    window.addEventListener('connect:signed-out', end);
+    return () => window.removeEventListener('connect:signed-out', end);
+  }, []);
+
   const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials }));
   // Signup renders its own role="alert" error; a global toast would say it twice.
   const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials, silent: true }));
@@ -127,7 +136,14 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const value = useMemo(() => ({ user, login, signup, logout, booting, isAuthenticated: Boolean(user) }), [user, booting]);
+  // The server signs the account out itself, so only local state is cleared.
+  const closeAccount = async (password) => {
+    await apiRequest('/users/delete-account/', { method: 'POST', body: { password }, silent: true });
+    setUser(null);
+    localStorage.removeItem('user_session');
+  };
+
+  const value = useMemo(() => ({ user, login, signup, logout, closeAccount, booting, isAuthenticated: Boolean(user) }), [user, booting]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

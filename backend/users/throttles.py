@@ -16,6 +16,11 @@ class SignupPhoneThrottle(SimpleRateThrottle):
         return self.cache_format % {'scope': self.scope, 'ident': digits[-9:]}
 
 
+class SignupIPThrottle(AnonRateThrottle):
+    # Loose on purpose: many Safaricom phones share one carrier IP.
+    scope = 'signup_ip'
+
+
 class LoginIPThrottle(AnonRateThrottle):
     # Per-IP limit for login only, separate from the general anon bucket.
     scope = 'login_ip'

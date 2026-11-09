@@ -759,6 +759,50 @@ export function PassengerPayments() {
   );
 }
 
+function CloseAccount() {
+  const { closeAccount } = useAuth();
+  const navigate = useNavigate();
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    if (!window.confirm('Delete your CONNECT account? You will be signed out and cannot undo this.')) return;
+    setError('');
+    setBusy(true);
+    try {
+      await closeAccount(password);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="close-account" aria-labelledby="close-account-title">
+      <h2 id="close-account-title">Close account</h2>
+      <p>
+        Removes your name, phone number and password. Booking and payment records are kept without them, as the law
+        requires. <Link to="/legal/delete-account">What is kept and why</Link>
+      </p>
+      {error && <div className="error" role="alert">{error}</div>}
+      <form onSubmit={submit} className="form-stack">
+        <label>
+          Your password, to confirm it is you
+          <input type="password" className="input" autoComplete="current-password" value={password}
+            onChange={(e) => setPassword(e.target.value)} required />
+        </label>
+        <button className="btn btn-danger" disabled={busy || !password}>
+          {busy ? 'Deleting account…' : 'Delete my account'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 export function PassengerProfile() {
   const { user } = useAuth();
   const looksLikePhone = (v) => /^\+?[0-9\s-]{7,}$/.test(String(v || ''));
@@ -817,6 +861,8 @@ export function PassengerProfile() {
           </strong>
         </div>
       </div>
+
+      <CloseAccount />
     </PassengerPage>
   );
 }

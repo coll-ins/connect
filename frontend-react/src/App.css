@@ -909,23 +909,37 @@
   margin-bottom: 30px;
 }
 
+/* The one back control: a real button, top-left, always readable. */
 .journey-back {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: fit-content;
+  min-height: 44px;
   margin-bottom: 16px;
-  padding: 0;
-  border: 0;
-  color: var(--text-2);
-  background: transparent;
-  font-size: 13px;
+  padding: 0 16px 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  background: var(--surface-2);
+  font-size: 15px;
   font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
 
 .journey-back:hover {
-  color: var(--text);
+  background: var(--surface-3);
+}
+
+.journey-back:active {
+  transform: scale(0.98);
+}
+
+.journey-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .journey-heading h1 {

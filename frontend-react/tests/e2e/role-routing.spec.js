@@ -104,7 +104,7 @@ test.describe('CONNECT role-specific navigation', () => {
     await page.goto('/company-manager');
 
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => localStorage.getItem('user_session'))).toBeNull();
   });
 });

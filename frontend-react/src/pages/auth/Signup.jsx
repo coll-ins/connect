@@ -8,6 +8,7 @@ import FieldNote from '../../components/FieldNote';
 import { checkName, checkPhone, checkPlace, PHONE_HINT } from '../../utils/inputRules';
 import '../../legal/Legal.css';
 import './Auth.css';
+import AuthTopBar from './AuthTopBar';
 
 // One name part: letters (incl. accented), apostrophes, hyphens; 2+ characters.
 const NAME_PATTERN = " *[A-Za-z\\u00C0-\\u024F'’\\-]{2,} *";
@@ -28,7 +29,7 @@ export default function Signup() {
   const errLocation = checkPlace(form.location, 'your usual location', { required: false, example: 'e.g. CBD or Rongai' });
 
   const submit = async (e) => {
-    e.preventDefault(); setError('');
+    e.preventDefault(); if (loading) return; setError('');
     const problem = errName || errPhone || errLocation;
     if (problem) { setError(problem); return; }
     if (!strong) { setPwTouched(true); setError('Your password does not meet every requirement below.'); return; }
@@ -45,8 +46,8 @@ export default function Signup() {
   };
 
   return <div className="auth-page"><div className="auth-card">
-    <Link to="/" className="brand-mark" aria-label="CONNECT home">C</Link>
-    <h1 className="signup-title">Create your account</h1>
+    <AuthTopBar mode="signup" />
+    <h1>Create your account</h1>
     <p className="muted">Book matatu seats, track your bus live and keep every receipt in one place.</p>
     {error && <div className="error" role="alert">{error}</div>}
     <form onSubmit={submit} className="form-stack">
@@ -89,6 +90,5 @@ export default function Signup() {
       </label>
       <button className="btn btn-primary btn-full" disabled={loading || !form.accept_terms}>{loading ? 'Creating account…' : 'Create account'}</button>
     </form>
-    <p className="auth-footer">Already have an account? <Link to="/login">Sign in</Link></p>
   </div></div>;
 }
