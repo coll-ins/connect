@@ -374,7 +374,15 @@ def manage_schedule(request, schedule_id):
                     status__in=('scheduled', 'boarding', 'departed'),
                 ).exclude(schedule=s).values('departure_at'),
             )
-            empty.update(bus=s.bus, capacity=s.capacity)
+            with transaction.atomic():
+                # Lock first, then re-check: a booking or a blocked seat may
+                # have landed since the query above was planned.
+                ids = list(empty.select_for_update(of=('self',)).values_list('id', flat=True))
+                Trip.objects.filter(
+                    id__in=ids, bookings__isnull=True, parcels__isnull=True,
+                ).exclude(
+                    seat_assignments__seat_no__gt=s.capacity,
+                ).update(bus=s.bus, capacity=s.capacity)
         date_changed = old_start != s.start_date or old_end != s.end_date
         date_window_expanded = (
             date_changed

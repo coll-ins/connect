@@ -69,3 +69,26 @@ class SignupRejectsNonsenseTests(SimpleTestCase):
                 r = self._signup(**over)
                 self.assertEqual(r.status_code, 400, r.data)
                 self.assertIn(field, str(r.data))
+
+
+class BreakerFindingsTests(SimpleTestCase):
+    databases = frozenset({'default'})
+
+    def test_signup_refuses_a_number_stored_in_an_older_spelling(self):
+        from rest_framework.test import APIClient
+
+        from users.models import CustomUser
+        u = CustomUser.objects.create_user(username='legacy', password='x', phone_number='+254711000501')
+        CustomUser.objects.filter(pk=u.pk).update(phone_number='0711000501')
+        r = APIClient().post('/api/users/register/', {
+            'name': 'Amina Hassan', 'phone_number': '+254711000501',
+            'password': 'StrongPassword123!', 'accept_terms': True}, format='json')
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertEqual(CustomUser.objects.filter(phone_number__endswith='711000501').count(), 1)
+
+    def test_non_text_is_refused(self):
+        from connect.validation import free_text, person_name, place
+        for check in (place, person_name, free_text):
+            for value in (True, 12, ['Westlands'], {'a': 1}):
+                with self.subTest(check=check.__name__, value=value), self.assertRaises(ValidationError):
+                    check(value)

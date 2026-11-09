@@ -33,6 +33,12 @@ _PLACEHOLDERS = {
 }
 
 
+def _text(value, label):
+    if value is not None and not isinstance(value, str):
+        raise ValidationError(f'Type {label} as words.')
+    return value
+
+
 def _clean(value):
     return ' '.join(str(value or '').split())
 
@@ -90,7 +96,7 @@ def place(value, label='the place', required=True, max_length=100,
     """A real place name: 'Westlands', 'Kencom, Moi Avenue', '4th Ngong Road'.
     Also used for other short proper names (companies, routes): `example`
     shows the person what fits."""
-    text = _clean(value)
+    text = _clean(_text(value, label))
     if not text:
         if required:
             raise ValidationError(f'Enter {label}, {example}.')
@@ -113,7 +119,7 @@ def place(value, label='the place', required=True, max_length=100,
 
 def person_name(value, label='the name', parts=2, max_length=100):
     """'Collins Otieno'. Letters, apostrophes and hyphens; `parts` names at least."""
-    text = _clean(value)
+    text = _clean(_text(value, label))
     example = 'e.g. Collins Otieno'
     words = text.split(' ') if text else []
     if len(text) > max_length:
@@ -134,7 +140,7 @@ def person_name(value, label='the name', parts=2, max_length=100):
 
 def free_text(value, label='this field', required=True, min_letters=3, max_length=1000):
     """Written sentences: must contain real words, not keyboard mashing."""
-    text = str(value or '').strip()
+    text = str(_text(value, label) or '').strip()
     if not text:
         if required:
             raise ValidationError(f'Please fill in {label}.')

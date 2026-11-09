@@ -87,6 +87,13 @@ def signup(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Older rows may hold 07... or 2547...; one number, one account.
+    if CustomUser.objects.filter(phone_number__in=phone_variants(data['phone_number'])).exists():
+        return Response(
+            {'error': 'This phone number already has an account. Sign in instead.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     if len(str(data.get('password') or '')) < 8:
         return Response(
             {'error': 'Password must be at least 8 characters long.'},

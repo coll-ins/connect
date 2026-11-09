@@ -15,7 +15,8 @@ class _TypedFields:
 
     def validate_phone_number(self, value):
         # Signup requires a phone (users/views.signup); staff may have none.
-        return kenyan_mobile(value) if str(value or '').strip() else value
+        # None, not '': the column is unique and allows many NULLs.
+        return kenyan_mobile(value) if str(value or '').strip() else None
 
     def validate_location(self, value):
         return place(value, 'the usual location', required=False)
