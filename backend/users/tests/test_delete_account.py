@@ -46,3 +46,13 @@ class DeleteAccountTests(TestCase):
         self.user.save()
         res = self.client.post(URL, {'password': 'Str0ng!Pass'}, format='json')
         self.assertEqual(res.status_code, 403)
+
+    def test_breaker_regressions(self):
+        # Normal traffic must not use up the 5 delete tries.
+        for _ in range(6):
+            self.client.get('/api/users/profile/')
+        # A non-text password is a 400, not a crash.
+        self.assertEqual(self.client.post(URL, {'password': 12345}, format='json').status_code, 400)
+        # Someone pre-claiming "deleted_<id>" cannot block the close.
+        CustomUser.objects.create_user(username=f'deleted_{self.user.pk}', password='x', phone_number='+254798765432')
+        self.assertEqual(self.client.post(URL, {'password': 'Str0ng!Pass'}, format='json').status_code, 200)

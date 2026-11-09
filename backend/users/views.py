@@ -1,4 +1,5 @@
 import hmac
+import uuid
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth import authenticate, login, logout
@@ -611,7 +612,8 @@ def company_staff_detail(request, staff_id):
 
 class DeleteAccountThrottle(UserRateThrottle):
     # Stops password guessing from a session left open on a shared phone.
-    rate = '5/hour'
+    # Own scope, so ordinary API calls don't use up these 5 tries.
+    scope = 'delete_account'
 
 
 @api_view(['POST'])
@@ -626,7 +628,8 @@ def delete_account(request):
             {'error': 'Staff and driver accounts are closed by your company manager.'},
             status=status.HTTP_403_FORBIDDEN,
         )
-    if not user.check_password(request.data.get('password') or ''):
+    password = request.data.get('password')
+    if not isinstance(password, str) or not user.check_password(password):
         return Response(
             {'error': 'That password is wrong. Enter the password you sign in with.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -660,7 +663,8 @@ def delete_account(request):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        user.username = f'deleted_{user.pk}'
+        # Random suffix: a sign-up can't pre-claim this name and block the close.
+        user.username = f'deleted_{user.pk}_{uuid.uuid4().hex[:12]}'
         user.first_name = ''
         user.last_name = ''
         user.email = ''
