@@ -3,51 +3,79 @@
 @media (min-width: 768px) { .lp-wrap { padding-left: 32px; padding-right: 32px; } }
 
 .lp h1, .lp h2, .lp h3, .lp p { margin: 0; }
-.lp h2 { font-size: clamp(1.75rem, 1.4rem + 1.5vw, 2.25rem); line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; }
+.lp h2 { font-size: clamp(2rem, 1.4rem + 2.6vw, 3rem); line-height: 1.08; letter-spacing: -0.03em; font-weight: 600; }
 .lp h3 { font-size: 1.125rem; font-weight: 600; }
 
-/* Nav */
-.lp-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 16px; padding-bottom: 16px; }
-.lp-logo { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.125rem; }
-.lp-logo .brand-mark { width: 40px; height: 40px; font-size: 1.25rem; border-radius: 10px; }
+/* Nav: a thin bar that stays put and lets the page show through it. */
+.lp-bar {
+  position: sticky; top: 0; z-index: 10;
+  background: rgb(11 18 21 / 0.72); border-bottom: 1px solid var(--border);
+  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+}
+.lp-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; }
+.lp-logo { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 1.0625rem; min-height: 44px; }
+.lp-logo .brand-mark { width: 32px; height: 32px; font-size: 1rem; border-radius: 8px; }
 .lp-nav-actions { display: flex; align-items: center; gap: 16px; }
-.lp-link { color: var(--text-2); font-weight: 600; padding: 12px 4px; text-underline-offset: 4px; }
-.lp-link:hover { color: var(--text); text-decoration: underline; }
-.lp .btn { min-height: 44px; }
+.lp-nav .btn { min-height: 36px; padding: 8px 16px; font-size: 0.9375rem; }
+.lp-link { color: var(--accent-text); font-weight: 500; padding: 12px 4px; text-underline-offset: 4px; }
+.lp-link::after { content: ' \203A'; }
+.lp-link:hover { text-decoration: underline; }
+.lp .btn { min-height: 44px; border-radius: 999px; }
 .lp .btn:focus-visible, .lp-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .lp .btn:active:not(:disabled) { transform: scale(0.98); }
-.lp-btn-lg { padding: 14px 24px; font-size: 1.0625rem; }
+.lp-btn-lg { padding: 14px 28px; font-size: 1.0625rem; }
 
-/* Hero */
-.lp-hero { display: grid; gap: 48px; padding-top: 32px; padding-bottom: 64px; align-items: center; }
-.lp-hero h1 { font-size: clamp(2.25rem, 1.5rem + 3.5vw, 4rem); line-height: 1.05; letter-spacing: -0.03em; font-weight: 700; max-width: 14ch; }
-.lp .lp-lead { margin-top: 20px; font-size: 1.125rem; line-height: 1.55; color: var(--text-2); max-width: 52ch; }
-.lp-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-top: 32px; }
+/* Hero: words only, centred, then the bus takes the whole screen. */
+.lp-hero { display: grid; justify-items: center; text-align: center; padding-top: 64px; padding-bottom: 64px; }
+.lp-hero h1 { font-size: clamp(2.5rem, 1.25rem + 5.5vw, 5rem); line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; max-width: 16ch; }
+.lp .lp-lead { margin-top: 24px; font-size: clamp(1.125rem, 1rem + 0.5vw, 1.375rem); line-height: 1.45; color: var(--text-2); max-width: 46ch; text-wrap: balance; }
+.lp-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 24px; margin-top: 32px; }
+@media (min-width: 960px) { .lp-hero { padding-top: 112px; padding-bottom: 96px; } }
 
-.lp-hero-visual { position: relative; max-width: 560px; width: 100%; justify-self: center; }
-.lp-hero-visual img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; object-position: center 30%; border-radius: var(--radius-panel); }
-
-/* The 3D stage: the one rich moment. Fixed ratio so nothing jumps while
-   three.js loads; a step lighter than the page, like a lit road at dusk. */
-.lp-stage {
-  position: relative; aspect-ratio: 1 / 1; border-radius: var(--radius-panel); overflow: hidden;
-  background: #121b21; /* the ground colour in HeroBus3D, so the road runs into it */
-  border: 1px solid var(--border);
-}
+/* The story: the one rich moment. The section is three screens tall; its
+   stage sticks for the whole of it while scrolling turns the bus and swaps
+   the words. #121b21 is the ground colour in HeroBus3D, so the road runs
+   off into the page. */
+/* App.css makes #root a scroll container on phones (overflow-x: hidden),
+   which stops anything inside it sticking. clip guards the same overflow. */
+#root:has(.lp) { overflow-x: clip; }
+.lp-story { height: 300svh; background: #121b21; }
+.lp-story-stage { position: sticky; top: 0; height: 100svh; display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+.lp-story-visual { position: relative; min-height: 0; }
+.lp-story-visual img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
 .lp-3d { position: absolute; inset: 0; }
 .lp-3d canvas { touch-action: pan-y; }
-.lp .lp-stage-caption {
-  position: absolute; top: 16px; right: 16px; max-width: 22ch; text-align: right;
-  font-size: 0.8125rem; line-height: 1.4; color: var(--text-3);
+
+.lp-chapters { list-style: none; margin: 0; padding: 24px 16px 40px; display: grid; }
+.lp-chapters li { grid-area: 1 / 1; opacity: 0; transform: translateY(12px); transition: opacity var(--dur-base) var(--ease), transform var(--dur-base) var(--ease); }
+.lp-chapters li.is-active { opacity: 1; transform: none; transition-duration: 480ms; }
+.lp .lp-chapters h2 { font-size: clamp(2rem, 1.25rem + 3.5vw, 3.5rem); line-height: 1.06; letter-spacing: -0.03em; }
+.lp .lp-chapters p { margin-top: 12px; font-size: 1.125rem; line-height: 1.5; color: var(--text-2); max-width: 36ch; }
+@media (min-width: 960px) {
+  .lp-story-stage { grid-template-rows: none; grid-template-columns: 5fr 7fr; align-items: center; }
+  .lp-story-visual { grid-column: 2; grid-row: 1; height: 100%; }
+  /* The road fades out before it reaches the words. */
+  .lp-story:not(.is-static) .lp-story-visual { -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%); mask-image: linear-gradient(90deg, transparent, #000 18%); }
+  .lp-chapters { grid-column: 1; grid-row: 1; padding: 0 32px 0 max(32px, calc((100vw - 1200px) / 2 + 32px)); }
+  .lp .lp-chapters p { font-size: 1.25rem; }
 }
 
-/* The ticket */
+/* No 3D or reduced motion: nothing pins, every chapter is on the page. */
+.lp-story.is-static { height: auto; }
+.lp-story.is-static .lp-story-stage { position: static; height: auto; }
+.lp-story.is-static .lp-story-visual { height: 56svh; }
+.lp-story.is-static .lp-chapters { gap: 40px; padding-top: 48px; padding-bottom: 64px; }
+.lp-story.is-static .lp-chapters li { grid-area: auto; opacity: 1; transform: none; }
+
+/* The ticket arrives with the last chapter. */
 .lp-ticket {
-  position: absolute; left: -16px; bottom: 24px; width: min(300px, 86%);
+  position: absolute; left: 16px; bottom: 16px; width: min(300px, calc(100% - 32px));
   padding: 16px 20px; border-radius: var(--radius-card);
   background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow-1);
-  animation: lp-rise 600ms var(--ease) 200ms both;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
 }
+.lp-ticket.is-shown { opacity: 1; transform: none; transition-duration: 480ms; }
 .lp-ticket-row { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
 .lp-live { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--accent-text); }
 .lp-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
@@ -58,18 +86,11 @@
 .lp-ticket dt { font-size: 0.75rem; color: var(--text-3); }
 .lp-ticket dd { margin: 4px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lp .lp-ticket p { margin-top: 12px; font-size: 0.8125rem; color: var(--text-2); }
-
-@keyframes lp-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-@media (min-width: 960px) {
-  .lp-hero { grid-template-columns: 1.1fr 1fr; padding-top: 64px; padding-bottom: 96px; }
-  .lp-hero-visual { justify-self: end; }
-  .lp-ticket { left: -64px; }
-}
+@media (min-width: 960px) { .lp-ticket { left: 32px; bottom: 48px; } }
 
 /* Sections */
-.lp-section { padding-top: 64px; padding-bottom: 64px; border-top: 1px solid var(--border); }
-@media (min-width: 960px) { .lp-section { padding-top: 96px; padding-bottom: 96px; } }
+.lp-section { padding-top: 80px; padding-bottom: 80px; }
+@media (min-width: 960px) { .lp-section { padding-top: 128px; padding-bottom: 128px; } }
 
 .lp-problems { list-style: none; padding: 0; margin: 40px 0 0; display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
 .lp-problems li { display: grid; gap: 8px; padding: 24px; background: var(--surface); }
@@ -113,13 +134,10 @@
 .lp-footer a:hover { color: var(--text); }
 
 @media (max-width: 480px) {
-  .lp-nav .lp-link { display: none; }
   .lp-cta .btn { width: 100%; }
-  .lp-ticket { left: 12px; right: 12px; width: auto; bottom: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-ticket { animation: none; }
   .lp .btn { transition: none; }
 }
 
@@ -167,7 +185,6 @@
   .lp-seatmap { width: 168px; padding: 12px; right: 12px; bottom: 12px; }
   .lp-seats { gap: 6px; }
 }
-@media (max-width: 639px) { .lp .lp-stage-caption { display: none; } }
 
 /* Installed-app welcome: one screen, one action. */
 .wl {

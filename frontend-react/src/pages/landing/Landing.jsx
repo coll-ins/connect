@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { Armchair, MapPinned, Package, Bus, Receipt, ShieldCheck, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -60,44 +60,50 @@ const STEPS = [
   { title: 'Board with your PIN', text: 'Track the bus, walk to your stage, show your PIN, ride.' },
 ];
 
-export default function Landing() {
-  const { user } = useAuth();
-  if (user) return <Navigate to={dashboardPath(user)} replace />;
-  if (isInstalledApp()) return <Welcome />;
+// The pinned story: the page scrolls, the bus stays and turns, the words change.
+const CHAPTERS = [
+  { title: 'Pick your exact seat.', text: 'See which seats are free on the next trips and choose yours before you leave the house.' },
+  { title: 'Pay from your phone.', text: 'M-Pesa or card. Your seat is confirmed the moment it is paid, with a receipt.' },
+  { title: 'Watch it come to you.', text: 'Follow your bus on a live map, stage by stage, and walk out when it is close.' },
+];
 
+// Pinning needs the 3D scene and a visitor who has not asked for less motion;
+// everyone else gets the same words stacked under a still picture.
+const SCRUB = webglOk && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function Story() {
+  const track = useRef(null);
+  const progress = useRef(0);
+  const [chapter, setChapter] = useState(0);
+
+  useEffect(() => {
+    if (!SCRUB) return undefined;
+    const onScroll = () => {
+      const r = track.current.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - window.innerHeight)));
+      progress.current = p;
+      setChapter(Math.min(CHAPTERS.length - 1, Math.floor(p * CHAPTERS.length)));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  const last = chapter === CHAPTERS.length - 1;
   return (
-    <div className="lp">
-      <header className="lp-nav lp-wrap">
-        <Link to="/" className="lp-logo"><span className="brand-mark">C</span>CONNECT</Link>
-        <nav className="lp-nav-actions">
-          <Link to="/login" className="btn btn-primary">Get started</Link>
-        </nav>
-      </header>
-
-      <section className="lp-hero lp-wrap">
-        <div className="lp-hero-copy">
-          <h1>Your matatu seat, booked before you reach the stage.</h1>
-          <p className="lp-lead">
-            CONNECT lets you book a seat on a matatu, pay for it, and watch the bus come to you on a live map.
-            No pushing at the stage, no waiting blind.
-          </p>
-          <div className="lp-cta">
-            <Link to="/login" className="btn btn-primary lp-btn-lg">Get started</Link>
-            <Link to="/signup" className="lp-link">New here? Create an account</Link>
-          </div>
-          <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
-        </div>
-
-        <div className="lp-hero-visual">
+    <section ref={track} className={`lp-story${SCRUB ? '' : ' is-static'}`}>
+      <div className="lp-story-stage">
+        <div className="lp-story-visual">
           {webglOk ? (
-            <div className="lp-stage">
-              <Suspense fallback={null}><HeroBus3D /></Suspense>
-              <p className="lp-stage-caption">The bus you book, on its way to your stage.</p>
-            </div>
+            <Suspense fallback={null}><HeroBus3D progress={SCRUB ? progress : undefined} turn={2.4} /></Suspense>
           ) : (
             <img src={matatuPhoto} alt="A red and white Nairobi matatu parked at a stage" width="736" height="1308" />
           )}
-          <div className="lp-ticket" aria-hidden="true">
+          <div className={`lp-ticket${last || !SCRUB ? ' is-shown' : ''}`} aria-hidden="true">
             <div className="lp-ticket-row">
               <span>CBD → Rongai</span>
               <span className="lp-live"><i />Live</span>
@@ -112,7 +118,49 @@ export default function Landing() {
             <p>Bus is 2 stages away, about 6 min</p>
           </div>
         </div>
+        <ol className="lp-chapters">
+          {CHAPTERS.map((c, i) => (
+            <li key={c.title} className={i === chapter ? 'is-active' : undefined}>
+              <h2>{c.title}</h2>
+              <p>{c.text}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+export default function Landing() {
+  const { user } = useAuth();
+  if (user) return <Navigate to={dashboardPath(user)} replace />;
+  if (isInstalledApp()) return <Welcome />;
+
+  return (
+    <div className="lp">
+      <header className="lp-bar">
+        <div className="lp-nav lp-wrap">
+          <Link to="/" className="lp-logo"><span className="brand-mark">C</span>CONNECT</Link>
+          <nav className="lp-nav-actions">
+            <Link to="/login" className="btn btn-primary">Get started</Link>
+          </nav>
+        </div>
+      </header>
+
+      <section className="lp-hero lp-wrap">
+        <h1>Your matatu seat, booked before you reach the stage.</h1>
+        <p className="lp-lead">
+          CONNECT lets you book a seat on a matatu, pay for it, and watch the bus come to you on a live map.
+          No pushing at the stage, no waiting blind.
+        </p>
+        <div className="lp-cta">
+          <Link to="/login" className="btn btn-primary lp-btn-lg">Get started</Link>
+          <Link to="/signup" className="lp-link">New here? Create an account</Link>
+        </div>
+        <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
       </section>
+
+      <Story />
 
       <section className="lp-section lp-wrap">
         <h2>What it fixes</h2>
