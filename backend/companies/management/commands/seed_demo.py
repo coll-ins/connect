@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from buses.models import Bus
 from companies.models import PickupStage, Route, Trip
 from drivers.models import Driver
 
@@ -69,12 +70,22 @@ class Command(BaseCommand):
         if opts['drive']:
             return self._drive(d1, stage)
 
+        def bus_for(plate, fleet, vehicle_type):
+            b, _ = Bus.objects.get_or_create(
+                registration_number=plate,
+                defaults={'company': company, 'bus_number': fleet,
+                          'vehicle_type': vehicle_type, 'capacity': 1},
+            )
+            return b
+
         Trip.objects.filter(driver__in=[d1, d2]).delete()
         boarding = Trip.objects.create(
-            route=route, driver=d1, capacity=14, status='boarding',
+            route=route, driver=d1, bus=bus_for('KDA 123A', 'D1', 'matatu_14'),
+            capacity=14, status='boarding',
             departure_at=timezone.now() - dt.timedelta(minutes=3))
         later = Trip.objects.create(
-            route=route, driver=d2, capacity=14, status='scheduled',
+            route=route, driver=d2, bus=bus_for('KDB 456B', 'D2', 'minibus_33'),
+            capacity=33, status='scheduled',
             departure_at=timezone.now() + dt.timedelta(hours=3))
 
         def account(username, phone, role, with_company, first, last):
@@ -89,7 +100,11 @@ class Command(BaseCommand):
             u.save()
             return u
 
-        account('wanjiku.k', '+254799000001', 'passenger', False, 'Wanjiku', 'Kamau')
+        rider = account('wanjiku.k', '+254799000001', 'passenger', False, 'Wanjiku', 'Kamau')
+        # A regular rider, so cash on board shows wherever CASH_ENABLED is on.
+        User.objects.filter(pk=rider.pk).update(
+            boarded_count=30, date_joined=timezone.now() - dt.timedelta(days=90),
+        )
         account('brian.o', '+254799000002', 'company_operator', True, 'Brian', 'Otieno')
         account('peter.m', d1.phone_number, 'driver', True, 'Peter', 'Mwangi')
         account('achieng.o', '+254799000003', 'company_manager', True, 'Achieng', 'Odhiambo')

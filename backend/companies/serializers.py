@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from connect.validation import free_text, kenyan_mobile, place
+
 from .models import Company, Route, Trip, PickupStage
 
 
@@ -13,6 +15,19 @@ class CompanySerializer(serializers.ModelSerializer):
             'phone_number',
         ]
         read_only_fields = ['id']
+
+    def validate_name(self, value):
+        return place(value, 'the company name', example='e.g. Super Metro Sacco')
+
+    def validate_description(self, value):
+        return free_text(value, 'the company description', required=False)
+
+    def validate_areas_served(self, value):
+        return place(value, 'the areas served', max_length=500,
+                     example='e.g. CBD, Westlands, Rongai')
+
+    def validate_phone_number(self, value):
+        return kenyan_mobile(value) if str(value or '').strip() else ''
 
 
 class PickupStageSerializer(serializers.ModelSerializer):
@@ -54,7 +69,7 @@ class PickupStageSerializer(serializers.ModelSerializer):
                 'Please provide the actual pickup stage name.'
             )
 
-        return name
+        return place(name, 'the pickup stage name', example='e.g. Kencom or Odeon')
 
 
 class RouteSerializer(serializers.ModelSerializer):
@@ -95,6 +110,16 @@ class RouteSerializer(serializers.ModelSerializer):
             'pickup_stages',
         ]
 
+    def validate_name(self, value):
+        return place(value, 'the route name', max_length=200,
+                     example='e.g. CBD to Rongai via Lang\'ata')
+
+    def validate_start_point(self, value):
+        return place(value, 'the starting point', example='e.g. Kencom, CBD')
+
+    def validate_end_point(self, value):
+        return place(value, 'the end point', example='e.g. Rongai')
+
 
 class TripSerializer(serializers.ModelSerializer):
     route_details = RouteSerializer(source='route', read_only=True)
@@ -104,10 +129,17 @@ class TripSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
-    driver_bus_number = serializers.CharField(
-        source='driver.bus_number',
-        read_only=True
-    )
+    # The trip's own bus when it has one; older trips fall back to the
+    # number typed on the driver.
+    driver_bus_number = serializers.SerializerMethodField()
+    bus_plate = serializers.CharField(source='bus.registration_number', read_only=True, default=None)
+    vehicle_label = serializers.SerializerMethodField()
+
+    def get_driver_bus_number(self, obj):
+        return obj.bus.bus_number if obj.bus_id else obj.driver.bus_number
+
+    def get_vehicle_label(self, obj):
+        return obj.bus.get_vehicle_type_display() if obj.bus_id else None
 
     company_name = serializers.CharField(
         source='route.company.name',
@@ -119,12 +151,9 @@ class TripSerializer(serializers.ModelSerializer):
     def get_booked_seats(self, obj):
         annotated = getattr(obj, 'booked_annot', None)
         if annotated is not None:
-            return int(annotated)
-        from django.db.models import Sum
-        return (
-            obj.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
-        )
+            return int(annotated) + int(getattr(obj, 'blocked_annot', 0) or 0)
+        from bookings.seats import seats_taken
+        return seats_taken(obj)
 
     class Meta:
         model = Trip
@@ -135,6 +164,9 @@ class TripSerializer(serializers.ModelSerializer):
             'driver',
             'driver_name',
             'driver_bus_number',
+            'bus',
+            'bus_plate',
+            'vehicle_label',
             'company_name',
             'departure_at',
             'capacity',
@@ -145,5 +177,9 @@ class TripSerializer(serializers.ModelSerializer):
             'id',
             'driver_name',
             'driver_bus_number',
+            'bus',
+            'bus_plate',
+            'vehicle_label',
+            'capacity',
             'company_name',
         ]

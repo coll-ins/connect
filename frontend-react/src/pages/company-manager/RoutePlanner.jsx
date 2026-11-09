@@ -9,6 +9,8 @@ import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import '../shared/Services.css';
+import FieldNote from '../../components/FieldNote';
+import { checkPlace } from '../../utils/inputRules';
 import './RoutePlanner.css';
 
 const NAIROBI = [-1.286389, 36.817223];
@@ -118,6 +120,7 @@ export default function RoutePlanner() {
   const [mode, setMode] = useState('stage');
   const [pending, setPending] = useState(null);
   const [stageName, setStageName] = useState('');
+  const stageNameError = checkPlace(stageName, 'the stage name', { example: 'e.g. Adams Arcade or Kencom' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [note, setNote] = useState('');
@@ -670,11 +673,14 @@ export default function RoutePlanner() {
                   {pending && (
                     <div className="svc-form" style={{ gridTemplateColumns: '1fr', marginBottom: 14 }}>
                       <label className="svc-field">Name the new stage
-                        <input className="input" maxLength={150} value={stageName}
+                        <input className="input" maxLength={100} value={stageName}
+                          aria-describedby="rp-stage-note" aria-invalid={Boolean(stageName.trim() && stageNameError)}
                           onChange={(e) => setStageName(e.target.value)} placeholder="e.g. Adams Arcade" />
+                        <FieldNote id="rp-stage-note" value={stageName} error={stageNameError}
+                          hint="The name passengers and drivers use for this stop, e.g. Adams Arcade or Kencom." />
                       </label>
                       <div>
-                        <button type="button" className="btn btn-primary" disabled={busy || !stageName.trim()} onClick={addStage}>
+                        <button type="button" className="btn btn-primary" disabled={busy || Boolean(stageNameError)} onClick={addStage}>
                           <Plus size={16} /> Add stage here
                         </button>
                         {' '}

@@ -77,6 +77,9 @@ function normalizeUser(data) {
     is_staff: Boolean(u.is_staff),
     is_superuser: Boolean(u.is_superuser),
     integrity_score: u.integrity_score ?? null,
+    can_pay_cash: Boolean(u.can_pay_cash),
+    cash_enabled: Boolean(u.cash_enabled),
+    trips_counted: u.trips_counted ?? 0,
   };
 }
 
@@ -114,7 +117,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials }));
-  const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials }));
+  // Signup renders its own role="alert" error; a global toast would say it twice.
+  const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials, silent: true }));
 
   const logout = async () => {
     try { await apiRequest('/users/logout/', { method: 'POST' }); } finally {

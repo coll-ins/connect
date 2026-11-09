@@ -34,7 +34,7 @@ class StuckLaterStageTests(TestCase):
     def test_later_stage_confirmed_booking_on_abandoned_trip_is_eventually_settled(self):
         c = Company.objects.create(name='C')
         r = Route.objects.create(company=c, name='R', start_point='a', end_point='b', price=Decimal('800'))
-        s1 = PickupStage.objects.create(route=r, name='s1', order=1, latitude=0, longitude=0)
+        PickupStage.objects.create(route=r, name='s1', order=1, latitude=0, longitude=0)
         s2 = PickupStage.objects.create(route=r, name='s2', order=2, latitude=0, longitude=0)
         d = Driver.objects.create(company=c, name='D', phone_number='0700000099', bus_number='K9')
         u = get_user_model().objects.create_user(username='p', password='password123', phone_number='+254700000098')

@@ -189,10 +189,10 @@ class DriversAppTests(APITestCase):
             url,
             {
                 "name": "New Driver",
-                "phone_number": "+254733333333",
+                "phone_number": "+254733123456",
                 "bus_number": "KDD 004D",
                 "company": self.company.id,
-                "password": "driverpass123",
+                "password": "Driver-pass123",
             },
             format="json",
         )
@@ -203,7 +203,7 @@ class DriversAppTests(APITestCase):
         )
 
         driver = Driver.objects.get(
-            phone_number="+254733333333"
+            phone_number="+254733123456"
         )
 
         self.assertEqual(
@@ -212,7 +212,7 @@ class DriversAppTests(APITestCase):
         )
 
         driver_user = User.objects.get(
-            phone_number="+254733333333"
+            phone_number="+254733123456"
         )
 
         self.assertEqual(
@@ -226,7 +226,7 @@ class DriversAppTests(APITestCase):
         )
 
         self.assertTrue(
-            driver_user.check_password("driverpass123")
+            driver_user.check_password("Driver-pass123")
         )
 
         self.assertTrue(
@@ -239,7 +239,7 @@ class DriversAppTests(APITestCase):
         response = self.client.post(
             reverse("drivers:driver-list"),
             {"name": "Form Driver", "phone_number": "+254733333390",
-             "bus_number": "KDD 090D", "password": "driverpass123"},
+             "bus_number": "KDD 090D", "password": "Driver-pass123"},
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
@@ -254,7 +254,7 @@ class DriversAppTests(APITestCase):
             url,
             {
                 "name": "No Password Driver",
-                "phone_number": "+254744444444",
+                "phone_number": "+254744123456",
                 "bus_number": "KFF 005F",
                 "company": self.company.id,
             },
@@ -268,7 +268,7 @@ class DriversAppTests(APITestCase):
 
         self.assertFalse(
             Driver.objects.filter(
-                phone_number="+254744444444"
+                phone_number="+254744123456"
             ).exists()
         )
 
@@ -284,7 +284,7 @@ class DriversAppTests(APITestCase):
                 "phone_number": self.manager.phone_number,
                 "bus_number": "KFF 006F",
                 "company": self.company.id,
-                "password": "driverpass123",
+                "password": "Driver-pass123",
             },
             format="json",
         )
@@ -309,10 +309,10 @@ class DriversAppTests(APITestCase):
             url,
             {
                 "name": "Other Driver",
-                "phone_number": "+254744444444",
+                "phone_number": "+254744123456",
                 "bus_number": "KEE 005E",
                 "company": self.other_company.id,
-                "password": "driverpass123",
+                "password": "Driver-pass123",
             },
             format="json",
         )
@@ -323,7 +323,7 @@ class DriversAppTests(APITestCase):
         )
 
         driver = Driver.objects.get(
-            phone_number="+254744444444"
+            phone_number="+254744123456"
         )
 
         self.assertEqual(
@@ -337,7 +337,7 @@ class DriversAppTests(APITestCase):
         )
 
         created_user = User.objects.get(
-            phone_number="+254744444444"
+            phone_number="+254744123456"
         )
 
         self.assertEqual(

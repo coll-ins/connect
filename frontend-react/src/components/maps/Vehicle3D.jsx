@@ -58,7 +58,7 @@ function AimVehicleCamera() {
 }
 
 // Soft studio reflections so paint, glass and rims read as real materials.
-function StudioEnvironment() {
+export function StudioEnvironment() {
   const gl = useThree((state) => state.gl);
   const texture = useMemo(() => {
     const pmrem = new PMREMGenerator(gl);
@@ -133,7 +133,7 @@ function useShadowTexture() {
   return texture;
 }
 
-function VehicleModel({ heading, latitude, longitude, stale, onReady }) {
+export function VehicleModel({ heading, latitude, longitude, stale, onReady }) {
   const ready = useRef(false);
   const yawRef = useRef(null);
   const bodyRef = useRef(null);

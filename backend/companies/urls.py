@@ -44,9 +44,9 @@ urlpatterns = [
         name='update_trip_status'
     ),
     path(
-        'trips/<int:trip_id>/capacity/',
-        views.update_trip_capacity,
-        name='update_trip_capacity'
+        'trips/<int:trip_id>/bus/',
+        views.update_trip_bus,
+        name='update_trip_bus'
     ),
     path(
         'operator-routes/',

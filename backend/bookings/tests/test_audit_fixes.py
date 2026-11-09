@@ -121,3 +121,83 @@ class PassengerCannotClaimCompanyFaultTests(AuditFixTests):
         r = self.client.post(self._url() + 'cancel/', {'fault_party': 'company'}, format='json')
         self.assertEqual(r.status_code, 403, r.data)
         self.assertIsNone(Payment.objects.get(booking=self.booking).refund_amount)
+
+
+class IncidentRefundRejectedSeatTests(APITestCase):
+    """Rejected incident refund must not oversell or double-book a seat."""
+
+    def setUp(self):
+        from bookings.models import Incident
+        from bookings.seats import assign_seats
+        company = Company.objects.create(name='A', areas_served='x')
+        self.route = Route.objects.create(
+            company=company, name='R', start_point='a', end_point='b',
+            price=Decimal('100'))
+        driver = Driver.objects.create(
+            name='D', phone_number='+254700000015', bus_number='KAA2',
+            company=company)
+        self.trip = Trip.objects.create(
+            route=self.route, driver=driver, capacity=1, status='scheduled',
+            departure_at=timezone.now() + dt.timedelta(hours=3))
+        self.pax = User.objects.create_user(
+            username='p2', password='pw-123456', phone_number='+254700000014')
+        self.booking = Booking.objects.create(
+            user=self.pax, trip=self.trip, route=self.route, driver=driver,
+            seats=1, total_amount=Decimal('100'), status='confirmed',
+            pickup_location='x')
+        assign_seats(self.trip, self.booking, [1])
+        Incident.objects.create(
+            trip=self.trip, reported_by=self.pax, incident_type='breakdown',
+            description='Broke down.', status='reported')
+
+    def _resolve(self, during_paystack):
+        claim = SimpleNamespace(provider_reference='REF', booking_number='BK2')
+
+        def reject(_claim):
+            during_paystack()
+            raise RefundRejected('Paystack refused the refund.')
+
+        self.client.force_authenticate(self.pax)
+        with mock.patch('bookings.services.claim_booking_refund',
+                        return_value=(Decimal('100'), claim)), \
+             mock.patch('bookings.services.execute_booking_refund',
+                        side_effect=reject), \
+             mock.patch('bookings.services.release_refund_claim'), \
+             mock.patch('bookings.views._alert_payment_problem') as alert:
+            r = self.client.post(
+                f'/api/bookings/{self.booking.id}/resolve-incident/',
+                {'resolution': 'refund'}, format='json')
+        return r, alert
+
+    def test_resold_seat_is_not_restored(self):
+        from bookings.models import SeatAssignment
+        from bookings.seats import assign_seats
+        other = User.objects.create_user(
+            username='q2', password='pw-123456', phone_number='+254700000016')
+
+        def resell_seat_1():
+            b = Booking.objects.create(
+                user=other, trip=self.trip, route=self.route,
+                driver=self.trip.driver, seats=1, total_amount=Decimal('100'),
+                status='confirmed', pickup_location='x')
+            assign_seats(self.trip, b, [1])
+
+        r, alert = self._resolve(resell_seat_1)
+
+        self.assertEqual(r.status_code, 409)
+        live = self.trip.bookings.exclude(status='cancelled')
+        self.assertLessEqual(sum(b.seats for b in live), self.trip.capacity)
+        holders = SeatAssignment.objects.filter(
+            trip=self.trip, seat_no=1, booking__in=live)
+        self.assertEqual(holders.count(), 1)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, 'cancelled')
+        alert.assert_called_once()
+
+    def test_free_seat_is_restored_with_its_number(self):
+        r, _ = self._resolve(lambda: None)
+        self.assertEqual(r.status_code, 409)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, 'confirmed')
+        self.assertEqual(
+            list(self.booking.seat_assignments.values_list('seat_no', flat=True)), [1])

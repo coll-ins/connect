@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import { BusOptions, useCompanyBuses } from '../../components/Fleet';
 import '../shared/Services.css';
 import './ServiceTemplateManager.css';
 
@@ -19,7 +20,7 @@ const blankTemplate = () => {
   return {
     route_id: '',
     driver_id: '',
-    capacity: '30',
+    bus_id: '',
     days_of_week: [0, 1, 2, 3, 4],
     departure_time: '06:00',
     service_end_time: '18:00',
@@ -36,6 +37,7 @@ const blankTemplate = () => {
 export default function ServiceTemplateManager({ companyId: companyIdProp }) {
   const { user } = useAuth();
   const companyId = companyIdProp || user?.company_id || user?.company?.id;
+  const { buses } = useCompanyBuses(companyId);
   const [routes, setRoutes] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -90,7 +92,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
     setForm({
       route_id: String(template.route_id),
       driver_id: String(template.driver_id),
-      capacity: String(template.capacity),
+      bus_id: template.bus_id ? String(template.bus_id) : '',
       days_of_week: template.days_of_week,
       departure_time: template.departure_time,
       service_end_time: template.service_end_time || '',
@@ -113,7 +115,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
       company_id: Number(companyId),
       route_id: Number(form.route_id),
       driver_id: Number(form.driver_id),
-      capacity: Number(form.capacity),
+      bus_id: Number(form.bus_id),
       days_of_week: form.days_of_week,
       departure_time: form.departure_time,
       service_end_time: form.service_end_time || null,
@@ -238,8 +240,10 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
             </select>
           </label>
           <label className="svc-field">
-            Seats per trip
-            <input className="input" type="number" min="1" max="100" required value={form.capacity} onChange={(event) => update('capacity', event.target.value)} />
+            Bus (its seats are each trip's seats)
+            <select className="input" required value={form.bus_id} onChange={(event) => update('bus_id', event.target.value)}>
+              <BusOptions buses={buses} />
+            </select>
           </label>
           <fieldset className="service-template-days">
             <legend>Operating days</legend>
@@ -334,7 +338,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
                     {template.is_active ? 'Active' : 'Paused'}
                   </span>
                 </div>
-                <p>{template.driver_name} · {template.bus_number} · {template.capacity} seats</p>
+                <p>{template.driver_name} · {template.bus_plate ? `Bus ${template.bus_number} · ${template.bus_plate}` : 'No bus assigned: edit to pick one'} · {template.capacity} seats</p>
                 <p>
                   {template.departure_time}–{template.service_end_time || template.departure_time}
                   {' · '}{template.normal_interval_minutes || 60} min normal

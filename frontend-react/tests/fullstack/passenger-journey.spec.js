@@ -35,14 +35,15 @@ test('passenger books, pays later from My bookings, then cancels', async ({ page
   const scheduled = page.locator('article', { hasText: 'scheduled' }).first();
   await expect(scheduled).toContainText('seats left');
   await scheduled.getByRole('button', { name: 'Select trip' }).click();
-  await page.getByRole('button', { name: /Confirm booking/ }).click();
+  await page.getByRole('radio', { name: 'Choose for me' }).click();
+  await page.getByRole('button', { name: 'Book 1 seat' }).click();
 
   // Walk away from the payment window: the booking must still be payable.
   await page.getByRole('button', { name: 'Close' }).first().click();
   await page.goto('/passenger/bookings');
   const card = page.locator('.passenger-data-card').first();
   await card.getByRole('button', { name: 'Pay now' }).click();
-  await page.getByRole('button', { name: /Pay with cash/ }).click();
+  await page.getByRole('button', { name: /Pay cash on board/ }).click();
   await expect(page).toHaveURL(/\/passenger\/map\?booking=/);
   await expect(page.getByText('Seat reserved · awaiting payment')).toBeVisible();
 

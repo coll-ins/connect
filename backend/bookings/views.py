@@ -1,4 +1,6 @@
 from connect.frontend import frontend_url
+from django.core.exceptions import ValidationError as DjangoValidationError
+from connect.validation import free_text, kenyan_mobile
 from django.db.models import Q
 import hmac
 import logging
@@ -35,10 +37,12 @@ from drivers.models import Driver
 from wallets.models import Wallet, WalletTransaction
 
 from .models import Booking, BookingHold, Payment, BoardingEvent
+from .seats import SeatError, assign_seats, move_seats, seat_map, seats_taken
 from .services import (
     settle_booking_fault,
     cancel_dead_pending_bookings,
     cash_due_on_board,
+    before_change_cutoff,
     cash_still_payable,
     trip_has_departed,
     create_booking_hold,
@@ -438,20 +442,11 @@ def initialize_mpesa_payment(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            phone = str(phone).strip()
-
-            if (
-                not phone.startswith('+254')
-                or len(phone) != 13
-                or not phone[1:].isdigit()
-            ):
+            try:
+                phone = kenyan_mobile(phone)
+            except DjangoValidationError as e:
                 return Response(
-                    {
-                        'error': (
-                            'Enter a valid Kenyan phone number, '
-                            'e.g. +254710000000.'
-                        )
-                    },
+                    {'error': 'M-PESA: ' + e.messages[0]},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -1291,6 +1286,22 @@ def initialize_cash_payment(request, booking_id):
     This serializes simultaneous cash-payment requests for the same
     booking and prevents OneToOne races.
     """
+    if not request.user.can_pay_cash:
+        return Response(
+            {
+                'error': (
+                    'Cash on board is not available yet. Pay with M-Pesa or card.'
+                    if not settings.CASH_ENABLED else
+                    'Cash on board is for regular riders: '
+                    f'{settings.CASH_MIN_TRIPS} trips, an integrity score of '
+                    f'{settings.CASH_MIN_INTEGRITY:g}% or more and an account at least '
+                    f'{settings.CASH_MIN_ACCOUNT_DAYS} days old. Pay with M-Pesa or card for now.'
+                ),
+                'code': 'cash_locked',
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     _release_dead_digital_attempt(booking_id, request.user)
 
     try:
@@ -1717,13 +1728,8 @@ def create_booking(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            confirmed_bookings = trip.bookings.exclude(
-                status='cancelled'
-            )
-
-            taken_seats = sum(
-                b.seats for b in confirmed_bookings
-            )
+            # Live bookings plus seats an operator has blocked.
+            taken_seats = seats_taken(trip)
 
             available_seats = trip.capacity - taken_seats
 
@@ -1754,6 +1760,17 @@ def create_booking(request):
                 status='pending'
             )
 
+            try:
+                seat_numbers = assign_seats(
+                    trip, booking, validated_data.get('seat_numbers')
+                )
+            except SeatError as exc:
+                transaction.set_rollback(True)
+                return Response(
+                    {'error': str(exc), 'code': 'seat_taken'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         return Response(
             {
                 'message': (
@@ -1762,6 +1779,7 @@ def create_booking(request):
                 ),
                 'booking_id': booking.id,
                 'booking_number': booking.booking_number,
+                'seat_numbers': seat_numbers,
                 'total_amount': str(total_amount),
                 'pickup_location': booking.pickup_location,
                 'pickup_stage_id': (
@@ -1784,6 +1802,14 @@ def create_booking(request):
 # MY BOOKINGS & DETAILS
 # ============================================================
 
+def _bus_number(trip, driver):
+    """The trip's own bus; trips made before buses were linked use the
+    number typed on the driver."""
+    if trip is not None and trip.bus_id:
+        return trip.bus.bus_number
+    return driver.bus_number if driver else None
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_bookings(request):
@@ -1803,10 +1829,12 @@ def get_my_bookings(request):
         .select_related(
             'trip__route__company',
             'trip__driver',
+            'trip__bus',
             'pickup_stage',
             'payment',
             'boarding_event',
         )
+        .prefetch_related('seat_assignments')
         .order_by('-created_at')
     )
 
@@ -1828,9 +1856,16 @@ def get_my_bookings(request):
                 else None
             ),
             'boarded': hasattr(b, 'boarding_event'),
+            'seat_numbers': sorted(a.seat_no for a in b.seat_assignments.all()),
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
             'trip_status': trip.status if trip else None,
+            # Free cancel / change of bus until this moment (see before_change_cutoff).
+            'can_change': before_change_cutoff(trip),
+            'change_cutoff_at': (
+                trip.departure_at - timezone.timedelta(minutes=settings.BOOKING_CHANGE_CUTOFF_MINUTES)
+                if trip else None
+            ),
 
             'company_name': (
                 route.company.name
@@ -1839,6 +1874,8 @@ def get_my_bookings(request):
             ),
 
             'route_name': route.name if route else None,
+            'route_id': route.id if route else None,
+            'company_id': route.company_id if route else None,
             'route_start_point': route.start_point if route else None,
             'route_end_point': route.end_point if route else None,
 
@@ -1888,11 +1925,8 @@ def get_my_bookings(request):
 
             'driver_id': driver.id if driver else None,
             'driver_name': driver.name if driver else None,
-            'driver_bus_number': (
-                driver.bus_number
-                if driver
-                else None
-            ),
+            'driver_bus_number': _bus_number(trip, driver),
+            'bus_plate': trip.bus.registration_number if trip and trip.bus_id else None,
             'driver_latitude': (
                 float(driver.latitude)
                 if driver and driver.latitude is not None
@@ -2304,7 +2338,7 @@ def move_booking_to_trip(request, booking_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    is_allowed = (
+    is_staff_move = (
         user.is_superuser
         or (
             user.role in {'company_manager', 'company_operator'}
@@ -2312,7 +2346,8 @@ def move_booking_to_trip(request, booking_id):
             and can_handle_route(user, booking.route_id)
         )
     )
-    if not is_allowed:
+    is_own_move = booking.user_id == user.id
+    if not (is_staff_move or is_own_move):
         return Response(
             {'error': 'Manager or Operator authorization required'},
             status=status.HTTP_403_FORBIDDEN
@@ -2380,6 +2415,18 @@ def move_booking_to_trip(request, booking_id):
                 {'error': 'The current trip has already left.'},
                 status=status.HTTP_409_CONFLICT
             )
+        if not is_staff_move and not before_change_cutoff(old_trip):
+            return Response(
+                {
+                    'error': (
+                        'Your bus leaves in less than '
+                        f'{settings.BOOKING_CHANGE_CUTOFF_MINUTES} minutes, so '
+                        'the booking can no longer be moved to another trip.'
+                    ),
+                    'code': 'change_cutoff',
+                },
+                status=status.HTTP_409_CONFLICT
+            )
 
         now = timezone.now()
         bookable = (
@@ -2394,15 +2441,14 @@ def move_booking_to_trip(request, booking_id):
                 {'error': 'The target trip is not open for passengers.'},
                 status=status.HTTP_409_CONFLICT
             )
+        if not is_staff_move and not before_change_cutoff(new_trip):
+            return Response(
+                {'error': 'That bus leaves too soon to move onto. Pick a later one.',
+                 'code': 'change_cutoff'},
+                status=status.HTTP_409_CONFLICT
+            )
 
-        taken_seats = (
-            new_trip.bookings
-            .exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))
-            .get('total')
-            or 0
-        )
-        available_seats = new_trip.capacity - taken_seats
+        available_seats = new_trip.capacity - seats_taken(new_trip)
         if booking.seats > available_seats:
             return Response(
                 {
@@ -2416,6 +2462,7 @@ def move_booking_to_trip(request, booking_id):
         booking.trip = new_trip
         booking.driver = new_trip.driver
         booking.save(update_fields=['trip', 'driver', 'updated_at'])
+        move_seats(old_trip, new_trip, booking)
 
     import logging
     logging.getLogger(__name__).info(
@@ -2616,13 +2663,15 @@ def cancel_booking(request, booking_id):
             )
 
             previous_status = booking.status
-
+            refund_party = fault_party
+            if fault_party == 'passenger' and before_change_cutoff(trip):
+                refund_party = 'passenger_early'
             # Reserve the refund inside this transaction but do NOT call
             # Paystack here: a rollback after Paystack accepted the refund
             # would erase the reservation and allow a second refund.
             refund_amount, refund_claim = claim_booking_refund(
                 booking,
-                fault_party
+                refund_party
             )
 
             booking.status = 'cancelled'
@@ -2667,17 +2716,26 @@ def cancel_booking(request, booking_id):
                     .get(pk=booking_id)
                 )
                 if restored.status == 'cancelled':
+                    # seats_taken counts blocked seats too; the cancelled
+                    # booking itself is excluded from it.
                     seat_free = locked_trip is None or (
                         not trip_has_departed(locked_trip)
-                        and sum(
-                            b.seats for b in locked_trip.bookings.exclude(
-                                status='cancelled'
-                            )
-                        ) + restored.seats <= locked_trip.capacity
+                        and seats_taken(locked_trip) + restored.seats
+                        <= locked_trip.capacity
                     )
                     if seat_free:
+                        old_numbers = list(
+                            restored.seat_assignments.values_list('seat_no', flat=True)
+                        )
                         restored.status = previous_status
                         restored.save(update_fields=['status'])
+                        if locked_trip is not None:
+                            # Its seat may have been resold meanwhile: keep
+                            # the old numbers if still free, else the lowest free.
+                            try:
+                                assign_seats(locked_trip, restored, old_numbers or None)
+                            except SeatError:
+                                assign_seats(locked_trip, restored)
                     else:
                         seat_lost = True
             if seat_lost:
@@ -2713,6 +2771,7 @@ def cancel_booking(request, booking_id):
     response_body = {
         'message': 'Booking cancelled successfully.',
         'fault_party': fault_party,
+        'free_cancellation': refund_party == 'passenger_early',
         'refund_amount': str(refund_amount),
     }
 
@@ -2950,16 +3009,8 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     status=status.HTTP_409_CONFLICT
                 )
 
-            taken_seats = (
-                replacement_trip.bookings
-                .exclude(status='cancelled')
-                .aggregate(total=Sum('seats'))
-                .get('total')
-                or 0
-            )
-
             available_seats = (
-                replacement_trip.capacity - taken_seats
+                replacement_trip.capacity - seats_taken(replacement_trip)
             )
 
             if booking.seats > available_seats:
@@ -2996,6 +3047,7 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     'updated_at',
                 ]
             )
+            move_seats(old_trip, replacement_trip, booking)
 
             IncidentResolution.objects.create(
                 booking=booking,
@@ -3063,12 +3115,56 @@ def resolve_incident_booking(request, booking_id):
         # Paystack definitely refunded nothing: undo the cancellation and
         # the resolution so the passenger can choose again.
         release_refund_claim(claim)
+        seat_lost = False
+        trip_id = (
+            Booking.objects.filter(pk=booking_pk)
+            .values_list('trip_id', flat=True).first()
+        )
         with transaction.atomic():
+            # Lock order trip, then booking, as everywhere else. The seat may
+            # have been resold while Paystack was being called. No departure
+            # check: an incident can happen after the bus has left.
+            locked_trip = (
+                Trip.objects.select_for_update().filter(pk=trip_id).first()
+                if trip_id else None
+            )
             restored = Booking.objects.select_for_update().get(pk=booking_pk)
             if restored.status == 'cancelled':
-                restored.status = previous_status
-                restored.save(update_fields=['status'])
-            IncidentResolution.objects.filter(pk=resolution_pk).delete()
+                seat_free = locked_trip is None or (
+                    seats_taken(locked_trip) + restored.seats
+                    <= locked_trip.capacity
+                )
+                if seat_free:
+                    old_numbers = list(
+                        restored.seat_assignments.values_list('seat_no', flat=True)
+                    )
+                    restored.status = previous_status
+                    restored.save(update_fields=['status'])
+                    if locked_trip is not None:
+                        try:
+                            assign_seats(locked_trip, restored, old_numbers or None)
+                        except SeatError:
+                            assign_seats(locked_trip, restored)
+                    IncidentResolution.objects.filter(pk=resolution_pk).delete()
+                else:
+                    seat_lost = True
+        if seat_lost:
+            # Keep the resolution: the booking really is cancelled and still
+            # owed a refund, so the passenger must not be offered it again.
+            _alert_payment_problem(
+                claim.provider_reference,
+                f'incident refund for booking {claim.booking_number} was '
+                f'rejected and its seat is gone; refund it manually',
+            )
+            return Response(
+                {
+                    'error': (
+                        f'{exc} The booking stays cancelled and our '
+                        'team has been alerted to refund you.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT
+            )
         return Response({'error': str(exc)}, status=status.HTTP_409_CONFLICT)
     except ValueError:
         # Outcome unknown: stays "processing" until reconciled, never resent.
@@ -3188,7 +3284,32 @@ def verify_boarding(request, booking_id):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            if booking.status != 'confirmed':
+            payment = (
+                Payment.objects.select_for_update()
+                .filter(booking=booking).first()
+            )
+            # Cash on board: the passenger hands over the fare and the driver
+            # checks their PIN. That PIN check is the cash receipt; there is
+            # no separate "confirm cash" step.
+            pays_cash_now = (
+                cash_due_on_board(booking, payment)
+                and cash_still_payable(trip)
+            )
+
+            # Taking cash follows the same rule as confirm_cash_payment:
+            # operators only when OPERATORS_CAN_CONFIRM_CASH is on.
+            if (
+                pays_cash_now
+                and not user.is_superuser
+                and user.role == 'company_operator'
+                and not getattr(settings, 'OPERATORS_CAN_CONFIRM_CASH', False)
+            ):
+                return Response(
+                    {'error': 'Operators cannot take cash payments.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if booking.status != 'confirmed' and not pays_cash_now:
                 return Response(
                     {
                         'error': (
@@ -3199,9 +3320,7 @@ def verify_boarding(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            try:
-                payment = booking.payment
-            except Payment.DoesNotExist:
+            if payment is None:
                 return Response(
                     {
                         'error': (
@@ -3211,7 +3330,7 @@ def verify_boarding(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            if payment.status != 'confirmed':
+            if payment.status != 'confirmed' and not pays_cash_now:
                 return Response(
                     {
                         'error': (
@@ -3342,9 +3461,12 @@ def verify_boarding(request, booking_id):
             # Boarding makes the payment eligible for settlement.
             # It does NOT transfer money between Django wallets.
             payment.settlement_status = 'eligible'
-            payment.save(
-                update_fields=['settlement_status']
-            )
+            update_fields = ['settlement_status']
+            if pays_cash_now:
+                payment.status = 'confirmed'
+                payment.confirmed_at = timezone.now()
+                update_fields += ['status', 'confirmed_at']
+            payment.save(update_fields=update_fields)
 
             # Mark the booking as completed.
             booking.status = 'completed'
@@ -3370,7 +3492,10 @@ def verify_boarding(request, booking_id):
                         verification_method
                     ),
                     'override_used': is_override,
-                    'booking_id': booking.id
+                    'booking_id': booking.id,
+                    'cash_collected': (
+                        str(payment.amount) if pays_cash_now else None
+                    ),
                 },
                 status=status.HTTP_200_OK
             )
@@ -3630,7 +3755,7 @@ def booking_live_location(request, booking_id):
                     driver.phone_number
                     if driver and can_see_contacts else None
                 ),
-                'bus_number': driver.bus_number if driver else None,
+                'bus_number': _bus_number(booking.trip, driver),
                 'latitude': d_lat,
                 'longitude': d_lng,
                 'location_updated_at': (
@@ -4132,11 +4257,10 @@ def report_incident(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not description or not str(description).strip():
-        return Response(
-            {'error': 'description is required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    try:
+        description = free_text(description, 'what happened', min_letters=5, max_length=2000)
+    except DjangoValidationError as e:
+        return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
     incident = Incident.objects.create(
         trip=trip,
@@ -4230,13 +4354,10 @@ def incident_detail(request, incident_id):
         incident.status = new_status
 
     if description is not None:
-        description = str(description).strip()
-
-        if not description:
-            return Response(
-                {'error': 'description cannot be empty.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        try:
+            description = free_text(description, 'what happened', min_letters=5, max_length=2000)
+        except DjangoValidationError as e:
+            return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
         incident.description = description
 
@@ -4395,6 +4516,7 @@ def get_driver_bookings(request, driver_id):
             "pickup_stage",
             "payment",
         )
+        .prefetch_related("seat_assignments")
         .order_by(
             "pickup_stage__order",
             "created_at",
@@ -4411,6 +4533,8 @@ def get_driver_bookings(request, driver_id):
             "booking_id": booking.id,
             "booking_number": booking.booking_number,
             "seats": booking.seats,
+            "total_amount": str(booking.total_amount),
+            "seat_numbers": sorted(a.seat_no for a in booking.seat_assignments.all()),
             "status": booking.status,
             "passenger": booking.user.display_name,
             "passenger_name": (
@@ -4950,7 +5074,8 @@ def passenger_records(request):
         .filter(user=request.user)
         .select_related(
             'route__company',
-            'trip',
+            'trip__driver',
+            'driver',
             'payment',
             'boarding_event',
             'financial_hold',
@@ -5055,6 +5180,14 @@ def passenger_records(request):
                 ),
             }
 
+        driver = booking.driver or (booking.trip.driver if booking.trip else None)
+        # Phone only for passengers who actually paid or rode (lost property,
+        # complaints); unpaid cash holds and cancelled bookings never see it.
+        show_driver_phone = (
+            booking.status in ('confirmed', 'completed')
+            and not cash_due_on_board(booking, payment)
+        )
+
         records.append({
             'booking_id': booking.id,
             'booking_number': booking.booking_number,
@@ -5084,6 +5217,18 @@ def passenger_records(request):
                 'pickup_location': booking.pickup_location,
                 'seats': booking.seats,
             },
+
+            'driver': {
+                'name': driver.name,
+                'phone_number': (
+                    driver.phone_number if show_driver_phone else None
+                ),
+                'bus_number': _bus_number(booking.trip, driver),
+                'bus_plate': (
+                    booking.trip.bus.registration_number
+                    if booking.trip and booking.trip.bus_id else None
+                ),
+            } if driver else None,
 
             'booking': {
                 'status': booking.status,
@@ -5331,14 +5476,7 @@ def booking_replacement_trips(request, booking_id):
 
     result = []
     for trip in candidates:
-        taken = (
-            trip.bookings
-            .exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))
-            .get('total')
-            or 0
-        )
-        available = trip.capacity - taken
+        available = trip.capacity - seats_taken(trip)
         if booking.seats <= available:
             result.append({
                 'id': trip.id,
@@ -5371,7 +5509,6 @@ def walk_in_booking(request, trip_id):
     from django.contrib.auth import get_user_model
     from django.db.models import F as _F, Sum
     from notifications import sms as _sms
-    from users.phone import canonical_phone
 
     raw_seats = request.data.get('seats', 1)
     try:
@@ -5385,9 +5522,10 @@ def walk_in_booking(request, trip_id):
         return Response({'error': 'seats must be between 1 and 20.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    phone = canonical_phone(str(request.data.get('phone_number', '')).strip())
-    if not phone:
-        return Response({'error': 'A valid passenger phone_number is required.'},
+    try:
+        phone = kenyan_mobile(request.data.get('phone_number'))
+    except DjangoValidationError as e:
+        return Response({'error': 'Passenger phone: ' + e.messages[0]},
                         status=status.HTTP_400_BAD_REQUEST)
 
     User = get_user_model()
@@ -5432,11 +5570,7 @@ def walk_in_booking(request, trip_id):
             return Response({'error': 'This route has no active first stage.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        taken = (
-            trip.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
-        )
-        available = trip.capacity - taken
+        available = trip.capacity - seats_taken(trip)
         if seats > available:
             return Response(
                 {'error': f'Not enough seats available. Only {available} remaining.'},
@@ -5468,6 +5602,17 @@ def walk_in_booking(request, trip_id):
             provider_reference=None, idempotency_key=None,
             refund_status='not_requested',
         )
+        wanted = request.data.get('seat_numbers')
+        if wanted is not None and not isinstance(wanted, list):
+            transaction.set_rollback(True)
+            return Response({'error': 'seat_numbers must be a list of seat numbers.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            assign_seats(trip, booking, wanted)
+        except SeatError as exc:
+            transaction.set_rollback(True)
+            return Response({'error': str(exc), 'code': 'seat_taken'},
+                            status=status.HTTP_409_CONFLICT)
         BoardingEvent.objects.create(
             booking=booking, trip=trip, method='walkin', verified_by=actor)
         User.objects.filter(pk=passenger.pk).update(
@@ -5563,3 +5708,80 @@ def staff_alerts(request):
     rows.sort(key=lambda r: r[0], reverse=True)
     items = [r[1] for r in rows[:20]]
     return Response({'count': len(items), 'items': items})
+
+
+# ============================================================
+# SEAT MAP
+# ============================================================
+
+def _seat_staff(user, trip):
+    """Company staff who may see names and block seats on this trip."""
+    return user.is_superuser or (
+        user.role in {'company_manager', 'company_operator'}
+        and user.company_id == trip.route.company_id
+        and can_handle_route(user, trip.route_id)
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def trip_seat_map(request, trip_id):
+    try:
+        trip = Trip.objects.select_related('route', 'driver', 'bus').get(pk=trip_id)
+    except Trip.DoesNotExist:
+        return Response({'error': 'Trip not found.'}, status=status.HTTP_404_NOT_FOUND)
+    user = request.user
+    staff = _seat_staff(user, trip) or (
+        user.role == 'company_auditor' and user.company_id == trip.route.company_id
+    )
+    is_driver = trip.driver is not None and is_driver_account_for(user, trip.driver)
+    mine = set(trip.bookings.filter(user=user).values_list('id', flat=True))
+    data = seat_map(trip, viewer_booking_ids=mine, show_names=staff or is_driver)
+    data['can_block'] = _seat_staff(user, trip) and trip.status in ('scheduled', 'boarding')
+    return Response(data)
+
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def trip_seat_block(request, trip_id, seat_no):
+    from .models import SeatAssignment
+    try:
+        note = free_text(request.data.get('note'), 'the note', required=False,
+                         min_letters=2, max_length=60)
+    except DjangoValidationError as e:
+        return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+    with transaction.atomic():
+        try:
+            trip = (
+                Trip.objects.select_for_update()
+                .select_related('route').get(pk=trip_id)
+            )
+        except Trip.DoesNotExist:
+            return Response({'error': 'Trip not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _seat_staff(request.user, trip):
+            return Response({'error': 'Only the company’s operators can block seats.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        if trip.status not in ('scheduled', 'boarding'):
+            return Response({'error': f'Seats cannot change on a {trip.status} trip.'},
+                            status=status.HTTP_409_CONFLICT)
+        if not 1 <= seat_no <= trip.capacity:
+            return Response({'error': f'Seat {seat_no} does not exist on this bus.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if request.method == 'DELETE':
+            trip.seat_assignments.filter(seat_no=seat_no, blocked=True).delete()
+        else:
+            trip.seat_assignments.filter(booking__status='cancelled').delete()
+            if trip.seat_assignments.filter(seat_no=seat_no).exists():
+                return Response({'error': f'Seat {seat_no} is already taken.'},
+                                status=status.HTTP_409_CONFLICT)
+            if seats_taken(trip) >= trip.capacity:
+                return Response({'error': 'Every seat on this bus is already sold.'},
+                                status=status.HTTP_409_CONFLICT)
+            SeatAssignment.objects.create(
+                trip=trip, seat_no=seat_no, blocked=True, blocked_by=request.user,
+                note=note,
+            )
+        data = seat_map(trip, show_names=True)
+    data['can_block'] = True
+    return Response(data)

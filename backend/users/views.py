@@ -14,7 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
-from .phone import phone_variants
+from .phone import canonical_phone, phone_variants
 from .throttles import (
     LoginIPThrottle,
     SignupPhoneThrottle,
@@ -63,6 +63,9 @@ def serialize_session_user(user):
         'is_staff': user.is_staff,
         'is_superuser': user.is_superuser,
         'integrity_score': user.integrity_score,
+        'can_pay_cash': user.can_pay_cash,
+        'cash_enabled': settings.CASH_ENABLED,
+        'trips_counted': user.boarded_count + user.no_show_count,
     }
 
 
@@ -76,11 +79,18 @@ def csrf_token(request):
 @throttle_classes([SignupPhoneThrottle, AnonRateThrottle])
 def signup(request):
     data = request.data.copy()
-    data['phone_number'] = normalize_phone_number(data.get('phone_number'))
+    data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
 
     if not data.get('phone_number') or not data.get('password'):
         return Response(
             {'error': 'Phone number and password are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Older rows may hold 07... or 2547...; one number, one account.
+    if CustomUser.objects.filter(phone_number__in=phone_variants(data['phone_number'])).exists():
+        return Response(
+            {'error': 'This phone number already has an account. Sign in instead.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -126,7 +136,7 @@ def admin_signup(request):
         )
 
     data = request.data.copy()
-    data['phone_number'] = normalize_phone_number(data.get('phone_number'))
+    data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
 
     serializer = UserSerializer(data=data)
     if serializer.is_valid():

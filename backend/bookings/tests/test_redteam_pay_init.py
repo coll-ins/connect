@@ -63,10 +63,24 @@ class RedTeamPayInitTests(APITestCase):
                     post.assert_not_called()
 
     def test_mpesa_rejects_malformed_numbers(self):
-        for phone in ("0712345678", "+25471234567", "+2547123456789",
-                      "+254abc4567890", "254712345678", "+1 555 0100"):
+        for phone in ("+25471234567", "+2547123456789", "+254abc4567890",
+                      "+1 555 0100", "0700000000", "0212345678"):
             with self.subTest(phone=phone), \
                  patch("bookings.views.requests.post") as post:
                 r = self._post(MPESA, self.owner, {"phone_number": phone})
                 self.assertEqual(r.status_code, 400)
                 post.assert_not_called()
+
+    def test_mpesa_accepts_local_spellings_and_sends_plus_254(self):
+        # Passengers type 07..., 2547... or +254 7..; Paystack only ever
+        # receives the one canonical form.
+        from bookings.models import Payment
+        for phone in ("0712345678", "254712345678", "+254 712 345 678"):
+            Payment.objects.filter(booking=self.booking).delete()
+            with self.subTest(phone=phone), \
+                 patch("bookings.views.requests.post") as post:
+                post.return_value.status_code = 400
+                post.return_value.json.return_value = {"status": False, "message": "x"}
+                self._post(MPESA, self.owner, {"phone_number": phone})
+                post.assert_called_once()
+                self.assertIn("+254712345678", str(post.call_args))

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bus,
@@ -16,8 +16,11 @@ import {
   X,
 } from 'lucide-react';
 import { apiRequest } from '../../api';
+import FieldNote from '../../components/FieldNote';
+import { checkName, checkPhone, checkPlace, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
+import { BusOptions, FleetManager, TripBusPicker, useCompanyBuses } from '../../components/Fleet';
 
 const EMPTY_COPY = {
   routes: ['No routes yet', 'Create a route to start selling seats on it.'],
@@ -26,7 +29,7 @@ const EMPTY_COPY = {
   drivers: ['No drivers yet', 'Add a driver so trips can be assigned a bus.'],
   operators: ['No operators yet', 'Add an operator to manage boarding and departures.'],
   bookings: ['No bookings yet', 'Bookings appear here as soon as passengers reserve seats on your trips.'],
-  capacity: ['No upcoming trips', 'Seat capacity shows for scheduled and boarding trips.'],
+  capacity: ['No upcoming trips', 'Scheduled and boarding trips show here with their bus and seats.'],
 };
 
 const money = (value) =>
@@ -75,8 +78,8 @@ const sectionConfig = {
     icon: ClipboardList,
   },
   capacity: {
-    title: 'Seats & Capacity',
-    description: 'Monitor scheduled seats and passenger occupancy.',
+    title: 'Buses & seats',
+    description: 'Your buses, and which bus runs each trip. A trip has exactly its bus\'s seats.',
     icon: Bus,
   },
   pricing: {
@@ -237,54 +240,18 @@ function tripStateLabel(trip) {
   return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
 }
 
-function TripCapacityEditor({ trip, onSaved }) {
-  const [value, setValue] = useState(String(trip.capacity || ''));
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  const st = String(trip.status || '').toLowerCase();
-  if (!['scheduled', 'boarding'].includes(st)) return null;
-  const dirty = Number(value) !== Number(trip.capacity);
-
-  const save = async () => {
-    setBusy(true);
-    setMsg('');
-    try {
-      await apiRequest(`/companies/trips/${trip.id}/capacity/`, {
-        method: 'PATCH',
-        body: { capacity: Number(value) },
-      });
-      setMsg('Saved');
-      onSaved();
-    } catch (e) {
-      setMsg(e?.message || 'Could not save');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="op-routes-capacity">
-      <input
-        type="number"
-        min="1"
-        max="100"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        aria-label="Seats"
-      />
-      <button type="button" onClick={save} disabled={!dirty || busy}>
-        {busy ? 'Saving…' : 'Update seats'}
-      </button>
-      {msg && <small role="status">{msg}</small>}
-    </div>
-  );
-}
-
-function Input({ label, ...props }) {
+// error also blocks the form: the browser refuses to submit and shows it.
+function Input({ label, hint, error, ...props }) {
+  const noteId = useId();
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.setCustomValidity(error || ''); }, [error]);
   return (
     <label className="company-field">
       <span>{label}</span>
-      <input {...props} />
+      <input ref={ref} {...props}
+        aria-describedby={hint || error ? noteId : undefined}
+        aria-invalid={Boolean(error && String(props.value ?? '').trim())} />
+      {(hint || error) && <FieldNote id={noteId} hint={hint} error={error} value={props.value} />}
     </label>
   );
 }
@@ -344,8 +311,11 @@ export default function CompanyManagerSection({ section }) {
     route_id: '',
     driver_id: '',
     departure_at: '',
-    capacity: 30,
+    bus_id: '',
   });
+  const { buses, reload: reloadBuses } = useCompanyBuses(
+    ['trips', 'capacity'].includes(section) ? companyId : null
+  );
 
   const [driverForm, setDriverForm] = useState({
     name: '',
@@ -561,7 +531,7 @@ export default function CompanyManagerSection({ section }) {
           departure_at: new Date(
             tripForm.departure_at
           ).toISOString(),
-          capacity: Number(tripForm.capacity),
+          bus_id: Number(tripForm.bus_id),
         },
       });
 
@@ -786,8 +756,9 @@ export default function CompanyManagerSection({ section }) {
                 route_id: '',
                 driver_id: '',
                 departure_at: '',
-                capacity: 30,
+                bus_id: '',
               });
+              reloadBuses();
               setModal('trip');
             }
 
@@ -1040,13 +1011,40 @@ export default function CompanyManagerSection({ section }) {
                         <span className="company-record-sub">
                           #{trip.id} · {tripStateLabel(trip)}
                         </span>
+                        <span className="company-record-sub">
+                          {trip.bus_plate
+                            ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate}`
+                            : 'No bus assigned'}
+                        </span>
                       </div>
 
                       <div>
-                        <strong>{trip.capacity}</strong>
+                        <strong>{trip.booked_seats || 0} / {trip.capacity}</strong>
                         <span className="company-record-sub">
-                          seats
+                          seats booked
                         </span>
+                        {['scheduled', 'boarding'].includes(String(trip.status)) && (
+                          <button
+                            type="button"
+                            className="company-secondary-button"
+                            onClick={() => {
+                              // Same route and time on a second bus.
+                              const d = new Date(trip.departure_at);
+                              const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                .toISOString().slice(0, 16);
+                              setTripForm({
+                                route_id: String(trip.route),
+                                driver_id: '',
+                                departure_at: local,
+                                bus_id: '',
+                              });
+                              reloadBuses();
+                              setModal('trip');
+                            }}
+                          >
+                            Add another bus
+                          </button>
+                        )}
                       </div>
 
                       <Select
@@ -1206,6 +1204,10 @@ export default function CompanyManagerSection({ section }) {
               )}
 
               {section === 'capacity' && (
+                <FleetManager companyId={companyId} canEdit />
+              )}
+
+              {section === 'capacity' && (
                 <div className="company-capacity-grid">
                   {activeTrips.map((trip) => {
                     const booked = Number(
@@ -1239,7 +1241,12 @@ export default function CompanyManagerSection({ section }) {
                         </div>
 
                         <span>{Math.round(percentage)}% occupied</span>
-                        <TripCapacityEditor trip={trip} onSaved={load} />
+                        <span className="company-record-sub">
+                          {trip.bus_plate
+                            ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate}`
+                            : 'No bus assigned'}
+                        </span>
+                        <TripBusPicker trip={trip} buses={buses} onSaved={load} />
                       </div>
                     );
                   })}
@@ -1314,6 +1321,9 @@ export default function CompanyManagerSection({ section }) {
                 })
               }
               placeholder="CBD to Rongai"
+              maxLength={200}
+              hint="What passengers see when they pick a route, e.g. CBD to Rongai via Lang'ata."
+              error={checkPlace(routeForm.name, 'the route name', { maxLength: 200, example: 'e.g. CBD to Rongai' })}
               required
             />
 
@@ -1327,6 +1337,10 @@ export default function CompanyManagerSection({ section }) {
                     start_point: e.target.value,
                   })
                 }
+                placeholder="e.g. Kencom, CBD"
+                maxLength={100}
+                hint="Where the route starts: the first stage's name."
+                error={checkPlace(routeForm.start_point, 'the starting point', { example: 'e.g. Kencom, CBD' })}
                 required
               />
 
@@ -1339,6 +1353,10 @@ export default function CompanyManagerSection({ section }) {
                     end_point: e.target.value,
                   })
                 }
+                placeholder="e.g. Rongai"
+                maxLength={100}
+                hint="Where the route ends: the last stage's name."
+                error={checkPlace(routeForm.end_point, 'the destination', { example: 'e.g. Rongai' })}
                 required
               />
             </div>
@@ -1419,20 +1437,19 @@ export default function CompanyManagerSection({ section }) {
               required
             />
 
-            <Input
-              label="Seat capacity"
-              type="number"
-              min="1"
-              max="100"
-              value={tripForm.capacity}
+            <Select
+              label="Bus (its seats are the trip's seats)"
+              value={tripForm.bus_id}
               onChange={(e) =>
                 setTripForm({
                   ...tripForm,
-                  capacity: e.target.value,
+                  bus_id: e.target.value,
                 })
               }
               required
-            />
+            >
+              <BusOptions buses={buses} />
+            </Select>
 
             <button className="company-primary-button" type="submit">
               <CalendarDays size={17} />
@@ -1482,11 +1499,19 @@ export default function CompanyManagerSection({ section }) {
                   name: e.target.value,
                 })
               }
+              placeholder="e.g. Collins Otieno"
+              maxLength={100}
+              hint={`As on the driver's ID. ${NAME_HINT}`}
+              error={checkName(driverForm.name, "the driver's name")}
               required
             />
 
             <Input
               label="Phone number"
+              type="tel"
+              inputMode="tel"
+              maxLength={16}
+              placeholder="07XX XXX XXX"
               value={driverForm.phone_number}
               onChange={(e) =>
                 setDriverForm({
@@ -1494,6 +1519,8 @@ export default function CompanyManagerSection({ section }) {
                   phone_number: e.target.value,
                 })
               }
+              hint={`The driver signs in with it and passengers may call it. ${PHONE_HINT}`}
+              error={checkPhone(driverForm.phone_number)}
               required
             />
 
@@ -1506,6 +1533,9 @@ export default function CompanyManagerSection({ section }) {
                   bus_number: e.target.value,
                 })
               }
+              placeholder="e.g. SM-014 or KDA 123A"
+              maxLength={20}
+              hint="The bus this driver usually drives: its fleet number or number plate."
               required
             />
 
@@ -1565,7 +1595,11 @@ export default function CompanyManagerSection({ section }) {
             />
 
             <Input
-              label="Phone number"
+              label="Phone number (optional)"
+              type="tel"
+              inputMode="tel"
+              maxLength={16}
+              placeholder="07XX XXX XXX"
               value={operatorForm.phone_number}
               onChange={(e) =>
                 setOperatorForm({
@@ -1573,6 +1607,8 @@ export default function CompanyManagerSection({ section }) {
                   phone_number: e.target.value,
                 })
               }
+              hint={`So the team can reach them. ${PHONE_HINT}`}
+              error={checkPhone(operatorForm.phone_number, { required: false })}
             />
 
             <Select

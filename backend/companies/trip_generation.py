@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from buses.models import Bus
 from drivers.models import Driver
 
 from .models import Trip
@@ -26,12 +27,20 @@ def _slot(sch, dep, revive=True):
                 return 'driver_unavailable'
             if Trip.objects.filter(driver=driver, departure_at=dep, status__in=ACTIVE).exists():
                 return 'driver_conflict'
+            bus = None
+            if sch.bus_id:
+                bus = Bus.objects.select_for_update().get(pk=sch.bus_id)
+                if not bus.is_active or bus.maintenance_status != 'operational':
+                    return 'bus_unavailable'
+                if bus.trips.filter(departure_at=dep, status__in=ACTIVE).exists():
+                    return 'bus_conflict'
             if trip is None:
-                Trip.objects.create(route=sch.route, driver=driver, departure_at=dep,
+                Trip.objects.create(route=sch.route, driver=driver, bus=bus, departure_at=dep,
                                     capacity=sch.capacity, status='scheduled', schedule=sch)
                 return 'created'
-            trip.route, trip.driver, trip.capacity, trip.status = sch.route, driver, sch.capacity, 'scheduled'
-            trip.save(update_fields=['route', 'driver', 'capacity', 'status'])
+            trip.route, trip.driver, trip.bus, trip.capacity, trip.status = (
+                sch.route, driver, bus, sch.capacity, 'scheduled')
+            trip.save(update_fields=['route', 'driver', 'bus', 'capacity', 'status'])
             return 'revived'
     except IntegrityError:
         return 'existing'
@@ -40,7 +49,8 @@ def _slot(sch, dep, revive=True):
 def regenerate_for_schedule(sch, days=HORIZON_DAYS, revive=True):
     """Create or revive future trips for ONE schedule. Safe to re-run. Returns counts."""
     counts = {k: 0 for k in (
-        'created', 'revived', 'existing', 'past', 'driver_unavailable', 'driver_conflict', 'invalid')}
+        'created', 'revived', 'existing', 'past', 'driver_unavailable', 'driver_conflict',
+        'bus_unavailable', 'bus_conflict', 'invalid')}
     if not sch.is_active:
         counts['driver_unavailable'] = 0
         counts['driver_conflict'] = 0

@@ -17,6 +17,7 @@ from .services import (
     create_charter,
     decline_charter, quote_charter, set_pending_reference,
 )
+from connect.validation import free_text, kenyan_mobile, person_name, place
 from users.identity import drivers_for_user
 
 
@@ -31,6 +32,24 @@ class CharterCreateSerializer(serializers.Serializer):
     contact_name = serializers.CharField(max_length=100)
     contact_phone = serializers.CharField(max_length=20)
     notes = serializers.CharField(max_length=1000, required=False, allow_blank=True, default='')
+
+    def validate_purpose(self, value):
+        return free_text(value, 'the purpose of the hire', max_length=200)
+
+    def validate_pickup_location(self, value):
+        return place(value, 'the pickup location', max_length=255)
+
+    def validate_destination(self, value):
+        return place(value, 'the destination', max_length=255, example='e.g. Naivasha or Mombasa')
+
+    def validate_contact_name(self, value):
+        return person_name(value, 'the contact name')
+
+    def validate_contact_phone(self, value):
+        return kenyan_mobile(value)
+
+    def validate_notes(self, value):
+        return free_text(value, 'the notes', required=False)
 
 
 class QuoteSerializer(serializers.Serializer):

@@ -3,11 +3,15 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Armchair, ArrowUpRight, Banknote, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
 
 import { apiRequest } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 import { canOpenTripMap, isActiveBooking } from './liveMapUtils';
 import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
 import PassengerLiveMap from './PassengerLiveMap';
+import SeatMap from '../../components/SeatMap';
+import FieldNote from '../../components/FieldNote';
+import { checkPhone, checkPlace, PHONE_HINT } from '../../utils/inputRules';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
 import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
 import bookBusImage from '../../assets/journeys/bookabus.jpeg';
@@ -34,6 +38,12 @@ function PaymentModal({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState('');
+  const { user } = useAuth();
+  // Cash is off at launch (backend CASH_ENABLED); later only for proven riders.
+  // The server enforces both, this only decides what to show.
+  const cashEnabled = Boolean(user?.cash_enabled);
+  const cashLocked = !user?.can_pay_cash;
+  const cashLockedReason = 'For regular riders only: 30 trips, an integrity score of 95% or more and an account at least 60 days old.';
 
   const cash = async () => {
     setBusy(true);
@@ -121,8 +131,8 @@ function PaymentModal({
       </NoticeStack>
     )}
     {step==='method' && <div className="stack" style={{marginTop:18}}>
-      <button className="pay-option" onClick={cash} disabled={busy}><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay with cash</strong><span>Pay the driver/conductor according to the trip rules.</span></div></button>
       <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
+      {cashEnabled && <button className="pay-option" onClick={cash} disabled={busy || cashLocked} aria-describedby="cash-note"><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay cash on board</strong><span id="cash-note">{cashLocked ? cashLockedReason : 'Get your PIN now, track the bus, and pay the driver when you board.'}</span></div></button>}
     </div>}
     {step==='online' && <div className="stack" style={{marginTop:18}}>
       <button className="pay-option" onClick={()=>setStep('mpesa-number')} disabled={busy}><div className="pay-icon"><Smartphone size={20} aria-hidden="true" /></div><div><strong>M-PESA</strong><span>Choose which phone number will receive the payment prompt.</span></div></button>
@@ -153,9 +163,13 @@ function PaymentModal({
           type="tel"
           value={mpesaPhone}
           onChange={(e)=>setMpesaPhone(e.target.value)}
-          placeholder="+254710000000"
+          placeholder="07XX XXX XXX"
           autoComplete="tel"
           inputMode="tel"
+          maxLength={16}
+          aria-label="M-PESA phone number"
+          aria-describedby="mpesa-phone-note"
+          aria-invalid={Boolean(mpesaPhone.trim() && checkPhone(mpesaPhone))}
           style={{
             display:'block',
             width:'100%',
@@ -169,12 +183,14 @@ function PaymentModal({
             pointerEvents:'auto'
           }}
         />
+        <FieldNote id="mpesa-phone-note" value={mpesaPhone} error={checkPhone(mpesaPhone)}
+          hint={`The M-PESA prompt goes to this number. ${PHONE_HINT}`} />
 
         <button
           className="btn btn-primary"
           type="button"
           style={{width:'100%',marginTop:12}}
-          disabled={busy || !mpesaPhone.trim()}
+          disabled={busy || Boolean(checkPhone(mpesaPhone))}
           onClick={()=>mpesa(mpesaPhone.trim())}
         >
           {busy ? 'Starting…' : 'Proceed'}
@@ -193,7 +209,7 @@ function PaymentModal({
     </div>}
 
     {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">Authorize the M-PESA prompt on the phone that received it.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
-    {step==='cash-success' && <div className="success">Cash selected. Pay the driver in cash. Your boarding PIN will appear on your trip card as soon as the driver confirms the payment.</div>}
+    {step==='cash-success' && <div className="success">Seat held. Your boarding PIN is on your trip card now. Track the bus, then pay the driver in cash and show your PIN when you board.</div>}
   </div></div>, document.body);
 }
 
@@ -263,9 +279,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
-  const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1);
+  const [bookingTrip,setBookingTrip]=useState(null);
+  const [pickedSeats,setPickedSeats]=useState([]),[seatMapKey,setSeatMapKey]=useState(0);
+  // autoCount > 0: the passenger let us choose; the server picks random free seats.
+  const [autoCount,setAutoCount]=useState(0);
+  const seats=autoCount||pickedSeats.length;
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
+  const otherPickupError = checkPlace(otherPickup, 'the pickup location', { example: 'e.g. Shell Rongai or Galleria Mall' });
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
 
   const refresh = useCallback(async()=>{
@@ -347,8 +368,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     };
   }, [company, route, selectedDate]);
 
-  // Cash bookings stay pending until the driver confirms the cash. Poll so the
-  // boarding PIN appears on the passenger's screen without a manual reload.
+  // Cash bookings stay pending until the driver checks the PIN on board. Poll
+  // so the trip card flips to boarded without a manual reload.
   const awaitingCash = bookings.some((b) => (
     b.payment_method === 'cash'
     && b.payment_status === 'pending'
@@ -372,12 +393,16 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if(t.status==='boarding') return 'Boarding at first stage only';
     return 'Unavailable';
   };
-  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1)};
+  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setPickedSeats([]);setAutoCount(0)};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
 
     if (!selectedStage && !manualPickup) {
       setError('Select a pickup stage or choose Other and enter your pickup location.');
+      return;
+    }
+    if (!seats) {
+      setError('Tap a free seat on the bus, or let us choose for you.');
       return;
     }
 
@@ -387,7 +412,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     try {
       const body = {
         trip_id: bookingTrip.id,
-        seats: Number(seats),
+        seats,
+        ...(autoCount ? {} : { seat_numbers: pickedSeats }),
       };
 
       if (selectedStage) {
@@ -414,6 +440,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       });
     } catch(e) {
       setError(e.message);
+      // Someone took the seat first: show the fresh map and let them re-pick.
+      if (e.data?.code === 'seat_taken') { setPickedSeats([]); setSeatMapKey((k) => k + 1); }
     } finally {
       setLoading(false);
     }
@@ -1022,17 +1050,23 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               setSelectedStage(null);
             }}
             placeholder="e.g. Shell Rongai"
+            maxLength={100}
+            aria-label="Custom pickup location"
+            aria-describedby="other-pickup-note"
+            aria-invalid={Boolean(otherPickup.trim() && otherPickupError)}
           />
 
           <button
             type="button"
             className="primary-button"
-            disabled={!otherPickup.trim()}
+            disabled={Boolean(otherPickupError)}
             onClick={() => setJourneyStep('trips')}
           >
             Continue
           </button>
         </div>
+        <FieldNote id="other-pickup-note" value={otherPickup} error={otherPickupError}
+          hint="A landmark on this route the driver can stop at: a petrol station, building or junction." />
       </div>
     </div>
 
@@ -1228,32 +1262,51 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 <strong>{selectedStage?.name || otherPickup.trim() || 'Choose a pickup stage'}</strong>
               </div>
             </div>
+
+            {/* In the scrolling part: a 51-seat coach is taller than a phone,
+                and the footer below must keep Book on screen. */}
+            <SeatMap
+              tripId={bookingTrip.id}
+              mode="pick"
+              selected={pickedSeats}
+              onChange={(next) => { setAutoCount(0); setPickedSeats(next); }}
+              max={Math.min(20, seatsLeft(bookingTrip))}
+              refreshKey={seatMapKey}
+            />
             </div>
 
             <div className="booking-modal-footer">
-              <div className="booking-seat-row">
-                <span>Seats</span>
-                <div className="booking-seat-stepper">
-                  <button
-                    type="button"
-                    aria-label="Remove a seat"
-                    onClick={() => setSeats(Math.max(1, Number(seats) - 1))}
-                    disabled={Number(seats) <= 1}
-                  >
-                    −
-                  </button>
-                  <strong aria-live="polite">{seats}</strong>
-                  <button
-                    type="button"
-                    aria-label="Add a seat"
-                    onClick={() =>
-                      setSeats(Math.min(20, seatsLeft(bookingTrip), Number(seats) + 1))
-                    }
-                    disabled={Number(seats) >= Math.min(20, seatsLeft(bookingTrip))}
-                  >
-                    +
-                  </button>
+              <div className="booking-seat-pick">
+                <div className="booking-seat-mode" role="radiogroup" aria-label="How to choose seats">
+                  <button type="button" role="radio" aria-checked={!autoCount}
+                    onClick={() => setAutoCount(0)}>I'll pick my seats</button>
+                  <button type="button" role="radio" aria-checked={!!autoCount}
+                    disabled={seatsLeft(bookingTrip) < 1}
+                    onClick={() => { setPickedSeats([]); setAutoCount(autoCount || 1); }}>Choose for me</button>
                 </div>
+                {autoCount ? (
+                  <div className="booking-seat-row">
+                    <span>How many seats?</span>
+                    <span className="booking-seat-count">
+                      <button type="button" aria-label="One seat fewer" disabled={autoCount <= 1}
+                        onClick={() => setAutoCount(autoCount - 1)}>−</button>
+                      <strong aria-live="polite">{autoCount}</strong>
+                      <button type="button" aria-label="One seat more"
+                        disabled={autoCount >= Math.min(20, seatsLeft(bookingTrip))}
+                        onClick={() => setAutoCount(autoCount + 1)}>+</button>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="booking-seat-row">
+                    <span>Choose your seat{seats === 1 ? '' : 's'}</span>
+                    <strong aria-live="polite">
+                      {seats ? `Seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Tap a free seat'}
+                    </strong>
+                  </div>
+                )}
+                {autoCount ? (
+                  <p className="booking-seat-note">Free seats are picked at random when you book. Your seat numbers show on your ticket.</p>
+                ) : null}
               </div>
 
               <div className="booking-total-glass">
@@ -1270,11 +1323,12 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 type="button"
                 className="glass-primary-button glass-primary-button-large"
                 onClick={createBooking}
-                disabled={loading}
+                disabled={loading || !seats}
               >
                 {loading
                   ? 'Creating booking…'
-                  : 'Confirm booking'}
+                  : autoCount ? `Book ${autoCount} seat${autoCount === 1 ? '' : 's'}`
+                  : seats ? `Book seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Pick a seat first'}
               </button>
             </div>
           </div>

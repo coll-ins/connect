@@ -2,7 +2,7 @@
 // environment variables) once the business is registered; the legal pages
 // and Help read them from here only.
 // Change with TERMS_VERSION in backend/connect/settings.py.
-export const LAST_UPDATED = '8 November 2026';
+export const LAST_UPDATED = '9 November 2026';
 
 const env = import.meta.env;
 

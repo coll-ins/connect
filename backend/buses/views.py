@@ -1,11 +1,14 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from companies.models import Company
+from bookings.seats import occupied_numbers, seats_taken
+from companies.models import Company, Trip
 from users.permissions import can_manage_company
 
 from .models import Bus
@@ -200,6 +203,11 @@ def bus_detail(request, bus_id):
         )
 
     if request.method == 'DELETE':
+        if bus.trips.exists() or bus.trip_schedules.exists():
+            return Response(
+                {'error': 'This bus has trips. Mark it inactive instead of removing it.'},
+                status=status.HTTP_409_CONFLICT,
+            )
         bus.delete()
 
         return Response(
@@ -219,7 +227,34 @@ def bus_detail(request, bus_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    serializer.save()
+    with transaction.atomic():
+        locked = Bus.objects.select_for_update().get(pk=bus.pk)
+        new_capacity = serializer.validated_data.get('capacity', locked.capacity)
+        upcoming = list(
+            Trip.objects.select_for_update()
+            .filter(bus=locked, status__in=('scheduled', 'boarding'))
+        )
+        if new_capacity != locked.capacity:
+            for trip in upcoming:
+                used = max(seats_taken(trip), max(occupied_numbers(trip), default=0))
+                if used > new_capacity:
+                    return Response(
+                        {
+                            'error': (
+                                f'The trip at {timezone.localtime(trip.departure_at):%d %b %H:%M} '
+                                f'already has {used} seats booked on this bus. Move it to '
+                                'another bus first.'
+                            ),
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+        serializer.instance = locked
+        bus = serializer.save()
+        # Seats on its open trips and schedules follow the bus.
+        for trip in upcoming:
+            trip.save(update_fields=['capacity'])
+        for sch in bus.trip_schedules.all():
+            sch.save(update_fields=['capacity'])
 
     return Response(
         BusSerializer(bus).data,

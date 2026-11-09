@@ -1,3 +1,4 @@
+from django.test import override_settings
 from decimal import Decimal
 import io
 from django.core.management import call_command
@@ -28,6 +29,7 @@ def _paystack_offline(*args, **kwargs):
     raise requests.RequestException('offline')
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class PaymentChannelTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -36,6 +38,7 @@ class PaymentChannelTests(TestCase):
             username='payment_passenger',
             password='password123',
             phone_number='+254700000001',
+            boarded_count=10,  # trusted: cash unlocked
         )
         self.driver = Driver.objects.create(
             company=self.company,
@@ -399,6 +402,7 @@ class PaymentChannelTests(TestCase):
         )
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class ConcurrentCashInitializationTests(TransactionTestCase):
     def setUp(self):
         self.company = Company.objects.create(
@@ -432,6 +436,7 @@ class ConcurrentCashInitializationTests(TransactionTestCase):
             username='concurrent_cash_user',
             password='password123',
             phone_number='+254700000002',
+            boarded_count=10,  # trusted: cash unlocked
         )
 
         self.booking = Booking.objects.create(
@@ -831,6 +836,7 @@ class ConcurrentDigitalInitializationTests(TransactionTestCase):
 
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class DeadDigitalAttemptTests(TestCase):
     """A closed or failed Paystack checkout must not lock the booking."""
 
@@ -839,7 +845,8 @@ class DeadDigitalAttemptTests(TestCase):
         company = Company.objects.create(name='Retry Line')
         self.passenger = User.objects.create_user(
             username='retry_passenger', password='password123',
-            phone_number='+254700000077')
+            phone_number='+254700000077',
+            boarded_count=10)  # trusted: cash unlocked
         route = Route.objects.create(
             company=company, name='CBD - Retry', start_point='CBD',
             end_point='Retry', price=Decimal('200.00'))

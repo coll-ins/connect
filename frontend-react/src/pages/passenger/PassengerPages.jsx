@@ -253,6 +253,28 @@ export function PassengerRecords({ mode = 'receipts' }) {
               </div>
 
               <div className="record-section">
+                <h3>Driver</h3>
+                {selected.driver ? (
+                  <div className="record-info-grid">
+                    <span>Name<strong>{selected.driver.name}</strong></span>
+                    <span>Bus<strong>{selected.driver.bus_number || '—'}</strong></span>
+                    <span>Phone
+                      <strong>
+                        {selected.driver.phone_number
+                          ? <a href={`tel:${selected.driver.phone_number}`}>{selected.driver.phone_number}</a>
+                          : 'Shared only on paid trips'}
+                      </strong>
+                    </span>
+                  </div>
+                ) : (
+                  <p className="muted">No driver was assigned to this trip yet.</p>
+                )}
+                {selected.driver?.phone_number && (
+                  <p className="muted">Left something on the bus? Call the driver with your trip reference.</p>
+                )}
+              </div>
+
+              <div className="record-section">
                 <h3>Booking</h3>
                 <div className="record-info-grid">
                   <span>Status<strong>{selected.booking?.status}</strong></span>
@@ -393,10 +415,12 @@ export function PassengerHelp() {
 }
 
 const lower = (v) => String(v || '').toLowerCase();
+const timeOnly = (v) => (v ? new Date(v).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '');
+const live = (b) => ['pending', 'confirmed'].includes(lower(b.status)) && lower(b.trip_status) === 'scheduled';
 
 // What a passenger can still do with a booking. Mirrors the backend rules:
-// passengers may cancel only before boarding starts; a cash booking waits
-// for the driver to confirm payment.
+// passengers may cancel only before boarding starts, and may change bus only
+// until the change cut-off (15 min before departure, from the server).
 function bookingActions(b) {
   const status = lower(b.status);
   const trip = lower(b.trip_status);
@@ -406,6 +430,7 @@ function bookingActions(b) {
     pay: status === 'pending' && trip !== 'departed' && pay !== 'confirmed'
       && !(lower(b.payment_method) === 'cash' && pay === 'pending'),
     cancel: live && trip === 'scheduled',
+    change: live && b.can_change === true,
     track: canOpenTripMap(b),
   };
 }
@@ -425,11 +450,48 @@ function BookingsBody({ activeOnly = false }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const [changing, setChanging] = useState(null); // { booking, trips }
+
+  const openChange = async (b) => {
+    setError('');
+    setBusyId(b.booking_id);
+    try {
+      const trips = await apiRequest(`/companies/${b.company_id}/trips/?route_id=${b.route_id}`);
+      const options = (Array.isArray(trips) ? trips : [])
+        .filter((t) => t.id !== b.trip_id
+          && (Number(t.capacity) - Number(t.booked_seats || 0)) >= Number(b.seats || 1))
+        .sort((x, y) => new Date(x.departure_at) - new Date(y.departure_at));
+      setChanging({ booking: b, trips: options });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const moveTo = async (trip) => {
+    const b = changing.booking;
+    setBusyId(b.booking_id);
+    setError('');
+    try {
+      await apiRequest(`/bookings/${b.booking_id}/move-trip/`, { method: 'POST', body: { trip_id: trip.id } });
+      setNotice(`Moved to the ${timeOnly(trip.departure_at)} bus. Same seat count, same fare.`);
+      setChanging(null);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const cancel = async (b) => {
     const paid = lower(b.payment_status) === 'confirmed' && lower(b.payment_method) !== 'cash';
-    const warning = paid
-      ? 'Cancel this booking? You will be refunded 50% of the fare.'
-      : 'Cancel this booking? Nothing has been charged.';
+    const warning = !paid
+      ? 'Cancel this booking? Nothing has been charged.'
+      : b.can_change
+        ? `Cancel this booking? You get a full refund because the bus leaves after ${timeOnly(b.change_cutoff_at)}.`
+        : 'Cancel this booking? The bus leaves in under 15 minutes, so you will be refunded 50% of the fare.';
     if (!window.confirm(warning)) return;
     setBusyId(b.booking_id);
     setError('');
@@ -487,7 +549,9 @@ function BookingsBody({ activeOnly = false }) {
               <h2>{booking.route_name || 'CONNECT Journey'}</h2>
 
               <div className="data-card-details">
-                <span><Armchair size={14} aria-hidden="true" /> {booking.seats} seat{booking.seats === 1 ? '' : 's'}</span>
+                <span><Armchair size={14} aria-hidden="true" /> {booking.seat_numbers?.length
+                  ? `Seat${booking.seat_numbers.length === 1 ? '' : 's'} ${booking.seat_numbers.join(', ')}`
+                  : `${booking.seats} seat${booking.seats === 1 ? '' : 's'}`}</span>
                 <span><MapPin size={14} aria-hidden="true" /> {booking.pickup_location}</span>
                 <span><CreditCard size={14} aria-hidden="true" /> {booking.payment_status}</span>
               </div>
@@ -511,6 +575,7 @@ function BookingsBody({ activeOnly = false }) {
               {(() => {
                 const can = bookingActions(booking);
                 if (!can.pay && !can.cancel && !can.track) return null;
+                const picking = changing?.booking.booking_id === booking.booking_id;
                 const busy = busyId === booking.booking_id;
                 return (
                   <div className="data-card-actions">
@@ -526,11 +591,38 @@ function BookingsBody({ activeOnly = false }) {
                         Open map
                       </button>
                     )}
+                    {can.change && !picking && (
+                      <button type="button" className="btn btn-ghost" disabled={busy}
+                        onClick={() => openChange(booking)}>
+                        Change bus
+                      </button>
+                    )}
                     {can.cancel && (
                       <button type="button" className="btn btn-ghost" disabled={busy}
                         onClick={() => cancel(booking)}>
-                        {busy ? 'Cancelling…' : 'Cancel booking'}
+                        {busy ? 'Working…' : 'Cancel booking'}
                       </button>
+                    )}
+                    {live(booking) && (
+                      <p className="change-note">
+                        {booking.can_change
+                          ? `Free to cancel or change bus until ${timeOnly(booking.change_cutoff_at)}.`
+                          : 'Your seat is locked to this bus. Cancelling now refunds 50%.'}
+                      </p>
+                    )}
+                    {picking && (
+                      <div className="change-picker">
+                        <strong>Pick another bus on {booking.route_name}</strong>
+                        {changing.trips.length === 0 ? (
+                          <span>No other bus on this route has {booking.seats} free seat{booking.seats === 1 ? '' : 's'} right now.</span>
+                        ) : changing.trips.map((t) => (
+                          <button type="button" key={t.id} className="btn btn-secondary" disabled={busy}
+                            onClick={() => moveTo(t)}>
+                            {date(t.departure_at)} · {Number(t.capacity) - Number(t.booked_seats || 0)} free
+                          </button>
+                        ))}
+                        <button type="button" className="btn btn-ghost" onClick={() => setChanging(null)}>Keep my bus</button>
+                      </div>
                     )}
                   </div>
                 );

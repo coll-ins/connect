@@ -1,6 +1,7 @@
 from decimal import Decimal
 from rest_framework import serializers
 from companies.models import Trip
+from connect.validation import place
 from .models import Incident
 from drivers.models import Driver
 
@@ -12,7 +13,13 @@ class BookingCreateSerializer(serializers.Serializer):
         default=1,
         min_value=1,
     )
-
+    # Optional exact seats; without them the lowest free seats are given.
+    seat_numbers = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=True,
+        max_length=70,
+    )
     # New structured pickup selection.
     pickup_stage_id = serializers.IntegerField(
         required=False,
@@ -25,6 +32,9 @@ class BookingCreateSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=255,
     )
+
+    def validate_pickup_location(self, value):
+        return place(value, 'the pickup location', required=False, max_length=255)
 
     def validate_trip_id(self, value):
         if not Trip.objects.filter(id=value).exists():

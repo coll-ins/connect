@@ -63,7 +63,7 @@ class ParcelTests(APITestCase):
         data = {
             'trip_id': self.trip.id, 'pickup_stage_id': self.s1.id,
             'dropoff_stage_id': self.s2.id, 'size': 'small',
-            'description': 'Documents', 'receiver_name': 'Jane',
+            'description': 'Documents', 'receiver_name': 'Jane Mwangi',
             'receiver_phone': '0712345678', 'no_prohibited_items': True,
         }
         data.update(over)

@@ -43,7 +43,7 @@ const terms = {
         {
           list: [
             'Online payment (M-PESA, card or bank through Paystack) must be completed within 20 minutes. An unpaid online booking is cancelled after that and its seats are released.',
-            'If you choose cash, your seat is held until the trip departs. Pay the conductor or driver when you board. A cash booking that has not been paid when the trip departs is cancelled.',
+            'Cash on board is not offered at launch. When it is offered, it is only for regular riders with a strong boarding record; their seat is held until the trip ends and they pay the driver when they board.',
             'You can hold up to 3 unpaid bookings at a time.',
             'Fares are set by the transport company, not by CONNECT, and shown in Kenya Shillings before you pay. The fare you see when you book is the fare charged through the app.',
             'Show your booking or boarding code when you board. Boarding is controlled by the transport company’s crew, who may refuse a passenger who cannot show a valid booking, is a danger to others, or breaks the law or the company’s rules.',
@@ -55,7 +55,7 @@ const terms = {
     {
       h: 'Cancellations, no-shows and refunds',
       body: [
-        'The platform applies the refund rules in the Refund and Cancellation Policy automatically, on behalf of the transport company. In short: you get a full refund when the transport company cancels or cannot carry you; you get half the fare back if you cancel before boarding starts or do not board. Anything outside those rules, such as compensation for a delay or a cash refund, is for the transport company to decide.',
+        'The platform applies the refund rules in the Refund and Cancellation Policy automatically, on behalf of the transport company. In short: you get a full refund when the transport company cancels or cannot carry you; you get the full fare back if you cancel more than 15 minutes before departure, and half the fare if you cancel later or do not board. Anything outside those rules, such as compensation for a delay or a cash refund, is for the transport company to decide.',
       ],
     },
     {
@@ -131,13 +131,15 @@ const refunds = {
             ['What happens', 'Refund'],
             ['You cancel an unpaid booking', 'Nothing was charged'],
             ['An unpaid online booking expires after 20 minutes', 'Nothing was charged'],
-            ['You cancel a paid booking before boarding starts', 'Half the fare'],
+            ['You cancel a paid booking more than 15 minutes before departure', 'Full fare'],
+            ['You cancel a paid booking within 15 minutes of departure, before boarding starts', 'Half the fare'],
             ['You do not board within 15 minutes of departure (no-show)', 'Half the fare'],
             ['The transport company cancels the trip', 'Full fare'],
             ['The company cancels your booking because it cannot carry you', 'Full fare'],
             ['An incident (breakdown, accident) stops the trip', 'Your choice: full refund or a seat on a later trip'],
           ],
         },
+        'Until 15 minutes before departure you can also move your booking to another bus on the same route, free of charge. After that your seat is committed to that bus.',
         'Once boarding has started you can no longer cancel a booking in the app.',
         'If you paid cash, CONNECT never received the money. Any refund is for the transport company to decide and pay; ask the crew or the company.',
         'Refunds of less than KES 5 cannot be sent through our payment processor and are not paid.',

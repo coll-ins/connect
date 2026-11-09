@@ -36,6 +36,7 @@ function RequestErrorNotice() {
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
+const Landing = lazy(() => import('./pages/landing/Landing'));
 
 const PassengerDashboard = lazy(() => import('./pages/passenger/PassengerDashboard'));
 const PassengerMapPage = lazy(() => import('./pages/passenger/PassengerMapPage'));
@@ -113,7 +114,7 @@ function DriverRoutes() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/legal" element={<Navigate to="/legal/terms" replace />} />

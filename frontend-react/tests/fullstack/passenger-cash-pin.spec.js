@@ -31,8 +31,9 @@ test('cash booking opens the map with the boarding PIN before the cash is paid',
 
   const scheduled = page.locator('article', { hasText: 'scheduled' }).first();
   await scheduled.getByRole('button', { name: 'Select trip' }).click();
-  await page.getByRole('button', { name: /Confirm booking/ }).click();
-  await page.getByRole('button', { name: /Pay with cash/ }).click();
+  await page.getByRole('radio', { name: 'Choose for me' }).click();
+  await page.getByRole('button', { name: 'Book 1 seat' }).click();
+  await page.getByRole('button', { name: /Pay cash on board/ }).click();
 
   await expect(page).toHaveURL(/\/passenger\/map\?booking=\d+/);
   const bookingId = new URL(page.url()).searchParams.get('booking');

@@ -18,6 +18,7 @@ import { Link, useLocation } from "react-router-dom";
 import { apiRequest } from "../../api";
 import DriverJobs from "./DriverJobs";
 import "./DriverPortal.css";
+import SeatMap from "../../components/SeatMap";
 
 const SERVICE_TIME_ZONE = "Africa/Nairobi";
 
@@ -96,7 +97,7 @@ function TimetableTrip({ trip }) {
       <div className="driver-timetable-details">
         <strong>{trip.route_name}</strong>
         <span>
-          Bus {trip.bus_number} · {trip.start_point} to {trip.end_point} · {trip.capacity} seats
+          Bus {trip.bus_number}{trip.bus_plate ? ` (${trip.bus_plate})` : ''} · {trip.start_point} to {trip.end_point} · {trip.capacity} seats
         </span>
       </div>
       <span className={`driver-timetable-status driver-timetable-status-${trip.status}`}>
@@ -125,40 +126,15 @@ function getCompanyName(driver) {
   );
 }
 
-const canConfirmCash = (b) =>
+// Cash on board: the driver takes the fare and checks the PIN in one step.
+const cashDueOnBoard = (b) =>
   String(b?.payment_method || "").toLowerCase() === "cash" &&
   String(b?.payment_status || "").toLowerCase() === "pending" &&
-  ["pending", "confirmed"].includes(String(b?.status || "").toLowerCase());
+  String(b?.status || "").toLowerCase() === "pending";
+
+const kes = (v) => `KES ${Number(v || 0).toLocaleString("en-KE")}`;
 
 export default function DriverPortal() {
-
-  const confirmCash = async (booking) => {
-    const passengerName =
-      booking.passenger?.name ||
-      booking.passenger_name ||
-      booking.passenger ||
-      `Booking #${booking.booking_id}`;
-
-    if (
-      !window.confirm(
-        `Confirm you have received the cash from ${passengerName}?`
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await apiRequest(
-        `/bookings/payments/${booking.booking_id}/cash/confirm/`,
-        { method: "POST" },
-      );
-
-      window.alert(`Cash from ${passengerName} confirmed.`);
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      window.alert(err?.message || "Unable to confirm this cash payment.");
-    }
-  };
 
   const pinName = (b) =>
     b?.passenger?.name || b?.passenger_name ||
@@ -171,12 +147,11 @@ export default function DriverPortal() {
       setFlash({ ok: true, text: `${pinName(booking)} is already boarded.` });
       return;
     }
-    if (booking.status !== "confirmed") {
+    const paid =
+      booking.status === "confirmed" &&
+      String(booking.payment_status || "").toLowerCase() === "confirmed";
+    if (!paid && !cashDueOnBoard(booking)) {
       setFlash({ ok: false, text: `Cannot board: booking is ${booking.status || "unknown"}.` });
-      return;
-    }
-    if (String(booking.payment_status || "").toLowerCase() !== "confirmed") {
-      setFlash({ ok: false, text: "Payment is not confirmed yet. Confirm cash first." });
       return;
     }
     setPin("");
@@ -195,7 +170,7 @@ export default function DriverPortal() {
     setPinBusy(true);
     setPinError("");
     try {
-      await apiRequest(`/bookings/${pinTarget.booking_id}/verify-boarding/`, {
+      const result = await apiRequest(`/bookings/${pinTarget.booking_id}/verify-boarding/`, {
         method: "POST",
         body: { boarding_pin: value },
       });
@@ -212,7 +187,9 @@ export default function DriverPortal() {
         confirmed = false;
       }
       setFlash(confirmed
-        ? { ok: true, text: `${pinName(target)} boarded. Confirmed by server.` }
+        ? { ok: true, text: result?.cash_collected
+            ? `${pinName(target)} boarded. ${kes(result.cash_collected)} cash recorded.`
+            : `${pinName(target)} boarded. Confirmed by server.` }
         : { ok: false, text: `PIN accepted, but the server list does not show ${pinName(target)} as boarded yet. Refresh to check.` });
       setReloadKey((k) => k + 1);
     } catch (err) {
@@ -356,6 +333,11 @@ export default function DriverPortal() {
           <div style={{background:"#fff",color:"#111",borderRadius:16,padding:20,width:"100%",maxWidth:360}}>
             <h3 style={{margin:"0 0 4px"}}>Board passenger</h3>
             <p style={{margin:"0 0 12px"}}>{pinName(pinTarget)} · {pinTarget.booking_number || pinTarget.booking_id}</p>
+            {cashDueOnBoard(pinTarget) && (
+              <p style={{margin:"0 0 12px",padding:"8px 12px",borderRadius:8,background:"#fef3c7",color:"#78350f",fontWeight:600}}>
+                Take {kes(pinTarget.total_amount)} cash first. Entering the PIN records it as paid.
+              </p>
+            )}
             <input
               autoFocus
               inputMode="numeric"
@@ -578,7 +560,7 @@ export default function DriverPortal() {
                 {rows.length === 0 && <p style={{opacity:.7,margin:"12px 0 0"}}>No passengers assigned yet.</p>}
                 {rows.map((b) => {
                   const boardedRow = st(b) === "completed";
-                  const cashDue = canConfirmCash(b);
+                  const cashDue = cashDueOnBoard(b);
                   const canBoard = st(b) === "confirmed" && pay(b) === "confirmed";
                   const label = pay(b) === "failed" ? "Payment failed" : st(b) === "pending" ? "Awaiting payment" : st(b) || "unknown";
                   return (
@@ -586,13 +568,13 @@ export default function DriverPortal() {
                       <div style={{minWidth:0}}>
                         <strong>{pinName(b)}</strong>
                         <div style={{fontSize:13,opacity:.75}}>
-                          {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seats || 1} seat(s)
+                          {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seat_numbers?.length ? `seat ${b.seat_numbers.join(", ")}` : `${b.seats || 1} seat(s)`}
                         </div>
                       </div>
                       {boardedRow ? (
                         <span style={{...btn,background:"#16a34a",cursor:"default",display:"inline-flex",alignItems:"center"}}>Boarded</span>
                       ) : cashDue ? (
-                        <button type="button" style={{...btn,background:"#d97706"}} onClick={() => confirmCash(b)}>Confirm cash received</button>
+                        <button type="button" style={{...btn,background:"#d97706"}} onClick={() => verifyPassenger(b)}>Cash {kes(b.total_amount)} · Verify PIN</button>
                       ) : canBoard ? (
                         <button type="button" style={{...btn,background:"#2563eb"}} onClick={() => verifyPassenger(b)}>Verify PIN</button>
                       ) : (
@@ -762,6 +744,20 @@ export default function DriverPortal() {
                 </div>
               </div>
 
+              {[...new Set(bookings
+                .filter((b) => !["cancelled", "no_show"].includes(String(b.status || "").toLowerCase()) && b.trip_id)
+                .map((b) => b.trip_id))]
+                .slice(0, 2)
+                .map((tripId) => {
+                  const first = bookings.find((b) => b.trip_id === tripId);
+                  return (
+                    <div key={tripId} className="driver-seatmap">
+                      <h3>Seats · {first?.route || "Trip"} {first?.departure_at ? new Date(first.departure_at).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : ""}</h3>
+                      <SeatMap tripId={tripId} mode="view" refreshKey={reloadKey} />
+                    </div>
+                  );
+                })}
+
               {bookings.length === 0 ? (
                 <div className="driver-empty">
                   No passengers found.
@@ -785,15 +781,15 @@ export default function DriverPortal() {
                         </strong>
 
                         <span>
-                          Seats: {b.seats || 1}
+                          {b.seat_numbers?.length ? `Seat ${b.seat_numbers.join(", ")}` : `Seats: ${b.seats || 1}`}
                         </span>
                         <span>
                           Payment: {b.payment_method || "-"} · {b.payment_status || "-"}
                         </span>
-                        {canConfirmCash(b) && (
+                        {cashDueOnBoard(b) && (
                           <button
                             type="button"
-                            onClick={() => confirmCash(b)}
+                            onClick={() => verifyPassenger(b)}
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
@@ -810,7 +806,7 @@ export default function DriverPortal() {
                             }}
                           >
                             <Banknote size={14} />
-                            Confirm cash received
+                            Take {kes(b.total_amount)} cash, verify PIN
                           </button>
                         )}
                       </div>
@@ -921,10 +917,10 @@ export default function DriverPortal() {
                         <span>
                           Payment: {b.payment_method || "-"} · {b.payment_status || "-"}
                         </span>
-                        {canConfirmCash(b) && (
+                        {cashDueOnBoard(b) && (
                           <button
                             type="button"
-                            onClick={() => confirmCash(b)}
+                            onClick={() => verifyPassenger(b)}
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
@@ -941,7 +937,7 @@ export default function DriverPortal() {
                             }}
                           >
                             <Banknote size={14} />
-                            Confirm cash received
+                            Take {kes(b.total_amount)} cash, verify PIN
                           </button>
                         )}
                       </div>

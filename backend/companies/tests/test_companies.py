@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from bookings.models import BoardingEvent, Booking
+from buses.models import Bus
 from companies.models import Company, Route, Trip
 from drivers.models import Driver  # Ensure driver model is imported
 from wallets.models import Wallet
@@ -45,6 +46,10 @@ class CompanyFunctionViewsTests(APITestCase):
           phone_number="0700000000",
           bus_number="KBZ 123A",
           company=self.company,
+      )
+      self.bus = Bus.objects.create(
+          company=self.company, registration_number="KBZ 123A",
+          bus_number="7", vehicle_type="bus_51", capacity=1,
       )
 
       self.trip = Trip.objects.create(
@@ -230,7 +235,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 40,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )
@@ -239,9 +244,10 @@ class CompanyFunctionViewsTests(APITestCase):
           response.status_code,
           status.HTTP_201_CREATED
       )
+      # Seats come from the bus (an Isuzu FTR90 51-seater), not the form.
       self.assertEqual(
           response.data["capacity"],
-          40
+          51
       )
       self.assertEqual(
           response.data["status"],
@@ -266,7 +272,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 30,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )
@@ -294,7 +300,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 30,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )
@@ -319,7 +325,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 30,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )
@@ -352,7 +358,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 30,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )
@@ -363,7 +369,7 @@ class CompanyFunctionViewsTests(APITestCase):
       )
 
 
-  def test_create_trip_invalid_capacity_rejected(self):
+  def test_create_trip_without_a_bus_rejected(self):
       self.client.force_authenticate(user=self.admin_user)
 
       url = reverse("create_trip")
@@ -858,7 +864,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 30,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )
@@ -883,7 +889,7 @@ class CompanyFunctionViewsTests(APITestCase):
               "departure_at": (
                   timezone.now() + timezone.timedelta(hours=2)
               ).isoformat(),
-              "capacity": 30,
+              "bus_id": self.bus.pk,
           },
           format="json",
       )

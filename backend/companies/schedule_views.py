@@ -10,6 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from buses.models import Bus
 from drivers.models import Driver
 from users.permissions import can_access_company
 from users.route_scope import operator_route_ids
@@ -58,7 +59,10 @@ def _data(s):
         'route_name': s.route.name,
         'driver_id': s.driver_id,
         'driver_name': s.driver.name,
-        'bus_number': s.driver.bus_number,
+        'bus_id': s.bus_id,
+        'bus_number': s.bus.bus_number if s.bus_id else s.driver.bus_number,
+        'bus_plate': s.bus.registration_number if s.bus_id else None,
+        'vehicle_type': s.bus.get_vehicle_type_display() if s.bus_id else None,
         'capacity': s.capacity,
         'days_of_week': sorted(s.weekdays()),
         'departure_time': s.departure_time.strftime('%H:%M'),
@@ -87,11 +91,18 @@ def _clean(d, company, partial):
         if not driver:
             return None, 'driver not found for this company.'
         f['driver'] = driver
-    if not partial or 'capacity' in d:
-        cap = _int(d.get('capacity'))
-        if cap is None or not 1 <= cap <= 100:
-            return None, 'capacity must be between 1 and 100.'
-        f['capacity'] = cap
+    if not partial or 'bus_id' in d:
+        # Seats come from the bus; a 'capacity' in the request is ignored.
+        raw = d.get('bus_id')
+        whole = not isinstance(raw, bool) and str(raw).strip().isdigit()
+        bus = whole and Bus.objects.filter(
+            id=int(str(raw).strip()), company=company,
+            is_active=True, maintenance_status='operational',
+        ).first()
+        if not bus:
+            return None, 'bus not found for this company, or it is not in service.'
+        f['bus'] = bus
+        f['capacity'] = bus.capacity
     if not partial or 'days_of_week' in d:
         days = _days(d.get('days_of_week'))
         if days is None:
@@ -204,7 +215,7 @@ def list_schedules(request, company_id):
     if not can_manage_company(request.user, company):
         return _bad('You are not authorized to view schedules for this company.', 403)
     qs = (TripSchedule.objects.filter(route__company=company)
-          .select_related('route', 'driver').order_by('departure_time', 'id'))
+          .select_related('route', 'driver', 'bus').order_by('departure_time', 'id'))
     return Response([_data(s) for s in qs])
 
 
@@ -220,7 +231,7 @@ def list_generation_exceptions(request, company_id):
     ).filter(
         models.Q(driver_unavailable_count__gt=0)
         | models.Q(driver_conflict_count__gt=0)
-    ).select_related('route', 'driver').order_by('route__name', 'departure_time', 'id')
+    ).select_related('route', 'driver', 'bus').order_by('route__name', 'departure_time', 'id')
     if request.user.role == 'company_operator':
         route_ids = operator_route_ids(request.user)
         if route_ids is not None:
@@ -294,7 +305,7 @@ def create_schedule(request):
             duplicate_fields = {
                 'route': f['route'],
                 'driver': f['driver'],
-                'capacity': f['capacity'],
+                'bus': f['bus'],
                 'days_of_week': f['days_of_week'],
                 'departure_time': f['departure_time'],
                 'service_end_time': f.get('service_end_time'),
@@ -343,20 +354,35 @@ def manage_schedule(request, schedule_id):
         if err:
             return _bad(err)
         old_fields = {key: getattr(s, key) for key in GENERATION_FIELDS}
-        old_capacity = s.capacity
+        old_bus_id = s.bus_id
         old_start, old_end, old_active = s.start_date, s.end_date, s.is_active
         for key, value in f.items():
             setattr(s, key, value)
         s.save()
         config_changed = any(old_fields[key] != getattr(s, key) for key in GENERATION_FIELDS)
-        if old_capacity != s.capacity:
-            Trip.objects.filter(
+        if old_bus_id != s.bus_id:
+            # Move only the empty future trips; a trip with bookings keeps its
+            # bus until someone swaps it on purpose (seat checks run there).
+            empty = Trip.objects.filter(
                 schedule=s,
                 status='scheduled',
                 departure_at__gt=timezone.now(),
                 bookings__isnull=True,
                 parcels__isnull=True,
-            ).update(capacity=s.capacity)
+            ).exclude(
+                departure_at__in=s.bus.trips.filter(
+                    status__in=('scheduled', 'boarding', 'departed'),
+                ).exclude(schedule=s).values('departure_at'),
+            )
+            with transaction.atomic():
+                # Lock first, then re-check: a booking or a blocked seat may
+                # have landed since the query above was planned.
+                ids = list(empty.select_for_update(of=('self',)).values_list('id', flat=True))
+                Trip.objects.filter(
+                    id__in=ids, bookings__isnull=True, parcels__isnull=True,
+                ).exclude(
+                    seat_assignments__seat_no__gt=s.capacity,
+                ).update(bus=s.bus, capacity=s.capacity)
         date_changed = old_start != s.start_date or old_end != s.end_date
         date_window_expanded = (
             date_changed

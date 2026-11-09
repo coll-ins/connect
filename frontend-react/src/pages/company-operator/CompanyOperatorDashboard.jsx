@@ -21,6 +21,10 @@ import { apiRequest } from '../../api';
 import { confirmTripCancel } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import './CompanyOperatorDashboard.css';
+import SeatMap from '../../components/SeatMap';
+import { TripBusPicker, useCompanyBuses } from '../../components/Fleet';
+import FieldNote from '../../components/FieldNote';
+import { checkPhone, PHONE_HINT } from '../../utils/inputRules';
 
 const sectionByPath = {
   '/company-operator': 'overview',
@@ -31,6 +35,8 @@ const sectionByPath = {
   '/company-operator/drivers': 'drivers',
   '/company-operator/capacity': 'capacity',
   '/company-operator/operations': 'operations',
+  // The sidebar's Boarding link: walk-in Book & board lives on the capacity desk.
+  '/company-operator/boarding': 'capacity',
 };
 
 const pathBySection = {
@@ -553,51 +559,20 @@ function TripCard({ trip, onStatusChange, updating }) {
   );
 }
 
-function CapacityEditor({ trip, bookedSeats, onSaved }) {
-  const [value, setValue] = useState(String(trip.capacity || ''));
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-  const status = String(trip.status || '').toLowerCase();
-  if (!['scheduled', 'boarding'].includes(status)) return null;
-  const dirty = Number(value) !== Number(trip.capacity);
-
-  const save = async () => {
-    setBusy(true);
-    setMsg('');
-    try {
-      const res = await apiRequest(`/companies/trips/${trip.id}/capacity/`, {
-        method: 'PATCH',
-        body: { capacity: Number(value) },
-      });
-      onSaved(res?.capacity ?? Number(value));
-      setMsg('Saved');
-    } catch (e) {
-      setMsg(e?.message || 'Could not save');
-    } finally {
-      setBusy(false);
-    }
-  };
-
+// Who sits where, and blocking seats for walk-ins or staff (loads on demand).
+function TripSeats({ trip }) {
+  const [open, setOpen] = useState(false);
+  if (!['scheduled', 'boarding'].includes(String(trip.status).toLowerCase())) return null;
   return (
-    <div className="operator-capacity-edit">
-      <label>
-        <span>Seats</span>
-        <input
-          type="number"
-          min={Math.max(1, bookedSeats)}
-          max={100}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-      </label>
-      <button type="button" onClick={save} disabled={!dirty || busy}>
-        {busy ? 'Saving…' : 'Save'}
+    <div className="operator-seats">
+      <button type="button" className="operator-seats-toggle" aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}>
+        {open ? 'Hide seat map' : 'Seat map'}
       </button>
-      {msg && <small role="status">{msg}</small>}
+      {open && <SeatMap tripId={trip.id} mode="manage" />}
     </div>
   );
 }
-
 
 function WalkInForm({ trip, onDone }) {
   const [phone, setPhone] = useState('');
@@ -634,8 +609,12 @@ function WalkInForm({ trip, onDone }) {
       <div className="operator-walkin-row">
         <input
           type="tel"
+          inputMode="tel"
+          maxLength={16}
           placeholder="Passenger phone e.g. 0712345678"
           aria-label="Passenger phone number"
+          aria-describedby="walkin-phone-note"
+          aria-invalid={Boolean(phone.trim() && checkPhone(phone))}
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           required
@@ -648,10 +627,12 @@ function WalkInForm({ trip, onDone }) {
           onChange={(e) => setSeats(e.target.value)}
           aria-label="Seats"
         />
-        <button type="submit" disabled={busy || !phone.trim()}>
+        <button type="submit" disabled={busy || Boolean(checkPhone(phone))}>
           {busy ? 'Booking…' : 'Book & board'}
         </button>
       </div>
+      <FieldNote id="walkin-phone-note" value={phone} error={checkPhone(phone)}
+        hint={`The passenger's own phone: their ticket and boarding PIN go to it. ${PHONE_HINT}`} />
       {msg && (
         <small role="status" className={ok ? 'walkin-ok' : 'walkin-err'}>
           {msg}
@@ -702,6 +683,7 @@ export default function CompanyOperatorDashboard() {
 
   const companyId =
     user?.company_id || user?.company?.id || user?.company;
+  const { buses } = useCompanyBuses(companyId);
 
   const loadOperations = useCallback(
     async (showRefresh = false) => {
@@ -1616,17 +1598,22 @@ export default function CompanyOperatorDashboard() {
                   />
                 </div>
 
-                <CapacityEditor
+                <span className="operator-capacity-bus">
+                  {trip.bus_plate
+                    ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate} · ${trip.vehicle_label}`
+                    : 'No bus assigned'}
+                </span>
+                <TripBusPicker
                   trip={trip}
-                  bookedSeats={bookedSeats}
-                  onSaved={(cap) =>
-                    setTrips((cur) =>
-                      cur.map((t) =>
-                        t.id === trip.id ? { ...t, capacity: cap } : t
-                      )
+                  buses={buses}
+                  onSaved={(updated) =>
+                    updated && setTrips((cur) =>
+                      cur.map((t) => (t.id === trip.id ? { ...t, ...updated } : t))
                     )
                   }
                 />
+
+                <TripSeats trip={trip} />
 
                 {String(trip.status).toLowerCase() === 'boarding' && (
                   <WalkInForm

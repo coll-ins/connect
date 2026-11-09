@@ -42,6 +42,8 @@
 .record-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 .record-info-grid span { display: flex; flex-direction: column; gap: 4px; color: var(--text-3); font-size: 11px; letter-spacing: 0; }
 .record-info-grid strong { color: var(--text); font-size: 13px; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.record-section > p { margin: 12px 0 0; font-size: 13px; }
+.record-info-grid a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
 .record-section.record-issue { padding: 14px; border: 1px solid rgb(var(--warn-rgb) / 0.3); border-radius: 14px; background: rgb(var(--warn-rgb) / 0.07); }
 .record-issue p { margin: 0 0 12px; color: var(--text); }
 
@@ -118,3 +120,7 @@
 .data-card-actions .btn {
   min-height: 44px;
 }
+.data-card-actions .change-note { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--text-2); }
+.change-picker { flex-basis: 100%; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-2); }
+.change-picker span { color: var(--text-2); font-size: 13px; }
+.change-picker .btn { justify-content: flex-start; min-height: 44px; }
