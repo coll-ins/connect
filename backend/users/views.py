@@ -9,7 +9,7 @@ from django.db import transaction
 from rest_framework import status
 from django.contrib.auth.hashers import make_password
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
@@ -17,6 +17,7 @@ from .models import CustomUser
 from .phone import canonical_phone, phone_variants
 from .throttles import (
     LoginIPThrottle,
+    SignupIPThrottle,
     SignupPhoneThrottle,
     clear_login_failures,
     login_blocked,
@@ -76,7 +77,7 @@ def csrf_token(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([SignupPhoneThrottle, AnonRateThrottle])
+@throttle_classes([SignupPhoneThrottle, SignupIPThrottle, AnonRateThrottle])
 def signup(request):
     data = request.data.copy()
     data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
@@ -518,6 +519,14 @@ def company_staff_detail(request, staff_id):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        # Managers are peers: one must not reset another's password or
+        # remove them and take the company over.
+        if staff_user.role == 'company_manager' and staff_user.pk != user.pk:
+            return Response(
+                {'error': 'Another manager can only be changed by the platform admin.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
     if request.method == 'DELETE':
         if staff_user.pk == user.pk:
             return Response(
@@ -540,6 +549,15 @@ def company_staff_detail(request, staff_id):
     if not serializer.is_valid():
         return Response(
             serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    new_phone = serializer.validated_data.get('phone_number')
+    if new_phone and CustomUser.objects.filter(
+        phone_number__in=phone_variants(new_phone)
+    ).exclude(pk=staff_user.pk).exists():
+        return Response(
+            {'error': 'A user with this phone number already exists.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -589,3 +607,68 @@ def company_staff_detail(request, staff_id):
         CompanyStaffSerializer(staff_user).data,
         status=status.HTTP_200_OK
     )
+
+
+class DeleteAccountThrottle(UserRateThrottle):
+    # Stops password guessing from a session left open on a shared phone.
+    rate = '5/hour'
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([DeleteAccountThrottle])
+def delete_account(request):
+    """Close a passenger's own account. Bookings, payments and parcels stay
+    for the companies' books, so the row is anonymised, not deleted."""
+    user = request.user
+    if user.role != 'passenger' or user.is_superuser:
+        return Response(
+            {'error': 'Staff and driver accounts are closed by your company manager.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if not user.check_password(request.data.get('password') or ''):
+        return Response(
+            {'error': 'That password is wrong. Enter the password you sign in with.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    from bookings.models import Booking
+    from charters.models import CharterRequest
+    from deliveries.models import Parcel
+    from wallets.models import Wallet
+
+    with transaction.atomic():
+        user = CustomUser.objects.select_for_update().get(pk=user.pk)
+        wallet = Wallet.objects.select_for_update().filter(user=user).first()
+        blockers = []
+        if wallet and (wallet.available_balance > 0 or wallet.held_balance > 0):
+            blockers.append(
+                f'you still have KES {wallet.available_balance + wallet.held_balance:,.0f} '
+                'in your wallet. Withdraw or use it first'
+            )
+        if Booking.objects.filter(user=user, status__in=['pending', 'confirmed']).exists():
+            blockers.append('you have a booking that is not finished. Cancel it or complete the trip first')
+        if Parcel.objects.filter(sender=user, status__in=['pending_payment', 'paid', 'picked_up']).exists():
+            blockers.append('you have a parcel on its way. Wait until it is delivered or cancel it first')
+        if CharterRequest.objects.filter(
+            passenger=user, status__in=['requested', 'quoted', 'confirmed'],
+        ).exists():
+            blockers.append('you have an open bus hire. Cancel it or wait until it is completed first')
+        if blockers:
+            return Response(
+                {'error': 'We cannot close your account yet: ' + '; '.join(blockers) + '.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        user.username = f'deleted_{user.pk}'
+        user.first_name = ''
+        user.last_name = ''
+        user.email = ''
+        user.phone_number = None
+        user.location = None
+        user.is_active = False
+        user.set_unusable_password()
+        user.save()
+
+    logout(request)
+    return Response({'message': 'Your account is closed and your personal details are removed.'})

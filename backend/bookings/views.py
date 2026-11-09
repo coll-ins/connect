@@ -1728,6 +1728,24 @@ def create_booking(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Cap unpaid SEATS too: three bookings of a whole bus each would
+            # otherwise let one account empty three trips without paying.
+            seat_cap = getattr(settings, 'MAX_PENDING_SEATS_PER_USER', 10)
+            pending_seats = Booking.objects.filter(
+                user=request.user, status='pending'
+            ).aggregate(n=Sum('seats'))['n'] or 0
+            if pending_seats + seats > seat_cap:
+                return Response(
+                    {
+                        'error': (
+                            f'You can hold at most {seat_cap} unpaid seats at a time. '
+                            f'You already hold {pending_seats}. Pay for or cancel '
+                            'a booking first.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             # Live bookings plus seats an operator has blocked.
             taken_seats = seats_taken(trip)
 

@@ -12,6 +12,8 @@ class BookingCreateSerializer(serializers.Serializer):
         required=False,
         default=1,
         min_value=1,
+        max_value=10,
+        error_messages={'max_value': 'You can book at most 10 seats at once.'},
     )
     # Optional exact seats; without them the lowest free seats are given.
     seat_numbers = serializers.ListField(

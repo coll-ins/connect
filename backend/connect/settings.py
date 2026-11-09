@@ -224,6 +224,9 @@ LOGIN_REDIRECT_URL = '/admin/'
 LOGOUT_REDIRECT_URL = '/admin/'
 
 
+# Installed app: people stay signed in like a ride app (Django's default is 14 days).
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 90
+
 # --- production security ---
 # Only active when DEBUG is off (i.e. on the live server).
 if not DEBUG:
@@ -321,6 +324,7 @@ if not DEBUG:
         )
 
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login_ip'] = '60/minute'
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['signup_ip'] = '20/hour'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['bus_reroute'] = '12/minute'
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['mpesa_push'] = '10/hour'
 
