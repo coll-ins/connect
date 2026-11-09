@@ -3115,12 +3115,56 @@ def resolve_incident_booking(request, booking_id):
         # Paystack definitely refunded nothing: undo the cancellation and
         # the resolution so the passenger can choose again.
         release_refund_claim(claim)
+        seat_lost = False
+        trip_id = (
+            Booking.objects.filter(pk=booking_pk)
+            .values_list('trip_id', flat=True).first()
+        )
         with transaction.atomic():
+            # Lock order trip, then booking, as everywhere else. The seat may
+            # have been resold while Paystack was being called. No departure
+            # check: an incident can happen after the bus has left.
+            locked_trip = (
+                Trip.objects.select_for_update().filter(pk=trip_id).first()
+                if trip_id else None
+            )
             restored = Booking.objects.select_for_update().get(pk=booking_pk)
             if restored.status == 'cancelled':
-                restored.status = previous_status
-                restored.save(update_fields=['status'])
-            IncidentResolution.objects.filter(pk=resolution_pk).delete()
+                seat_free = locked_trip is None or (
+                    seats_taken(locked_trip) + restored.seats
+                    <= locked_trip.capacity
+                )
+                if seat_free:
+                    old_numbers = list(
+                        restored.seat_assignments.values_list('seat_no', flat=True)
+                    )
+                    restored.status = previous_status
+                    restored.save(update_fields=['status'])
+                    if locked_trip is not None:
+                        try:
+                            assign_seats(locked_trip, restored, old_numbers or None)
+                        except SeatError:
+                            assign_seats(locked_trip, restored)
+                    IncidentResolution.objects.filter(pk=resolution_pk).delete()
+                else:
+                    seat_lost = True
+        if seat_lost:
+            # Keep the resolution: the booking really is cancelled and still
+            # owed a refund, so the passenger must not be offered it again.
+            _alert_payment_problem(
+                claim.provider_reference,
+                f'incident refund for booking {claim.booking_number} was '
+                f'rejected and its seat is gone; refund it manually',
+            )
+            return Response(
+                {
+                    'error': (
+                        f'{exc} The booking stays cancelled and our '
+                        'team has been alerted to refund you.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT
+            )
         return Response({'error': str(exc)}, status=status.HTTP_409_CONFLICT)
     except ValueError:
         # Outcome unknown: stays "processing" until reconciled, never resent.
