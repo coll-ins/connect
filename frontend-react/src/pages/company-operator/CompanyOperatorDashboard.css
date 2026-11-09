@@ -1603,3 +1603,12 @@
 .operator-walkin-row button:disabled { opacity: .4; cursor: not-allowed; }
 .walkin-ok { color: var(--accent-text); }
 .walkin-err { color: var(--danger-text); }
+
+.operator-seats { display: grid; gap: 12px; margin-top: 12px; }
+.operator-seats-toggle {
+  justify-self: start; min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-control);
+  background: transparent; color: var(--text); font-weight: 600;
+}
+.operator-seats-toggle:hover { background: var(--surface-2); }
+.operator-seats-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

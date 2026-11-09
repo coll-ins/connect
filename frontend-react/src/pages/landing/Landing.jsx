@@ -34,15 +34,17 @@ const FEATURES = [
   { icon: ShieldCheck, title: 'Boarding PIN', text: 'Only you can board on your seat. The driver checks your PIN.' },
 ];
 
-// A 14-seater, 3 across with an aisle; seat 7 matches the hero ticket.
+// The real 14-seater HiAce: 2 beside the driver (front right), then rows of 3.
+// Seat 7 matches the hero ticket.
 const SEATS = [
-  'taken', 'free', 'aisle', 'taken',
-  'free', 'taken', 'aisle', 'free',
-  'mine', 'taken', 'aisle', 'free',
-  'free', 'taken', 'taken', 'free',
+  'taken', 'free', 'driver',
+  'free', 'taken', 'free',
+  'mine', 'taken', 'free',
+  'free', 'free', 'taken',
+  'taken', 'free', 'free',
 ];
 let seatNo = 0;
-const SEAT_LABELS = SEATS.map((state) => (state === 'aisle' ? '' : String(++seatNo)));
+const SEAT_LABELS = SEATS.map((state) => (state === 'driver' ? '' : String(++seatNo)));
 
 const STEPS = [
   { title: 'Create your account', text: 'Your name, phone number and a password. Takes a minute.' },

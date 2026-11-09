@@ -35,6 +35,7 @@ from drivers.models import Driver
 from wallets.models import Wallet, WalletTransaction
 
 from .models import Booking, BookingHold, Payment, BoardingEvent
+from .seats import SeatError, assign_seats, move_seats, seat_map, seats_taken
 from .services import (
     settle_booking_fault,
     cancel_dead_pending_bookings,
@@ -1734,13 +1735,8 @@ def create_booking(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            confirmed_bookings = trip.bookings.exclude(
-                status='cancelled'
-            )
-
-            taken_seats = sum(
-                b.seats for b in confirmed_bookings
-            )
+            # Live bookings plus seats an operator has blocked.
+            taken_seats = seats_taken(trip)
 
             available_seats = trip.capacity - taken_seats
 
@@ -1771,6 +1767,17 @@ def create_booking(request):
                 status='pending'
             )
 
+            try:
+                seat_numbers = assign_seats(
+                    trip, booking, validated_data.get('seat_numbers')
+                )
+            except SeatError as exc:
+                transaction.set_rollback(True)
+                return Response(
+                    {'error': str(exc), 'code': 'seat_taken'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         return Response(
             {
                 'message': (
@@ -1779,6 +1786,7 @@ def create_booking(request):
                 ),
                 'booking_id': booking.id,
                 'booking_number': booking.booking_number,
+                'seat_numbers': seat_numbers,
                 'total_amount': str(total_amount),
                 'pickup_location': booking.pickup_location,
                 'pickup_stage_id': (
@@ -1824,6 +1832,7 @@ def get_my_bookings(request):
             'payment',
             'boarding_event',
         )
+        .prefetch_related('seat_assignments')
         .order_by('-created_at')
     )
 
@@ -1845,6 +1854,7 @@ def get_my_bookings(request):
                 else None
             ),
             'boarded': hasattr(b, 'boarding_event'),
+            'seat_numbers': sorted(a.seat_no for a in b.seat_assignments.all()),
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
             'trip_status': trip.status if trip else None,
@@ -2432,15 +2442,14 @@ def move_booking_to_trip(request, booking_id):
                 {'error': 'The target trip is not open for passengers.'},
                 status=status.HTTP_409_CONFLICT
             )
+        if not is_staff_move and not before_change_cutoff(new_trip):
+            return Response(
+                {'error': 'That bus leaves too soon to move onto. Pick a later one.',
+                 'code': 'change_cutoff'},
+                status=status.HTTP_409_CONFLICT
+            )
 
-        taken_seats = (
-            new_trip.bookings
-            .exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))
-            .get('total')
-            or 0
-        )
-        available_seats = new_trip.capacity - taken_seats
+        available_seats = new_trip.capacity - seats_taken(new_trip)
         if booking.seats > available_seats:
             return Response(
                 {
@@ -2454,6 +2463,7 @@ def move_booking_to_trip(request, booking_id):
         booking.trip = new_trip
         booking.driver = new_trip.driver
         booking.save(update_fields=['trip', 'driver', 'updated_at'])
+        move_seats(old_trip, new_trip, booking)
 
     import logging
     logging.getLogger(__name__).info(
@@ -2707,17 +2717,26 @@ def cancel_booking(request, booking_id):
                     .get(pk=booking_id)
                 )
                 if restored.status == 'cancelled':
+                    # seats_taken counts blocked seats too; the cancelled
+                    # booking itself is excluded from it.
                     seat_free = locked_trip is None or (
                         not trip_has_departed(locked_trip)
-                        and sum(
-                            b.seats for b in locked_trip.bookings.exclude(
-                                status='cancelled'
-                            )
-                        ) + restored.seats <= locked_trip.capacity
+                        and seats_taken(locked_trip) + restored.seats
+                        <= locked_trip.capacity
                     )
                     if seat_free:
+                        old_numbers = list(
+                            restored.seat_assignments.values_list('seat_no', flat=True)
+                        )
                         restored.status = previous_status
                         restored.save(update_fields=['status'])
+                        if locked_trip is not None:
+                            # Its seat may have been resold meanwhile: keep
+                            # the old numbers if still free, else the lowest free.
+                            try:
+                                assign_seats(locked_trip, restored, old_numbers or None)
+                            except SeatError:
+                                assign_seats(locked_trip, restored)
                     else:
                         seat_lost = True
             if seat_lost:
@@ -2991,16 +3010,8 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     status=status.HTTP_409_CONFLICT
                 )
 
-            taken_seats = (
-                replacement_trip.bookings
-                .exclude(status='cancelled')
-                .aggregate(total=Sum('seats'))
-                .get('total')
-                or 0
-            )
-
             available_seats = (
-                replacement_trip.capacity - taken_seats
+                replacement_trip.capacity - seats_taken(replacement_trip)
             )
 
             if booking.seats > available_seats:
@@ -3037,6 +3048,7 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     'updated_at',
                 ]
             )
+            move_seats(old_trip, replacement_trip, booking)
 
             IncidentResolution.objects.create(
                 booking=booking,
@@ -4465,6 +4477,7 @@ def get_driver_bookings(request, driver_id):
             "pickup_stage",
             "payment",
         )
+        .prefetch_related("seat_assignments")
         .order_by(
             "pickup_stage__order",
             "created_at",
@@ -4482,6 +4495,7 @@ def get_driver_bookings(request, driver_id):
             "booking_number": booking.booking_number,
             "seats": booking.seats,
             "total_amount": str(booking.total_amount),
+            "seat_numbers": sorted(a.seat_no for a in booking.seat_assignments.all()),
             "status": booking.status,
             "passenger": booking.user.display_name,
             "passenger_name": (
@@ -5419,14 +5433,7 @@ def booking_replacement_trips(request, booking_id):
 
     result = []
     for trip in candidates:
-        taken = (
-            trip.bookings
-            .exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))
-            .get('total')
-            or 0
-        )
-        available = trip.capacity - taken
+        available = trip.capacity - seats_taken(trip)
         if booking.seats <= available:
             result.append({
                 'id': trip.id,
@@ -5520,11 +5527,7 @@ def walk_in_booking(request, trip_id):
             return Response({'error': 'This route has no active first stage.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        taken = (
-            trip.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
-        )
-        available = trip.capacity - taken
+        available = trip.capacity - seats_taken(trip)
         if seats > available:
             return Response(
                 {'error': f'Not enough seats available. Only {available} remaining.'},
@@ -5556,6 +5559,17 @@ def walk_in_booking(request, trip_id):
             provider_reference=None, idempotency_key=None,
             refund_status='not_requested',
         )
+        wanted = request.data.get('seat_numbers')
+        if wanted is not None and not isinstance(wanted, list):
+            transaction.set_rollback(True)
+            return Response({'error': 'seat_numbers must be a list of seat numbers.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            assign_seats(trip, booking, wanted)
+        except SeatError as exc:
+            transaction.set_rollback(True)
+            return Response({'error': str(exc), 'code': 'seat_taken'},
+                            status=status.HTTP_409_CONFLICT)
         BoardingEvent.objects.create(
             booking=booking, trip=trip, method='walkin', verified_by=actor)
         User.objects.filter(pk=passenger.pk).update(
@@ -5651,3 +5665,75 @@ def staff_alerts(request):
     rows.sort(key=lambda r: r[0], reverse=True)
     items = [r[1] for r in rows[:20]]
     return Response({'count': len(items), 'items': items})
+
+
+# ============================================================
+# SEAT MAP
+# ============================================================
+
+def _seat_staff(user, trip):
+    """Company staff who may see names and block seats on this trip."""
+    return user.is_superuser or (
+        user.role in {'company_manager', 'company_operator'}
+        and user.company_id == trip.route.company_id
+        and can_handle_route(user, trip.route_id)
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def trip_seat_map(request, trip_id):
+    try:
+        trip = Trip.objects.select_related('route', 'driver').get(pk=trip_id)
+    except Trip.DoesNotExist:
+        return Response({'error': 'Trip not found.'}, status=status.HTTP_404_NOT_FOUND)
+    user = request.user
+    staff = _seat_staff(user, trip) or (
+        user.role == 'company_auditor' and user.company_id == trip.route.company_id
+    )
+    is_driver = trip.driver is not None and is_driver_account_for(user, trip.driver)
+    mine = set(trip.bookings.filter(user=user).values_list('id', flat=True))
+    data = seat_map(trip, viewer_booking_ids=mine, show_names=staff or is_driver)
+    data['can_block'] = _seat_staff(user, trip) and trip.status in ('scheduled', 'boarding')
+    return Response(data)
+
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def trip_seat_block(request, trip_id, seat_no):
+    from .models import SeatAssignment
+    with transaction.atomic():
+        try:
+            trip = (
+                Trip.objects.select_for_update()
+                .select_related('route').get(pk=trip_id)
+            )
+        except Trip.DoesNotExist:
+            return Response({'error': 'Trip not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _seat_staff(request.user, trip):
+            return Response({'error': 'Only the company’s operators can block seats.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        if trip.status not in ('scheduled', 'boarding'):
+            return Response({'error': f'Seats cannot change on a {trip.status} trip.'},
+                            status=status.HTTP_409_CONFLICT)
+        if not 1 <= seat_no <= trip.capacity:
+            return Response({'error': f'Seat {seat_no} does not exist on this bus.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if request.method == 'DELETE':
+            trip.seat_assignments.filter(seat_no=seat_no, blocked=True).delete()
+        else:
+            trip.seat_assignments.filter(booking__status='cancelled').delete()
+            if trip.seat_assignments.filter(seat_no=seat_no).exists():
+                return Response({'error': f'Seat {seat_no} is already taken.'},
+                                status=status.HTTP_409_CONFLICT)
+            if seats_taken(trip) >= trip.capacity:
+                return Response({'error': 'Every seat on this bus is already sold.'},
+                                status=status.HTTP_409_CONFLICT)
+            SeatAssignment.objects.create(
+                trip=trip, seat_no=seat_no, blocked=True, blocked_by=request.user,
+                note=str(request.data.get('note') or '')[:60],
+            )
+        data = seat_map(trip, show_names=True)
+    data['can_block'] = True
+    return Response(data)

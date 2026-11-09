@@ -478,3 +478,38 @@ class PayoutItem(models.Model):
 
     def __str__(self):
         return f'{self.kind} {self.object_id} in payout {self.payout_id}'
+
+
+class SeatAssignment(models.Model):
+    """One physical seat on one trip: either a booking's seat or an operator
+    block. The unique (trip, seat_no) constraint is what stops two people
+    getting the same seat; a cancelled booking's rows count as free."""
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='seat_assignments')
+    seat_no = models.PositiveSmallIntegerField()
+    booking = models.ForeignKey(
+        Booking, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='seat_assignments',
+    )
+    blocked = models.BooleanField(default=False)
+    blocked_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+    note = models.CharField(max_length=60, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['trip', 'seat_no'], name='uniq_trip_seat'),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(booking__isnull=False, blocked=False)
+                    | models.Q(booking__isnull=True, blocked=True)
+                ),
+                name='seat_booking_xor_block',
+            ),
+            models.CheckConstraint(condition=models.Q(seat_no__gte=1), name='seat_no_positive'),
+        ]
+
+    def __str__(self):
+        return f'trip {self.trip_id} seat {self.seat_no}'

@@ -393,7 +393,8 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     Company staff may only access trips belonging to their own company.
     Superusers may access every company.
     """
-    from django.db.models import Q as _Q, Sum as _Sum
+    from django.db.models import Count as _Count, OuterRef as _OuterRef, Q as _Q, Subquery as _Subquery, Sum as _Sum
+    from bookings.models import SeatAssignment
     from django.db.models.functions import Coalesce as _Coalesce
     queryset = Trip.objects.select_related(
         'route',
@@ -403,7 +404,16 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
         booked_annot=_Coalesce(
             _Sum('bookings__seats', filter=~_Q(bookings__status='cancelled')),
             0,
-        )
+        ),
+        # Operator-blocked seats are not sellable either (subquery: a second
+        # join would multiply the seat sum above).
+        blocked_annot=_Coalesce(
+            _Subquery(
+                SeatAssignment.objects.filter(trip=_OuterRef('pk'), blocked=True)
+                .values('trip').annotate(c=_Count('id')).values('c')
+            ),
+            0,
+        ),
     )
 
     user = request.user
@@ -1669,11 +1679,13 @@ def update_trip_capacity(request, trip_id, *args, **kwargs):
                 {'error': f'Capacity cannot be changed on a {locked.status} trip.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        taken = (
-            locked.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
-        )
-        if capacity < taken:
+        from bookings.seats import seats_taken
+        taken = seats_taken(locked)
+        top_seat = (
+            locked.seat_assignments.exclude(booking__status='cancelled')
+            .order_by('-seat_no').values_list('seat_no', flat=True).first()
+        ) or 0
+        if capacity < max(taken, top_seat):
             return Response(
                 {
                     'error': f'{taken} seats are already booked; '

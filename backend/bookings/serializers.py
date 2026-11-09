@@ -12,7 +12,13 @@ class BookingCreateSerializer(serializers.Serializer):
         default=1,
         min_value=1,
     )
-
+    # Optional exact seats; without them the lowest free seats are given.
+    seat_numbers = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=True,
+        max_length=70,
+    )
     # New structured pickup selection.
     pickup_stage_id = serializers.IntegerField(
         required=False,

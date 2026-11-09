@@ -113,3 +113,5 @@
     min-height: 150px;
   }
 }
+
+.booking-seat-pick { display: grid; gap: 12px; }

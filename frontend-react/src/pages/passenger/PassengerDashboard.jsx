@@ -9,6 +9,7 @@ import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
 import PassengerLiveMap from './PassengerLiveMap';
+import SeatMap from '../../components/SeatMap';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
 import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
 import bookBusImage from '../../assets/journeys/bookabus.jpeg';
@@ -270,7 +271,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const [bookings,setBookings]=useState([]);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
-  const [bookingTrip,setBookingTrip]=useState(null),[seats,setSeats]=useState(1);
+  const [bookingTrip,setBookingTrip]=useState(null);
+  const [pickedSeats,setPickedSeats]=useState([]),[seatMapKey,setSeatMapKey]=useState(0);
+  const seats=pickedSeats.length;
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
@@ -379,12 +382,16 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if(t.status==='boarding') return 'Boarding at first stage only';
     return 'Unavailable';
   };
-  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setSeats(1)};
+  const startBooking=(trip)=>{setError('');setBookingTrip(trip);setPickedSeats([])};
   const createBooking=async()=>{
     const manualPickup = otherPickup.trim();
 
     if (!selectedStage && !manualPickup) {
       setError('Select a pickup stage or choose Other and enter your pickup location.');
+      return;
+    }
+    if (!pickedSeats.length) {
+      setError('Tap a free seat on the bus to choose where you sit.');
       return;
     }
 
@@ -394,7 +401,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     try {
       const body = {
         trip_id: bookingTrip.id,
-        seats: Number(seats),
+        seats: pickedSeats.length,
+        seat_numbers: pickedSeats,
       };
 
       if (selectedStage) {
@@ -421,6 +429,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       });
     } catch(e) {
       setError(e.message);
+      // Someone took the seat first: show the fresh map and let them re-pick.
+      if (e.data?.code === 'seat_taken') { setPickedSeats([]); setSeatMapKey((k) => k + 1); }
     } finally {
       setLoading(false);
     }
@@ -1238,29 +1248,21 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </div>
 
             <div className="booking-modal-footer">
-              <div className="booking-seat-row">
-                <span>Seats</span>
-                <div className="booking-seat-stepper">
-                  <button
-                    type="button"
-                    aria-label="Remove a seat"
-                    onClick={() => setSeats(Math.max(1, Number(seats) - 1))}
-                    disabled={Number(seats) <= 1}
-                  >
-                    −
-                  </button>
-                  <strong aria-live="polite">{seats}</strong>
-                  <button
-                    type="button"
-                    aria-label="Add a seat"
-                    onClick={() =>
-                      setSeats(Math.min(20, seatsLeft(bookingTrip), Number(seats) + 1))
-                    }
-                    disabled={Number(seats) >= Math.min(20, seatsLeft(bookingTrip))}
-                  >
-                    +
-                  </button>
+              <div className="booking-seat-pick">
+                <div className="booking-seat-row">
+                  <span>Choose your seat{seats === 1 ? '' : 's'}</span>
+                  <strong aria-live="polite">
+                    {seats ? `Seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Tap a free seat'}
+                  </strong>
                 </div>
+                <SeatMap
+                  tripId={bookingTrip.id}
+                  mode="pick"
+                  selected={pickedSeats}
+                  onChange={setPickedSeats}
+                  max={Math.min(20, seatsLeft(bookingTrip))}
+                  refreshKey={seatMapKey}
+                />
               </div>
 
               <div className="booking-total-glass">
@@ -1277,11 +1279,11 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 type="button"
                 className="glass-primary-button glass-primary-button-large"
                 onClick={createBooking}
-                disabled={loading}
+                disabled={loading || !seats}
               >
                 {loading
                   ? 'Creating booking…'
-                  : 'Confirm booking'}
+                  : seats ? `Book seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Pick a seat first'}
               </button>
             </div>
           </div>

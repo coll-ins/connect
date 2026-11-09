@@ -1106,3 +1106,6 @@
     grid-row: 2;
   }
 }
+
+.driver-seatmap { display: grid; gap: 12px; margin: 0 0 24px; padding: 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-card); }
+.driver-seatmap h3 { margin: 0; font-size: 15px; }

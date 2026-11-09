@@ -549,7 +549,9 @@ function BookingsBody({ activeOnly = false }) {
               <h2>{booking.route_name || 'CONNECT Journey'}</h2>
 
               <div className="data-card-details">
-                <span><Armchair size={14} aria-hidden="true" /> {booking.seats} seat{booking.seats === 1 ? '' : 's'}</span>
+                <span><Armchair size={14} aria-hidden="true" /> {booking.seat_numbers?.length
+                  ? `Seat${booking.seat_numbers.length === 1 ? '' : 's'} ${booking.seat_numbers.join(', ')}`
+                  : `${booking.seats} seat${booking.seats === 1 ? '' : 's'}`}</span>
                 <span><MapPin size={14} aria-hidden="true" /> {booking.pickup_location}</span>
                 <span><CreditCard size={14} aria-hidden="true" /> {booking.payment_status}</span>
               </div>

@@ -21,6 +21,7 @@ import { apiRequest } from '../../api';
 import { confirmTripCancel } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import './CompanyOperatorDashboard.css';
+import SeatMap from '../../components/SeatMap';
 
 const sectionByPath = {
   '/company-operator': 'overview',
@@ -598,6 +599,21 @@ function CapacityEditor({ trip, bookedSeats, onSaved }) {
   );
 }
 
+
+// Who sits where, and blocking seats for walk-ins or staff (loads on demand).
+function TripSeats({ trip }) {
+  const [open, setOpen] = useState(false);
+  if (!['scheduled', 'boarding'].includes(String(trip.status).toLowerCase())) return null;
+  return (
+    <div className="operator-seats">
+      <button type="button" className="operator-seats-toggle" aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}>
+        {open ? 'Hide seat map' : 'Seat map'}
+      </button>
+      {open && <SeatMap tripId={trip.id} mode="manage" />}
+    </div>
+  );
+}
 
 function WalkInForm({ trip, onDone }) {
   const [phone, setPhone] = useState('');
@@ -1627,6 +1643,8 @@ export default function CompanyOperatorDashboard() {
                     )
                   }
                 />
+
+                <TripSeats trip={trip} />
 
                 {String(trip.status).toLowerCase() === 'boarding' && (
                   <WalkInForm

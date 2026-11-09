@@ -119,12 +119,9 @@ class TripSerializer(serializers.ModelSerializer):
     def get_booked_seats(self, obj):
         annotated = getattr(obj, 'booked_annot', None)
         if annotated is not None:
-            return int(annotated)
-        from django.db.models import Sum
-        return (
-            obj.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
-        )
+            return int(annotated) + int(getattr(obj, 'blocked_annot', 0) or 0)
+        from bookings.seats import seats_taken
+        return seats_taken(obj)
 
     class Meta:
         model = Trip

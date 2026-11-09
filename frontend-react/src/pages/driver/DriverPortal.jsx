@@ -18,6 +18,7 @@ import { Link, useLocation } from "react-router-dom";
 import { apiRequest } from "../../api";
 import DriverJobs from "./DriverJobs";
 import "./DriverPortal.css";
+import SeatMap from "../../components/SeatMap";
 
 const SERVICE_TIME_ZONE = "Africa/Nairobi";
 
@@ -567,7 +568,7 @@ export default function DriverPortal() {
                       <div style={{minWidth:0}}>
                         <strong>{pinName(b)}</strong>
                         <div style={{fontSize:13,opacity:.75}}>
-                          {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seats || 1} seat(s)
+                          {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seat_numbers?.length ? `seat ${b.seat_numbers.join(", ")}` : `${b.seats || 1} seat(s)`}
                         </div>
                       </div>
                       {boardedRow ? (
@@ -743,6 +744,20 @@ export default function DriverPortal() {
                 </div>
               </div>
 
+              {[...new Set(bookings
+                .filter((b) => !["cancelled", "no_show"].includes(String(b.status || "").toLowerCase()) && b.trip_id)
+                .map((b) => b.trip_id))]
+                .slice(0, 2)
+                .map((tripId) => {
+                  const first = bookings.find((b) => b.trip_id === tripId);
+                  return (
+                    <div key={tripId} className="driver-seatmap">
+                      <h3>Seats · {first?.route || "Trip"} {first?.departure_at ? new Date(first.departure_at).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : ""}</h3>
+                      <SeatMap tripId={tripId} mode="view" refreshKey={reloadKey} />
+                    </div>
+                  );
+                })}
+
               {bookings.length === 0 ? (
                 <div className="driver-empty">
                   No passengers found.
@@ -766,7 +781,7 @@ export default function DriverPortal() {
                         </strong>
 
                         <span>
-                          Seats: {b.seats || 1}
+                          {b.seat_numbers?.length ? `Seat ${b.seat_numbers.join(", ")}` : `Seats: ${b.seats || 1}`}
                         </span>
                         <span>
                           Payment: {b.payment_method || "-"} · {b.payment_status || "-"}
