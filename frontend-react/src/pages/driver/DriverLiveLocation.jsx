@@ -12,6 +12,8 @@ import { apiRequest } from '../../api';
 import ConnectMap from '../../components/maps/ConnectMap';
 import './DriverLiveLocation.css';
 import { webglOk } from '../../components/maps/webgl';
+import FieldNote from '../../components/FieldNote';
+import { checkText } from '../../utils/inputRules';
 
 const formatDate = (value) =>
   value
@@ -407,6 +409,7 @@ export default function DriverLiveLocation() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportType, setReportType] = useState('breakdown');
   const [reportText, setReportText] = useState('');
+  const reportError = checkText(reportText, 'what happened', { minLetters: 5, maxLength: 2000 });
   const [reportSending, setReportSending] = useState(false);
   const [reportDone, setReportDone] = useState('');
 
@@ -679,16 +682,22 @@ export default function DriverLiveLocation() {
                 <textarea
                   value={reportText}
                   onChange={(e) => setReportText(e.target.value)}
-                  placeholder="What happened?"
+                  placeholder="e.g. Front tyre burst near Mlolongo, waiting for a mechanic."
                   rows={3}
-                  style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)', color: '#fff', width: '100%', marginBottom: 8 }}
+                  maxLength={2000}
+                  aria-label="What happened?"
+                  aria-describedby="incident-note"
+                  aria-invalid={Boolean(reportText.trim() && reportError)}
+                  style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)', color: '#fff', width: '100%', marginBottom: 4 }}
                 />
+                <FieldNote id="incident-note" value={reportText} error={reportError}
+                  hint="Your manager reads this. Say what happened, where, and what you need." />
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     type="button"
                     onClick={submitIncident}
-                    disabled={reportSending || !reportText.trim()}
+                    disabled={reportSending || Boolean(reportError)}
                     style={{ flex: 1, padding: '10px 12px', borderRadius: 12, border: 'none', background: '#d97706', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
                   >
                     {reportSending ? 'Sending...' : 'Send report'}

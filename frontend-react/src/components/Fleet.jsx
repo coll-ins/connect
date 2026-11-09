@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Bus as BusIcon, RefreshCw } from 'lucide-react';
 import { apiRequest } from '../api';
+import ValidatedInput from './ValidatedInput';
 import './Fleet.css';
+
+// Same rule as backend buses/serializers.validate_registration_number.
+const PLATE = /^(K[A-Z]{2}|EV[A-Z])\d{3}[A-Z]$/;
 
 // Same keys and seat counts as backend bookings/seats.py VEHICLES.
 export const VEHICLE_TYPES = [
@@ -182,12 +186,16 @@ export function FleetManager({ companyId, canEdit }) {
         <form className="company-form-grid fleet-form" onSubmit={add}>
           <label className="company-field">
             <span>Number plate</span>
-            <input required value={form.registration_number} autoComplete="off" placeholder="KDK 404M"
+            <ValidatedInput required value={form.registration_number} autoComplete="off" placeholder="KDK 404M"
+              maxLength={9} autoCapitalize="characters"
+              hint="Exactly as on the bus: 3 letters, 3 numbers, 1 letter, e.g. KDK 404M."
+              error={PLATE.test(form.registration_number.replace(/\s+/g, '').toUpperCase()) ? '' : 'Enter the number plate exactly as on the bus, e.g. KDK 404M.'}
               onChange={(e) => setForm({ ...form, registration_number: e.target.value })} />
           </label>
           <label className="company-field">
             <span>Fleet number</span>
-            <input required value={form.bus_number} autoComplete="off" placeholder="SM-12"
+            <ValidatedInput required value={form.bus_number} autoComplete="off" placeholder="SM-12"
+              maxLength={20} hint="Your company's own number for this bus, as painted on it, e.g. SM-12."
               onChange={(e) => setForm({ ...form, bus_number: e.target.value })} />
           </label>
           <label className="company-field">

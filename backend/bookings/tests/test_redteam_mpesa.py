@@ -50,7 +50,7 @@ class RedTeamMpesaTests(APITestCase):
         from bookings.views import MpesaPushThrottle
         with patch.dict(MpesaPushThrottle.THROTTLE_RATES, {"mpesa_push": "3/hour"}), \
              patch("bookings.views.requests.post") as post:
-            codes = [self._post("0712345678").status_code for _ in range(5)]
+            codes = [self._post("+2547123").status_code for _ in range(5)]
         self.assertEqual(codes, [400, 400, 400, 429, 429])
         post.assert_not_called()
 

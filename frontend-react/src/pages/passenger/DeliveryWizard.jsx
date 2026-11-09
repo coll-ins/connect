@@ -5,6 +5,8 @@ import { ArrowLeft, Check, Package } from 'lucide-react';
 import { apiRequest } from '../../api';
 import AppShell from '../../components/layout/AppShell';
 import { label, money, when } from '../shared/serviceUtils';
+import FieldNote from '../../components/FieldNote';
+import { checkName, checkPhone, checkText, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import '../shared/Services.css';
 
 const STEPS = ['Company', 'Route', 'Bus', 'Stops', 'Parcel', 'Receiver'];
@@ -37,6 +39,9 @@ export function DeliveryNew() {
     company: '', route: '', trip: '', pickup: '', dropoff: '', size: '',
     description: '', receiverName: '', receiverPhone: '', ok: false,
   });
+  const errDesc = checkText(f.description, 'what is in the parcel', { maxLength: 200 });
+  const errName = checkName(f.receiverName, "the receiver's name");
+  const errPhone = checkPhone(f.receiverPhone);
 
   useEffect(() => {
     apiRequest('/deliveries/options/')
@@ -198,10 +203,13 @@ export function DeliveryNew() {
                 </div>
                 <label className="svc-field">What is in the parcel?
                   <input className="input" maxLength={200} value={f.description}
-                    onChange={(e) => pick({ description: e.target.value })} placeholder="e.g. Documents" />
+                    aria-describedby="pc-desc" aria-invalid={Boolean(f.description.trim() && errDesc)}
+                    onChange={(e) => pick({ description: e.target.value })} placeholder="e.g. Documents in an envelope" />
+                  <FieldNote id="pc-desc" value={f.description} error={errDesc}
+                    hint="Say what is inside in plain words. The driver checks it matches when collecting." />
                 </label>
                 <div className="svc-actions">
-                  <button type="button" className="btn btn-primary" disabled={!f.size || !f.description.trim()} onClick={() => setStep(5)}>Next</button>
+                  <button type="button" className="btn btn-primary" disabled={!f.size || Boolean(errDesc)} onClick={() => setStep(5)}>Next</button>
                 </div>
               </>
             )}
@@ -211,12 +219,18 @@ export function DeliveryNew() {
                 <h2 className="svc-q">Who is receiving it?</h2>
                 <div className="svc-form">
                   <label className="svc-field">Receiver&apos;s name
-                    <input className="input" maxLength={100} value={f.receiverName}
+                    <input className="input" maxLength={100} value={f.receiverName} placeholder="e.g. Collins Otieno"
+                      aria-describedby="pc-name" aria-invalid={Boolean(f.receiverName.trim() && errName)}
                       onChange={(e) => pick({ receiverName: e.target.value })} />
+                    <FieldNote id="pc-name" value={f.receiverName} error={errName}
+                      hint={`As on their ID: the driver checks it at handover. ${NAME_HINT}`} />
                   </label>
                   <label className="svc-field">Receiver&apos;s phone
-                    <input className="input" type="tel" inputMode="tel" value={f.receiverPhone}
+                    <input className="input" type="tel" inputMode="tel" autoComplete="off" maxLength={16} value={f.receiverPhone}
+                      aria-describedby="pc-phone" aria-invalid={Boolean(f.receiverPhone.trim() && errPhone)}
                       onChange={(e) => pick({ receiverPhone: e.target.value })} placeholder="07XX XXX XXX" />
+                    <FieldNote id="pc-phone" value={f.receiverPhone} error={errPhone}
+                      hint={`The driver calls this number on arrival. ${PHONE_HINT}`} />
                   </label>
                 </div>
 
@@ -239,7 +253,7 @@ export function DeliveryNew() {
 
                 <div className="svc-actions">
                   <button className="btn btn-primary"
-                    disabled={busy || !f.receiverName.trim() || !f.receiverPhone.trim() || !f.ok}>
+                    disabled={busy || Boolean(errName) || Boolean(errPhone) || !f.ok}>
                     {busy ? 'Creating…' : `Confirm and continue to payment${price ? ` · ${money(price)}` : ''}`}
                   </button>
                 </div>

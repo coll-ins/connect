@@ -10,6 +10,8 @@ import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
 import PassengerLiveMap from './PassengerLiveMap';
 import SeatMap from '../../components/SeatMap';
+import FieldNote from '../../components/FieldNote';
+import { checkPhone, checkPlace, PHONE_HINT } from '../../utils/inputRules';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
 import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
 import bookBusImage from '../../assets/journeys/bookabus.jpeg';
@@ -161,9 +163,13 @@ function PaymentModal({
           type="tel"
           value={mpesaPhone}
           onChange={(e)=>setMpesaPhone(e.target.value)}
-          placeholder="+254710000000"
+          placeholder="07XX XXX XXX"
           autoComplete="tel"
           inputMode="tel"
+          maxLength={16}
+          aria-label="M-PESA phone number"
+          aria-describedby="mpesa-phone-note"
+          aria-invalid={Boolean(mpesaPhone.trim() && checkPhone(mpesaPhone))}
           style={{
             display:'block',
             width:'100%',
@@ -177,12 +183,14 @@ function PaymentModal({
             pointerEvents:'auto'
           }}
         />
+        <FieldNote id="mpesa-phone-note" value={mpesaPhone} error={checkPhone(mpesaPhone)}
+          hint={`The M-PESA prompt goes to this number. ${PHONE_HINT}`} />
 
         <button
           className="btn btn-primary"
           type="button"
           style={{width:'100%',marginTop:12}}
-          disabled={busy || !mpesaPhone.trim()}
+          disabled={busy || Boolean(checkPhone(mpesaPhone))}
           onClick={()=>mpesa(mpesaPhone.trim())}
         >
           {busy ? 'Starting…' : 'Proceed'}
@@ -278,6 +286,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const seats=autoCount||pickedSeats.length;
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
+  const otherPickupError = checkPlace(otherPickup, 'the pickup location', { example: 'e.g. Shell Rongai or Galleria Mall' });
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
 
   const refresh = useCallback(async()=>{
@@ -1041,17 +1050,23 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               setSelectedStage(null);
             }}
             placeholder="e.g. Shell Rongai"
+            maxLength={100}
+            aria-label="Custom pickup location"
+            aria-describedby="other-pickup-note"
+            aria-invalid={Boolean(otherPickup.trim() && otherPickupError)}
           />
 
           <button
             type="button"
             className="primary-button"
-            disabled={!otherPickup.trim()}
+            disabled={Boolean(otherPickupError)}
             onClick={() => setJourneyStep('trips')}
           >
             Continue
           </button>
         </div>
+        <FieldNote id="other-pickup-note" value={otherPickup} error={otherPickupError}
+          hint="A landmark on this route the driver can stop at: a petrol station, building or junction." />
       </div>
     </div>
 

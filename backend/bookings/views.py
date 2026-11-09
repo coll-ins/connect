@@ -1,4 +1,6 @@
 from connect.frontend import frontend_url
+from django.core.exceptions import ValidationError as DjangoValidationError
+from connect.validation import free_text, kenyan_mobile
 from django.db.models import Q
 import hmac
 import logging
@@ -440,20 +442,11 @@ def initialize_mpesa_payment(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            phone = str(phone).strip()
-
-            if (
-                not phone.startswith('+254')
-                or len(phone) != 13
-                or not phone[1:].isdigit()
-            ):
+            try:
+                phone = kenyan_mobile(phone)
+            except DjangoValidationError as e:
                 return Response(
-                    {
-                        'error': (
-                            'Enter a valid Kenyan phone number, '
-                            'e.g. +254710000000.'
-                        )
-                    },
+                    {'error': 'M-PESA: ' + e.messages[0]},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -4220,11 +4213,10 @@ def report_incident(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if not description or not str(description).strip():
-        return Response(
-            {'error': 'description is required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    try:
+        description = free_text(description, 'what happened', min_letters=5, max_length=2000)
+    except DjangoValidationError as e:
+        return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
     incident = Incident.objects.create(
         trip=trip,
@@ -4318,13 +4310,10 @@ def incident_detail(request, incident_id):
         incident.status = new_status
 
     if description is not None:
-        description = str(description).strip()
-
-        if not description:
-            return Response(
-                {'error': 'description cannot be empty.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        try:
+            description = free_text(description, 'what happened', min_letters=5, max_length=2000)
+        except DjangoValidationError as e:
+            return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
         incident.description = description
 
@@ -5476,7 +5465,6 @@ def walk_in_booking(request, trip_id):
     from django.contrib.auth import get_user_model
     from django.db.models import F as _F, Sum
     from notifications import sms as _sms
-    from users.phone import canonical_phone
 
     raw_seats = request.data.get('seats', 1)
     try:
@@ -5490,9 +5478,10 @@ def walk_in_booking(request, trip_id):
         return Response({'error': 'seats must be between 1 and 20.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    phone = canonical_phone(str(request.data.get('phone_number', '')).strip())
-    if not phone:
-        return Response({'error': 'A valid passenger phone_number is required.'},
+    try:
+        phone = kenyan_mobile(request.data.get('phone_number'))
+    except DjangoValidationError as e:
+        return Response({'error': 'Passenger phone: ' + e.messages[0]},
                         status=status.HTTP_400_BAD_REQUEST)
 
     User = get_user_model()
@@ -5712,6 +5701,11 @@ def trip_seat_map(request, trip_id):
 @permission_classes([IsAuthenticated])
 def trip_seat_block(request, trip_id, seat_no):
     from .models import SeatAssignment
+    try:
+        note = free_text(request.data.get('note'), 'the note', required=False,
+                         min_letters=2, max_length=60)
+    except DjangoValidationError as e:
+        return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
     with transaction.atomic():
         try:
             trip = (
@@ -5742,7 +5736,7 @@ def trip_seat_block(request, trip_id, seat_no):
                                 status=status.HTTP_409_CONFLICT)
             SeatAssignment.objects.create(
                 trip=trip, seat_no=seat_no, blocked=True, blocked_by=request.user,
-                note=str(request.data.get('note') or '')[:60],
+                note=note,
             )
         data = seat_map(trip, show_names=True)
     data['can_block'] = True

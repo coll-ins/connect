@@ -5,6 +5,8 @@ import { ArrowLeft, Bus, Check } from 'lucide-react';
 import { apiRequest } from '../../api';
 import AppShell from '../../components/layout/AppShell';
 import { localInput, localToIso, when } from '../shared/serviceUtils';
+import FieldNote from '../../components/FieldNote';
+import { checkName, checkPhone, checkPlace, checkText, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import '../shared/Services.css';
 
 const STEPS = ['Company', 'Trip', 'When', 'Contact', 'Review'];
@@ -48,9 +50,18 @@ export function CharterNew() {
   const company = companies?.find((c) => String(c.id) === f.company);
   const back = () => (step > 0 ? setStep(step - 1) : navigate('/passenger/charter'));
 
-  const tripOk = f.purpose.trim() && f.pickup.trim() && f.destination.trim();
+  const err = {
+    purpose: checkText(f.purpose, 'the purpose of the hire', { maxLength: 200 }),
+    pickup: checkPlace(f.pickup, 'the pickup location', { maxLength: 255 }),
+    destination: checkPlace(f.destination, 'the destination', { maxLength: 255, example: 'e.g. Naivasha or Mombasa' }),
+    contactName: checkName(f.contactName, 'the contact name'),
+    contactPhone: checkPhone(f.contactPhone),
+    notes: checkText(f.notes, 'the notes', { required: false }),
+  };
+  const tripOk = !err.purpose && !err.pickup && !err.destination;
   const whenOk = f.depart && (!f.ret || f.ret > f.depart);
-  const contactOk = Number(f.count) >= 1 && f.contactName.trim() && f.contactPhone.trim();
+  const contactOk = Number(f.count) >= 1 && Number(f.count) <= 200
+    && !err.contactName && !err.contactPhone && !err.notes;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -128,15 +139,24 @@ export function CharterNew() {
                 <div className="svc-form">
                   <label className="svc-field wide">What is the trip for?
                     <input className="input" maxLength={200} value={f.purpose}
+                      aria-describedby="ch-purpose" aria-invalid={Boolean(f.purpose.trim() && err.purpose)}
                       onChange={(e) => set({ purpose: e.target.value })} placeholder="e.g. School trip to Nakuru" />
+                    <FieldNote id="ch-purpose" value={f.purpose} error={err.purpose}
+                      hint="Say what the trip is, in plain words. The company reads this to quote you." />
                   </label>
                   <label className="svc-field">Pickup location
-                    <input className="input" maxLength={255} value={f.pickup}
+                    <input className="input" maxLength={255} value={f.pickup} placeholder="e.g. Kencom, Moi Avenue"
+                      aria-describedby="ch-pickup" aria-invalid={Boolean(f.pickup.trim() && err.pickup)}
                       onChange={(e) => set({ pickup: e.target.value })} />
+                    <FieldNote id="ch-pickup" value={f.pickup} error={err.pickup}
+                      hint="Where the bus should collect you: a stage, building or road the driver can find." />
                   </label>
                   <label className="svc-field">Destination
-                    <input className="input" maxLength={255} value={f.destination}
+                    <input className="input" maxLength={255} value={f.destination} placeholder="e.g. Naivasha"
+                      aria-describedby="ch-dest" aria-invalid={Boolean(f.destination.trim() && err.destination)}
                       onChange={(e) => set({ destination: e.target.value })} />
+                    <FieldNote id="ch-dest" value={f.destination} error={err.destination}
+                      hint="The town or place you are going to." />
                   </label>
                 </div>
                 <Next ok={tripOk} onNext={() => setStep(2)} />
@@ -168,21 +188,33 @@ export function CharterNew() {
                 <h2 className="svc-q">Who should the company contact?</h2>
                 <div className="svc-form">
                   <label className="svc-field">Number of passengers
-                    <input className="input" type="number" min="1" max="200" value={f.count}
-                      onChange={(e) => set({ count: e.target.value })} />
+                    <input className="input" type="number" inputMode="numeric" min="1" max="200" step="1" value={f.count}
+                      aria-describedby="ch-count" onChange={(e) => set({ count: e.target.value })} />
+                    <FieldNote id="ch-count" value={f.count}
+                      error={Number(f.count) >= 1 && Number(f.count) <= 200 ? '' : 'Enter a whole number from 1 to 200.'}
+                      hint="Everyone travelling, adults and children, from 1 to 200." />
                   </label>
                   <label className="svc-field">Contact name
-                    <input className="input" maxLength={100} value={f.contactName}
+                    <input className="input" maxLength={100} value={f.contactName} placeholder="e.g. Collins Otieno"
+                      autoComplete="name" aria-describedby="ch-name" aria-invalid={Boolean(f.contactName.trim() && err.contactName)}
                       onChange={(e) => set({ contactName: e.target.value })} />
+                    <FieldNote id="ch-name" value={f.contactName} error={err.contactName}
+                      hint={`The person the company should talk to. ${NAME_HINT}`} />
                   </label>
                   <label className="svc-field">Contact phone
-                    <input className="input" type="tel" inputMode="tel" value={f.contactPhone}
+                    <input className="input" type="tel" inputMode="tel" autoComplete="tel" maxLength={16} value={f.contactPhone}
+                      aria-describedby="ch-phone" aria-invalid={Boolean(f.contactPhone.trim() && err.contactPhone)}
                       onChange={(e) => set({ contactPhone: e.target.value })} placeholder="07XX XXX XXX" />
+                    <FieldNote id="ch-phone" value={f.contactPhone} error={err.contactPhone}
+                      hint={`The company calls this number about the hire. ${PHONE_HINT}`} />
                   </label>
                   <label className="svc-field wide">Notes (optional)
                     <textarea className="input" rows="3" maxLength={1000} value={f.notes}
+                      aria-describedby="ch-notes" aria-invalid={Boolean(f.notes.trim() && err.notes)}
                       onChange={(e) => set({ notes: e.target.value })}
                       placeholder="Stops along the way, luggage, special needs…" />
+                    <FieldNote id="ch-notes" value={f.notes} error={err.notes}
+                      hint="Anything the company needs to know to plan the trip. Up to 1000 characters." />
                   </label>
                 </div>
                 <Next ok={contactOk} onNext={() => setStep(4)} />

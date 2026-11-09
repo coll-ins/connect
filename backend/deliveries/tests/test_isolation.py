@@ -57,7 +57,7 @@ class CompanyIsolationTests(APITestCase):
         self.client.force_authenticate(sender)
         r = self.client.post(BASE, {
             'trip_id': trip.id, 'pickup_stage_id': s1.id, 'dropoff_stage_id': s2.id,
-            'size': 'small', 'description': 'Box', 'receiver_name': 'R',
+            'size': 'small', 'description': 'Box', 'receiver_name': 'Rose Akinyi',
             'receiver_phone': '0712345678', 'no_prohibited_items': True,
         }, format='json')
         self.assertEqual(r.status_code, 201, r.data)
@@ -106,7 +106,7 @@ class CompanyIsolationTests(APITestCase):
         self.client.force_authenticate(self.sender)
         r = self.client.post(BASE, {
             'trip_id': bad.id, 'pickup_stage_id': self.a1.id, 'dropoff_stage_id': self.a2.id,
-            'size': 'small', 'description': 'Box', 'receiver_name': 'R',
+            'size': 'small', 'description': 'Box', 'receiver_name': 'Rose Akinyi',
             'receiver_phone': '0712345678', 'no_prohibited_items': True,
         }, format='json')
         self.assertEqual(r.status_code, 409)

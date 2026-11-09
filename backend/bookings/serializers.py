@@ -1,6 +1,7 @@
 from decimal import Decimal
 from rest_framework import serializers
 from companies.models import Trip
+from connect.validation import place
 from .models import Incident
 from drivers.models import Driver
 
@@ -31,6 +32,9 @@ class BookingCreateSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=255,
     )
+
+    def validate_pickup_location(self, value):
+        return place(value, 'the pickup location', required=False, max_length=255)
 
     def validate_trip_id(self, value):
         if not Trip.objects.filter(id=value).exists():

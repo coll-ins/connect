@@ -47,7 +47,7 @@ class DriverPhoneChangeTests(_Fixture, APITestCase):
         self.assertEqual(self._phones(), (self.old_phone, self.old_phone))
 
     def test_patch_without_a_phone_leaves_both_alone(self):
-        response = self.client.patch(self.url, {'name': 'Renamed'}, format='json')
+        response = self.client.patch(self.url, {'name': 'Renamed Driver'}, format='json')
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(self._phones(), (self.old_phone, self.old_phone))
 

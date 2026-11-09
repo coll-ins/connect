@@ -31,6 +31,8 @@ import {
   Navigate,
 } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import ValidatedInput from '../../components/ValidatedInput';
+import { checkName, checkPhone, checkPlace, checkText, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import { BusOptions, useCompanyBuses } from '../../components/Fleet';
@@ -4329,7 +4331,9 @@ export default function PlatformAdminDashboard() {
                     Company name
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'The registered name passengers will see, e.g. Super Metro Sacco.'}
+                    error={checkPlace(companyForm.name, 'the company name', { example: 'e.g. Super Metro Sacco' })}
                     value={companyForm.name}
                     onChange={(event) =>
                       setCompanyForm({
@@ -4346,7 +4350,9 @@ export default function PlatformAdminDashboard() {
                     Areas served
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'Places the company runs to, separated by commas.'}
+                    error={checkPlace(companyForm.areas_served, 'the areas served', { maxLength: 500, example: 'e.g. CBD, Westlands, Rongai' })}
                     value={
                       companyForm.areas_served
                     }
@@ -4367,7 +4373,9 @@ export default function PlatformAdminDashboard() {
                     Phone number
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'Optional. The office line passengers can call. ' + PHONE_HINT}
+                    error={checkPhone(companyForm.phone_number, { required: false })}
                     value={
                       companyForm.phone_number
                     }
@@ -4386,7 +4394,9 @@ export default function PlatformAdminDashboard() {
                     Description
                   </label>
 
-                  <textarea
+                  <ValidatedInput as="textarea"
+                    hint={'Optional. One or two plain sentences about the company.'}
+                    error={checkText(companyForm.description, 'the company description', { required: false })}
                     value={
                       companyForm.description
                     }
@@ -4502,7 +4512,9 @@ export default function PlatformAdminDashboard() {
                     Route name
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'What passengers see when they pick a route, e.g. CBD to Rongai.'}
+                    error={checkPlace(routeForm.name, 'the route name', { maxLength: 200, example: 'e.g. CBD to Rongai' })}
                     value={routeForm.name}
                     onChange={(event) =>
                       setRouteForm({
@@ -4519,7 +4531,9 @@ export default function PlatformAdminDashboard() {
                     Start point
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'Where the route starts: the first stage\'s name.'}
+                    error={checkPlace(routeForm.start_point, 'the starting point', { example: 'e.g. Kencom, CBD' })}
                     value={
                       routeForm.start_point
                     }
@@ -4539,7 +4553,9 @@ export default function PlatformAdminDashboard() {
                     End point
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'Where the route ends: the last stage\'s name.'}
+                    error={checkPlace(routeForm.end_point, 'the end point', { example: 'e.g. Rongai' })}
                     value={
                       routeForm.end_point
                     }
@@ -4678,7 +4694,9 @@ export default function PlatformAdminDashboard() {
                     Driver name
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'As on the driver\'s ID. ' + NAME_HINT}
+                    error={checkName(driverForm.name, "the driver's name")}
                     value={driverForm.name}
                     onChange={(event) =>
                       setDriverForm({
@@ -4695,7 +4713,9 @@ export default function PlatformAdminDashboard() {
                     Phone
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'The driver signs in with it. ' + PHONE_HINT}
+                    error={checkPhone(driverForm.phone_number)}
                     value={
                       driverForm.phone_number
                     }
@@ -5061,7 +5081,9 @@ export default function PlatformAdminDashboard() {
                     Phone
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'Optional. ' + PHONE_HINT}
+                    error={checkPhone(operatorForm.phone_number, { required: false })}
                     value={
                       operatorForm.phone_number
                     }
@@ -5080,7 +5102,9 @@ export default function PlatformAdminDashboard() {
                     Location
                   </label>
 
-                  <input
+                  <ValidatedInput
+                    hint={'Optional. Where they usually work, e.g. Kencom.'}
+                    error={checkPlace(operatorForm.location, 'the location', { required: false })}
                     value={
                       operatorForm.location
                     }

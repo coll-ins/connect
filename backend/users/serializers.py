@@ -3,13 +3,27 @@ import re
 
 from rest_framework import serializers
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+from connect.validation import kenyan_mobile, person_name, place
+
 from .models import CustomUser
 
 
-NAME_PART = re.compile(r"^[^\W\d_]+(?:['’-][^\W\d_]+)*$")
+class _TypedFields:
+    """Phone and location as people type them, checked the same everywhere."""
+
+    def validate_phone_number(self, value):
+        # Signup requires a phone (users/views.signup); staff may have none.
+        return kenyan_mobile(value) if str(value or '').strip() else value
+
+    def validate_location(self, value):
+        return place(value, 'the usual location', required=False)
 
 
-class UserSerializer(serializers.ModelSerializer):
+
+
+class UserSerializer(_TypedFields, serializers.ModelSerializer):
     username = serializers.CharField(required=False, allow_blank=True)
     name = serializers.CharField(
         required=False, allow_blank=True, write_only=True, max_length=150
@@ -38,15 +52,10 @@ class UserSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         attrs = super().validate(attrs)
         if self.instance is None:
-            full = ' '.join(str(attrs.get('name') or '').split())
-            parts = full.split(' ') if full else []
-            if len(parts) < 2 or not all(
-                len(p) >= 2 and NAME_PART.match(p) for p in parts
-            ):
-                raise serializers.ValidationError({
-                    'name': 'Enter your first and last name, e.g. Collins Otieno.'
-                })
-            attrs['name'] = full
+            try:
+                attrs['name'] = person_name(attrs.get('name'), 'your name', max_length=150)
+            except DjangoValidationError as e:
+                raise serializers.ValidationError({'name': e.messages[0]})
         return attrs
 
     def create(self, validated_data):
@@ -75,7 +84,7 @@ class UserSerializer(serializers.ModelSerializer):
         )
 
 
-class CompanyStaffSerializer(serializers.ModelSerializer):
+class CompanyStaffSerializer(_TypedFields, serializers.ModelSerializer):
     """
     Serializer for company-managed staff.
 

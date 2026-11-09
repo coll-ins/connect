@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import PasswordInput from '../../components/PasswordInput';
 import PasswordChecklist, { passwordIsStrong } from '../../components/PasswordChecklist';
 import { dashboardPath } from '../../utils/roleRoutes';
+import FieldNote from '../../components/FieldNote';
+import { checkName, checkPhone, checkPlace, PHONE_HINT } from '../../utils/inputRules';
 import '../../legal/Legal.css';
 import './Auth.css';
 
@@ -20,9 +22,15 @@ export default function Signup() {
   const [pwTouched, setPwTouched] = useState(false);
   const update = (key) => (e) => setForm(v => ({ ...v, [key]: e.target.value }));
   const strong = passwordIsStrong(form.password);
+  const fullName = `${form.first_name} ${form.last_name}`;
+  const errName = form.first_name.trim() && form.last_name.trim() ? checkName(fullName, 'your name') : '';
+  const errPhone = checkPhone(form.phone_number);
+  const errLocation = checkPlace(form.location, 'your usual location', { required: false, example: 'e.g. CBD or Rongai' });
 
   const submit = async (e) => {
     e.preventDefault(); setError('');
+    const problem = errName || errPhone || errLocation;
+    if (problem) { setError(problem); return; }
     if (!strong) { setPwTouched(true); setError('Your password does not meet every requirement below.'); return; }
     setLoading(true);
     try {
@@ -52,8 +60,18 @@ export default function Signup() {
             maxLength="70" pattern={NAME_PATTERN} title="At least 2 letters, e.g. Otieno" required />
         </label>
       </div>
-      <label>Phone number<input className="input" type="tel" inputMode="tel" value={form.phone_number} onChange={update('phone_number')} placeholder="07XX XXX XXX or +2547XX XXX XXX" autoComplete="tel" required /></label>
-      <label><span>Usual location <span className="label-optional">(optional)</span></span><input className="input" value={form.location} onChange={update('location')} placeholder="e.g. CBD" /></label>
+      <FieldNote id="su-name" value={errName ? fullName : ''} error={errName}
+        hint="Your real first and last name, as on your ID. Drivers use it to check your ticket." />
+      <label>Phone number<input className="input" type="tel" inputMode="tel" maxLength={16} value={form.phone_number} onChange={update('phone_number')}
+        placeholder="07XX XXX XXX" autoComplete="tel" required
+        aria-describedby="su-phone" aria-invalid={Boolean(form.phone_number.trim() && errPhone)} /></label>
+      <FieldNote id="su-phone" value={form.phone_number} error={errPhone}
+        hint={`You sign in with it and pay with M-PESA on it. ${PHONE_HINT}`} />
+      <label><span>Usual location <span className="label-optional">(optional)</span></span><input className="input" value={form.location} onChange={update('location')}
+        placeholder="e.g. CBD" maxLength={100}
+        aria-describedby="su-loc" aria-invalid={Boolean(form.location.trim() && errLocation)} /></label>
+      <FieldNote id="su-loc" value={form.location} error={errLocation}
+        hint="The area you usually travel from, so we show your stage first." />
       <label>Password
         <PasswordInput className={`input${pwTouched && !strong ? ' input-invalid' : ''}`} autoComplete="new-password"
           value={form.password} onChange={update('password')}

@@ -2,10 +2,12 @@ import re
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from companies.models import Company
+from connect.validation import free_text
 from drivers.models import Driver
 from users.permissions import can_manage_company
 from users.views import normalize_phone_number
@@ -115,9 +117,10 @@ def quote_charter(*, charter_id, manager, price, driver_id, valid_hours):
 
 
 def decline_charter(*, charter_id, manager, reason):
-    reason = (reason or '').strip()
-    if not reason or len(reason) > 300:
-        raise CharterError('Give a reason (up to 300 characters).')
+    try:
+        reason = free_text(reason, 'the reason', max_length=300)
+    except ValidationError as e:
+        raise CharterError(e.messages[0])
     with transaction.atomic():
         charter = CharterRequest.objects.select_for_update().get(id=charter_id)
         if not can_manage_company(manager, charter.company_id):
@@ -152,9 +155,10 @@ def cancel_charter(*, charter_id, user):
 
 def company_cancel_charter(*, charter_id, manager, reason):
     """The company cannot run a paid hire: cancel it and refund in full."""
-    reason = (reason or '').strip()
-    if not reason or len(reason) > 300:
-        raise CharterError('Give a reason (up to 300 characters).')
+    try:
+        reason = free_text(reason, 'the reason', max_length=300)
+    except ValidationError as e:
+        raise CharterError(e.messages[0])
     with transaction.atomic():
         charter = CharterRequest.objects.select_for_update().get(id=charter_id)
         if not can_manage_company(manager, charter.company_id):

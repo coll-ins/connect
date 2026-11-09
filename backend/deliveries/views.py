@@ -17,6 +17,7 @@ from connect.frontend import frontend_url
 
 from connect import paystack_extra as paystack
 from .services import ParcelError, cancel_parcel, create_parcel, deliver, pick_up
+from connect.validation import free_text, kenyan_mobile, person_name
 from users.identity import drivers_for_user
 
 
@@ -29,6 +30,15 @@ class ParcelCreateSerializer(serializers.Serializer):
     receiver_name = serializers.CharField(max_length=100)
     receiver_phone = serializers.CharField(max_length=20)
     no_prohibited_items = serializers.BooleanField()
+
+    def validate_description(self, value):
+        return free_text(value, 'what is in the parcel', max_length=200)
+
+    def validate_receiver_name(self, value):
+        return person_name(value, "the receiver's name")
+
+    def validate_receiver_phone(self, value):
+        return kenyan_mobile(value)
 
     def validate_no_prohibited_items(self, value):
         if value is not True:

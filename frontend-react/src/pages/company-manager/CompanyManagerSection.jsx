@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bus,
@@ -16,6 +16,8 @@ import {
   X,
 } from 'lucide-react';
 import { apiRequest } from '../../api';
+import FieldNote from '../../components/FieldNote';
+import { checkName, checkPhone, checkPlace, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import { BusOptions, FleetManager, TripBusPicker, useCompanyBuses } from '../../components/Fleet';
@@ -238,11 +240,18 @@ function tripStateLabel(trip) {
   return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown';
 }
 
-function Input({ label, ...props }) {
+// error also blocks the form: the browser refuses to submit and shows it.
+function Input({ label, hint, error, ...props }) {
+  const noteId = useId();
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.setCustomValidity(error || ''); }, [error]);
   return (
     <label className="company-field">
       <span>{label}</span>
-      <input {...props} />
+      <input ref={ref} {...props}
+        aria-describedby={hint || error ? noteId : undefined}
+        aria-invalid={Boolean(error && String(props.value ?? '').trim())} />
+      {(hint || error) && <FieldNote id={noteId} hint={hint} error={error} value={props.value} />}
     </label>
   );
 }
@@ -1312,6 +1321,9 @@ export default function CompanyManagerSection({ section }) {
                 })
               }
               placeholder="CBD to Rongai"
+              maxLength={200}
+              hint="What passengers see when they pick a route, e.g. CBD to Rongai via Lang'ata."
+              error={checkPlace(routeForm.name, 'the route name', { maxLength: 200, example: 'e.g. CBD to Rongai' })}
               required
             />
 
@@ -1325,6 +1337,10 @@ export default function CompanyManagerSection({ section }) {
                     start_point: e.target.value,
                   })
                 }
+                placeholder="e.g. Kencom, CBD"
+                maxLength={100}
+                hint="Where the route starts: the first stage's name."
+                error={checkPlace(routeForm.start_point, 'the starting point', { example: 'e.g. Kencom, CBD' })}
                 required
               />
 
@@ -1337,6 +1353,10 @@ export default function CompanyManagerSection({ section }) {
                     end_point: e.target.value,
                   })
                 }
+                placeholder="e.g. Rongai"
+                maxLength={100}
+                hint="Where the route ends: the last stage's name."
+                error={checkPlace(routeForm.end_point, 'the destination', { example: 'e.g. Rongai' })}
                 required
               />
             </div>
@@ -1479,11 +1499,19 @@ export default function CompanyManagerSection({ section }) {
                   name: e.target.value,
                 })
               }
+              placeholder="e.g. Collins Otieno"
+              maxLength={100}
+              hint={`As on the driver's ID. ${NAME_HINT}`}
+              error={checkName(driverForm.name, "the driver's name")}
               required
             />
 
             <Input
               label="Phone number"
+              type="tel"
+              inputMode="tel"
+              maxLength={16}
+              placeholder="07XX XXX XXX"
               value={driverForm.phone_number}
               onChange={(e) =>
                 setDriverForm({
@@ -1491,6 +1519,8 @@ export default function CompanyManagerSection({ section }) {
                   phone_number: e.target.value,
                 })
               }
+              hint={`The driver signs in with it and passengers may call it. ${PHONE_HINT}`}
+              error={checkPhone(driverForm.phone_number)}
               required
             />
 
@@ -1503,6 +1533,9 @@ export default function CompanyManagerSection({ section }) {
                   bus_number: e.target.value,
                 })
               }
+              placeholder="e.g. SM-014 or KDA 123A"
+              maxLength={20}
+              hint="The bus this driver usually drives: its fleet number or number plate."
               required
             />
 
@@ -1562,7 +1595,11 @@ export default function CompanyManagerSection({ section }) {
             />
 
             <Input
-              label="Phone number"
+              label="Phone number (optional)"
+              type="tel"
+              inputMode="tel"
+              maxLength={16}
+              placeholder="07XX XXX XXX"
               value={operatorForm.phone_number}
               onChange={(e) =>
                 setOperatorForm({
@@ -1570,6 +1607,8 @@ export default function CompanyManagerSection({ section }) {
                   phone_number: e.target.value,
                 })
               }
+              hint={`So the team can reach them. ${PHONE_HINT}`}
+              error={checkPhone(operatorForm.phone_number, { required: false })}
             />
 
             <Select

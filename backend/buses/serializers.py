@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from bookings.seats import OTHER, VEHICLES
@@ -69,14 +71,15 @@ class BusSerializer(serializers.ModelSerializer):
         return value
 
     def validate_registration_number(self, value):
-        value = value.strip().upper()
-
-        if not value:
+        # Kenyan plates are LLL NNNL: KAA 001A onwards (now KD.., KE..), and
+        # EV.. for electric vehicles (The Star, 2023-05-21 and 2026-02-23).
+        value = ''.join(str(value).upper().split())
+        if not re.fullmatch(r'(K[A-Z]{2}|EV[A-Z])\d{3}[A-Z]', value):
             raise serializers.ValidationError(
-                'Registration number is required.'
+                'Enter the number plate exactly as on the bus: 3 letters, '
+                '3 numbers and 1 letter, e.g. KDK 404M.'
             )
-
-        return value
+        return f'{value[:3]} {value[3:]}'
 
     def validate_bus_number(self, value):
         value = value.strip()

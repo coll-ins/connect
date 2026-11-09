@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from connect.validation import free_text, kenyan_mobile, place
+
 from .models import Company, Route, Trip, PickupStage
 
 
@@ -13,6 +15,19 @@ class CompanySerializer(serializers.ModelSerializer):
             'phone_number',
         ]
         read_only_fields = ['id']
+
+    def validate_name(self, value):
+        return place(value, 'the company name', example='e.g. Super Metro Sacco')
+
+    def validate_description(self, value):
+        return free_text(value, 'the company description', required=False)
+
+    def validate_areas_served(self, value):
+        return place(value, 'the areas served', max_length=500,
+                     example='e.g. CBD, Westlands, Rongai')
+
+    def validate_phone_number(self, value):
+        return kenyan_mobile(value) if str(value or '').strip() else ''
 
 
 class PickupStageSerializer(serializers.ModelSerializer):
@@ -54,7 +69,7 @@ class PickupStageSerializer(serializers.ModelSerializer):
                 'Please provide the actual pickup stage name.'
             )
 
-        return name
+        return place(name, 'the pickup stage name', example='e.g. Kencom or Odeon')
 
 
 class RouteSerializer(serializers.ModelSerializer):
@@ -94,6 +109,16 @@ class RouteSerializer(serializers.ModelSerializer):
             'company_name',
             'pickup_stages',
         ]
+
+    def validate_name(self, value):
+        return place(value, 'the route name', max_length=200,
+                     example='e.g. CBD to Rongai via Lang\'ata')
+
+    def validate_start_point(self, value):
+        return place(value, 'the starting point', example='e.g. Kencom, CBD')
+
+    def validate_end_point(self, value):
+        return place(value, 'the end point', example='e.g. Rongai')
 
 
 class TripSerializer(serializers.ModelSerializer):

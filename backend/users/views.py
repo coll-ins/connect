@@ -14,7 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import CustomUser
-from .phone import phone_variants
+from .phone import canonical_phone, phone_variants
 from .throttles import (
     LoginIPThrottle,
     SignupPhoneThrottle,
@@ -79,7 +79,7 @@ def csrf_token(request):
 @throttle_classes([SignupPhoneThrottle, AnonRateThrottle])
 def signup(request):
     data = request.data.copy()
-    data['phone_number'] = normalize_phone_number(data.get('phone_number'))
+    data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
 
     if not data.get('phone_number') or not data.get('password'):
         return Response(
@@ -129,7 +129,7 @@ def admin_signup(request):
         )
 
     data = request.data.copy()
-    data['phone_number'] = normalize_phone_number(data.get('phone_number'))
+    data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
 
     serializer = UserSerializer(data=data)
     if serializer.is_valid():

@@ -23,6 +23,8 @@ import { useAuth } from '../../context/AuthContext';
 import './CompanyOperatorDashboard.css';
 import SeatMap from '../../components/SeatMap';
 import { TripBusPicker, useCompanyBuses } from '../../components/Fleet';
+import FieldNote from '../../components/FieldNote';
+import { checkPhone, PHONE_HINT } from '../../utils/inputRules';
 
 const sectionByPath = {
   '/company-operator': 'overview',
@@ -605,8 +607,12 @@ function WalkInForm({ trip, onDone }) {
       <div className="operator-walkin-row">
         <input
           type="tel"
+          inputMode="tel"
+          maxLength={16}
           placeholder="Passenger phone e.g. 0712345678"
           aria-label="Passenger phone number"
+          aria-describedby="walkin-phone-note"
+          aria-invalid={Boolean(phone.trim() && checkPhone(phone))}
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           required
@@ -619,10 +625,12 @@ function WalkInForm({ trip, onDone }) {
           onChange={(e) => setSeats(e.target.value)}
           aria-label="Seats"
         />
-        <button type="submit" disabled={busy || !phone.trim()}>
+        <button type="submit" disabled={busy || Boolean(checkPhone(phone))}>
           {busy ? 'Booking…' : 'Book & board'}
         </button>
       </div>
+      <FieldNote id="walkin-phone-note" value={phone} error={checkPhone(phone)}
+        hint={`The passenger's own phone: their ticket and boarding PIN go to it. ${PHONE_HINT}`} />
       {msg && (
         <small role="status" className={ok ? 'walkin-ok' : 'walkin-err'}>
           {msg}

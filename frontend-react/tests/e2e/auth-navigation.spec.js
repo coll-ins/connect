@@ -122,6 +122,33 @@ test.describe('CONNECT public entry and access guards', () => {
     })).toBe('passenger');
   });
 
+  test('signup explains each field and refuses nonsense before sending it', async ({ page }) => {
+    let registerCalls = 0;
+    await stubCsrf(page);
+    await page.route('**/api/users/register/', async (route) => {
+      registerCalls += 1;
+      await route.fulfill({ status: 500, body: '{}' });
+    });
+
+    await page.goto('/signup');
+    // Before typing, each field says what it wants.
+    await expect(page.getByText(/07XX XXX XXX, 01XX XXX XXX or \+254 7XX XXX XXX/)).toBeVisible();
+
+    await page.getByLabel('First name').fill('Qwer');
+    await page.getByLabel('Last name').fill('Passenger');
+    await page.getByLabel('Phone number').fill('12345');
+    await page.getByLabel(/Usual location/).fill('asdfgh');
+    await expect(page.locator('#su-phone')).toHaveClass(/is-error/);
+    await expect(page.locator('#su-loc')).toContainText('"asdfgh" in your usual location does not look like a real word');
+    await expect(page.locator('#su-name')).toContainText('"Qwer" in your name does not look like a real word');
+
+    await page.getByRole('textbox', { name: 'Password' }).fill('StrongPassword123!');
+    await page.getByRole('checkbox', { name: /I agree to the Terms of Service/ }).check();
+    await page.getByRole('button', { name: 'Create account' }).click();
+    await expect(page.getByRole('alert')).toContainText('does not look like a real word');
+    expect(registerCalls).toBe(0);
+  });
+
   test('failed signup remains unauthenticated and reports the error', async ({ page }) => {
     await stubCsrf(page);
     await page.route('**/api/users/register/', async (route) => {

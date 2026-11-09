@@ -48,7 +48,7 @@ class CharterTests(APITestCase):
             'company_id': self.a.id, 'purpose': 'School trip',
             'pickup_location': 'Karen', 'destination': 'Nakuru',
             'depart_at': (timezone.now() + timedelta(days=3)).isoformat(),
-            'passenger_count': 40, 'contact_name': 'Teacher',
+            'passenger_count': 40, 'contact_name': 'Grace Wanjiru',
             'contact_phone': '0712345678',
         }
         data.update(over)

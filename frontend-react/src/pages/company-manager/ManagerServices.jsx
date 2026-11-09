@@ -4,6 +4,8 @@ import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { label, money, when } from '../shared/serviceUtils';
 import '../shared/Services.css';
+import FieldNote from '../../components/FieldNote';
+import { checkText } from '../../utils/inputRules';
 
 const Badge = ({ status }) => (
   <span className={`svc-badge svc-st-${status}`}>{label(status)}</span>
@@ -168,10 +170,13 @@ function QuoteForm({ charter, drivers, onDone }) {
       ) : (
         <div className="svc-form">
           <label className="svc-field wide">Reason (the passenger will see this)
-            <input className="input" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <input className="input" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)}
+            aria-describedby="mgr-decline-note" aria-invalid={Boolean(reason.trim() && checkText(reason, 'the reason', { maxLength: 300 }))} />
+          <FieldNote id="mgr-decline-note" value={reason} error={checkText(reason, 'the reason', { maxLength: 300 })}
+            hint="Explain in a full sentence, e.g. All our buses are booked that weekend. Up to 300 characters." />
           </label>
           <div style={{ gridColumn: '1 / -1' }}>
-            <button className="btn btn-primary" disabled={busy || !reason.trim()} onClick={() => run('decline', { reason: reason.trim() })}>
+            <button className="btn btn-primary" disabled={busy || Boolean(checkText(reason, 'the reason', { maxLength: 300 }))} onClick={() => run('decline', { reason: reason.trim() })}>
               {busy ? 'Declining…' : 'Decline request'}
             </button>
           </div>
@@ -208,10 +213,13 @@ function CancelPaidHire({ charter, onDone }) {
       {error && <div className="svc-error" style={{ marginBottom: 10 }}>{error}</div>}
       <div className="svc-form">
         <label className="svc-field wide">Reason (the passenger will see this)
-          <input className="input" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input className="input" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)}
+            aria-describedby="mgr-cancel-note" aria-invalid={Boolean(reason.trim() && checkText(reason, 'the reason', { maxLength: 300 }))} />
+          <FieldNote id="mgr-cancel-note" value={reason} error={checkText(reason, 'the reason', { maxLength: 300 })}
+            hint="Explain in a full sentence, e.g. All our buses are booked that weekend. Up to 300 characters." />
         </label>
         <div className="svc-actions wide" style={{ gridColumn: '1 / -1', marginTop: 0 }}>
-          <button className="btn btn-primary" disabled={busy || !reason.trim()} onClick={submit}>
+          <button className="btn btn-primary" disabled={busy || Boolean(checkText(reason, 'the reason', { maxLength: 300 }))} onClick={submit}>
             {busy ? 'Cancelling…' : `Cancel and refund ${money(charter.quote_price)}`}
           </button>
           <button className="btn btn-ghost" disabled={busy} onClick={() => setOpen(false)}>Keep hire</button>
