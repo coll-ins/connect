@@ -36,6 +36,8 @@ export default defineConfig({
         DATABASE_URL: 'sqlite:///smoke.sqlite3',
         REDIS_URL: '',
         REDIS_CACHE_URL: '',
+        // Off at launch; on here so the cash journey stays tested.
+        CASH_ENABLED: 'True',
       },
     },
     {

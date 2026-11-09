@@ -11,6 +11,10 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
     }
   });
   const tag = String(Date.now()).slice(-5);
+  // Names and plates are checked as real: letters for the name, KXX 000X plate.
+  const SYL = ['ka', 'be', 'di', 'fo', 'gu', 'ha', 'je', 'ki', 'lo', 'mu'];
+  const word = `M${[...tag].map((d) => SYL[d]).join('')}`;
+  const plate = `KDT ${tag.slice(0, 3)}${'ABCDEFGHJK'[tag[3]]}`;
 
   await page.goto('/login');
   await page.getByLabel('Phone number').fill('+254799000003');
@@ -30,30 +34,30 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
 
   await page.goto('/company-manager/drivers');
   await page.getByRole('button', { name: 'Add Driver' }).first().click();
-  await modal.getByLabel('Driver name').fill(`Wanjiru ${tag}`);
+  await modal.getByLabel('Driver name').fill(`Wanjiru ${word}`);
   await modal.getByLabel('Phone number').fill(`+2547330${tag}`);
   await modal.getByLabel('Bus number').fill(`KDT ${tag}`);
   const pw = modal.getByLabel('Login password');
   if (await pw.count()) await pw.fill('Matatu-Route-58');
   await modal.getByRole('button', { name: 'Add Driver' }).click();
-  await expect(page.getByText(`Wanjiru ${tag}`)).toBeVisible();
+  await expect(page.getByText(`Wanjiru ${word}`)).toBeVisible();
 
   await page.goto('/company-manager/capacity');
-  await page.getByLabel('Number plate').fill(`KDT ${tag}`);
+  await page.getByLabel('Number plate').fill(plate);
   await page.getByLabel('Fleet number').fill(`F${tag}`);
   await page.getByLabel('Vehicle').selectOption('matatu_14');
   await page.getByRole('button', { name: 'Add bus' }).click();
-  await expect(page.getByText(`F${tag} · KDT ${tag}`)).toBeVisible();
+  await expect(page.getByText(`F${tag} · ${plate}`)).toBeVisible();
 
   await page.goto('/company-manager/trips');
   await page.getByRole('button', { name: 'Create Trip' }).first().click();
   await modal.getByLabel('Route').selectOption({ label: `Test ${tag} - Rongai` });
-  await modal.getByLabel('Driver').selectOption({ label: `Wanjiru ${tag} · KDT ${tag}` });
+  await modal.getByLabel('Driver').selectOption({ label: `Wanjiru ${word} · KDT ${tag}` });
   const tomorrow = new Date(Date.now() + 86400000);
   const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000)
     .toISOString().slice(0, 16);
   await modal.getByLabel('Departure').fill(local);
-  await modal.getByLabel(/^Bus/).selectOption({ label: `F${tag} · KDT ${tag} · 14 seats` });
+  await modal.getByLabel(/^Bus/).selectOption({ label: `F${tag} · ${plate} · 14 seats` });
   await modal.getByRole('button', { name: 'Create Trip' }).click();
   await expect(modal).toHaveCount(0);
   await expect(page.getByText(`Test ${tag} - Rongai`).first()).toBeVisible();

@@ -100,7 +100,11 @@ class Command(BaseCommand):
             u.save()
             return u
 
-        account('wanjiku.k', '+254799000001', 'passenger', False, 'Wanjiku', 'Kamau')
+        rider = account('wanjiku.k', '+254799000001', 'passenger', False, 'Wanjiku', 'Kamau')
+        # A regular rider, so cash on board shows wherever CASH_ENABLED is on.
+        User.objects.filter(pk=rider.pk).update(
+            boarded_count=30, date_joined=timezone.now() - dt.timedelta(days=90),
+        )
         account('brian.o', '+254799000002', 'company_operator', True, 'Brian', 'Otieno')
         account('peter.m', d1.phone_number, 'driver', True, 'Peter', 'Mwangi')
         account('achieng.o', '+254799000003', 'company_manager', True, 'Achieng', 'Odhiambo')
