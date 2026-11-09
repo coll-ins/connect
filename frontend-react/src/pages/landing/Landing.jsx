@@ -16,8 +16,8 @@ const PROBLEMS = [
     fix: 'Watch your bus move on a live map, stage by stage, with traffic on the route.',
   },
   {
-    pain: 'Cash, no change, no receipt.',
-    fix: 'Pay with M-Pesa or card and get a receipt for every trip. Regular riders unlock cash on board.',
+    pain: 'No change, no receipt.',
+    fix: 'Pay with M-Pesa or card and get a receipt for every trip, searchable any time.',
   },
   {
     pain: 'You left something on the bus and nobody to call.',
@@ -47,7 +47,7 @@ const SEAT_LABELS = SEATS.map((state) => (state === 'aisle' ? '' : String(++seat
 const STEPS = [
   { title: 'Create your account', text: 'Your name, phone number and a password. Takes a minute.' },
   { title: 'Choose route and seat', text: 'Pick the company, the trip time and the seat you want.' },
-  { title: 'Pay', text: 'M-Pesa or card. Regulars with a high integrity score can pay cash on board.' },
+  { title: 'Pay', text: 'M-Pesa or card. Your seat is confirmed the moment it is paid.' },
   { title: 'Board with your PIN', text: 'Track the bus, walk to your stage, show your PIN, ride.' },
 ];
 
@@ -76,7 +76,7 @@ export default function Landing() {
             <Link to="/signup" className="btn btn-primary lp-btn-lg">Get started</Link>
             <Link to="/login" className="lp-link">I already have an account</Link>
           </div>
-          <p className="lp-fact">Free to join. Pay with M-Pesa or card, cash once you are a regular.</p>
+          <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
         </div>
 
         <div className="lp-hero-visual">

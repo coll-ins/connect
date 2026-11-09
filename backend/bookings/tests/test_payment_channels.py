@@ -1,3 +1,4 @@
+from django.test import override_settings
 from decimal import Decimal
 import io
 from django.core.management import call_command
@@ -28,6 +29,7 @@ def _paystack_offline(*args, **kwargs):
     raise requests.RequestException('offline')
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class PaymentChannelTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -400,6 +402,7 @@ class PaymentChannelTests(TestCase):
         )
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class ConcurrentCashInitializationTests(TransactionTestCase):
     def setUp(self):
         self.company = Company.objects.create(
@@ -833,6 +836,7 @@ class ConcurrentDigitalInitializationTests(TransactionTestCase):
 
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class DeadDigitalAttemptTests(TestCase):
     """A closed or failed Paystack checkout must not lock the booking."""
 

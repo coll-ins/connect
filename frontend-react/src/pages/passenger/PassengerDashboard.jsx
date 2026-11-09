@@ -36,11 +36,11 @@ function PaymentModal({
   const [error, setError] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState('');
   const { user } = useAuth();
-  // Mirrors backend settings CASH_MIN_TRIPS / CASH_MIN_INTEGRITY; the server enforces it.
+  // Cash is off at launch (backend CASH_ENABLED); later only for proven riders.
+  // The server enforces both, this only decides what to show.
+  const cashEnabled = Boolean(user?.cash_enabled);
   const cashLocked = !user?.can_pay_cash;
-  const cashLockedReason = user?.integrity_score == null
-    ? 'Pay online for your first trips. Cash unlocks after 10 trips with an integrity score of 90% or more.'
-    : `Unlocks after 10 trips with 90%+ integrity. You: ${Math.min(user.trips_counted, 10)} of 10 trips, ${user.integrity_score}%.`;
+  const cashLockedReason = 'For regular riders only: 30 trips, an integrity score of 95% or more and an account at least 60 days old.';
 
   const cash = async () => {
     setBusy(true);
@@ -129,7 +129,7 @@ function PaymentModal({
     )}
     {step==='method' && <div className="stack" style={{marginTop:18}}>
       <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
-      <button className="pay-option" onClick={cash} disabled={busy || cashLocked} aria-describedby="cash-note"><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay cash on board</strong><span id="cash-note">{cashLocked ? cashLockedReason : 'Get your PIN now, track the bus, and pay the driver when you board.'}</span></div></button>
+      {cashEnabled && <button className="pay-option" onClick={cash} disabled={busy || cashLocked} aria-describedby="cash-note"><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay cash on board</strong><span id="cash-note">{cashLocked ? cashLockedReason : 'Get your PIN now, track the bus, and pay the driver when you board.'}</span></div></button>}
     </div>}
     {step==='online' && <div className="stack" style={{marginTop:18}}>
       <button className="pay-option" onClick={()=>setStep('mpesa-number')} disabled={busy}><div className="pay-icon"><Smartphone size={20} aria-hidden="true" /></div><div><strong>M-PESA</strong><span>Choose which phone number will receive the payment prompt.</span></div></button>

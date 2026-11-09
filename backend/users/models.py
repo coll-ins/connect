@@ -77,11 +77,20 @@ class CustomUser(AbstractUser):
     def can_pay_cash(self):
         """Cash is earned: pay online first, then cash once the passenger has
         enough finished trips (boarded or no-show) and a high integrity score."""
+        from datetime import timedelta
+
         from django.conf import settings
+        from django.utils import timezone
+        if not settings.CASH_ENABLED:
+            return False
         trips = self.boarded_count + self.no_show_count
         score = self.integrity_score
+        old_enough = self.date_joined <= timezone.now() - timedelta(
+            days=settings.CASH_MIN_ACCOUNT_DAYS
+        )
         return (
-            trips >= settings.CASH_MIN_TRIPS
+            old_enough
+            and trips >= settings.CASH_MIN_TRIPS
             and score is not None
             and score >= settings.CASH_MIN_INTEGRITY
         )

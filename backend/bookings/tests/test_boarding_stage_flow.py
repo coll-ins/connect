@@ -254,6 +254,7 @@ class BoardingTripVisibilityTests(Base):
         self.assertEqual(resp.status_code, 400)
 
 
+@override_settings(CASH_ENABLED=True, CASH_MIN_TRIPS=1, CASH_MIN_ACCOUNT_DAYS=0)
 class BoardingPaymentTests(Base):
     def _set_trip(self, status, minutes_ago):
         Trip.objects.filter(pk=self.trip.pk).update(

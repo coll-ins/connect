@@ -40,6 +40,17 @@ def cash_due_on_board(booking, payment):
     )
 
 
+def before_change_cutoff(trip):
+    """True while the passenger can still cancel for free or change bus."""
+    from django.conf import settings
+    return (
+        trip is not None
+        and trip.status == 'scheduled'
+        and trip.departure_at - timezone.now()
+        > timedelta(minutes=settings.BOOKING_CHANGE_CUTOFF_MINUTES)
+    )
+
+
 def cash_still_payable(trip):
     """Cash can be taken until the trip ends: passengers board at stages
     along the way, after the bus has left the first one."""
@@ -168,7 +179,9 @@ def claim_booking_refund(booking, fault_party):
         if payment.status != 'confirmed':
             return Decimal('0.00'), None
 
-        if fault_party not in ('passenger', 'company'):
+        # 'passenger_early': the passenger cancelled before the change
+        # cut-off, so the seat can still be resold: full refund.
+        if fault_party not in ('passenger', 'passenger_early', 'company'):
             raise ValueError('Invalid fault party.')
 
         # Another request already owns this refund. Never send a second one.
@@ -177,7 +190,7 @@ def claim_booking_refund(booking, fault_party):
 
         fare = payment.amount
 
-        if fault_party == 'company':
+        if fault_party in ('company', 'passenger_early'):
             refund_amount = fare
         else:
             refund_amount = (

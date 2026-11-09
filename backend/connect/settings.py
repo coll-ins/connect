@@ -343,11 +343,19 @@ if 'test' in sys.argv:
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 # Bump when the Terms/Privacy text changes materially (and LAST_UPDATED in frontend src/legal/business.js).
-TERMS_VERSION = '2026-11-08'
+TERMS_VERSION = '2026-11-09'
 MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
-# Cash on board is unlocked at 9 out of 10: at least 10 finished trips, 90%+ boarded.
-CASH_MIN_TRIPS = int(os.getenv('CASH_MIN_TRIPS', '10'))
-CASH_MIN_INTEGRITY = float(os.getenv('CASH_MIN_INTEGRITY', '90'))
+# Launch is M-Pesa/card only. Cash stays off until CASH_ENABLED=true, and even
+# then only for proven riders: 30+ finished trips, 95%+ boarded (at most one
+# no-show in 30) and an account at least 60 days old, so trips can't be farmed fast.
+CASH_ENABLED = os.getenv('CASH_ENABLED', 'false').lower() == 'true'
+CASH_MIN_TRIPS = int(os.getenv('CASH_MIN_TRIPS', '30'))
+CASH_MIN_INTEGRITY = float(os.getenv('CASH_MIN_INTEGRITY', '95'))
+CASH_MIN_ACCOUNT_DAYS = int(os.getenv('CASH_MIN_ACCOUNT_DAYS', '60'))
+# Up to this many minutes before departure a passenger may cancel for a full
+# refund or move to another bus on the route. After it the seat is committed:
+# no moves, and cancelling refunds 50%.
+BOOKING_CHANGE_CUTOFF_MINUTES = int(os.getenv('BOOKING_CHANGE_CUTOFF_MINUTES', '15'))
 PENDING_BOOKING_TTL_MINUTES = 20    # expire_pending_bookings cancels unpaid bookings older than this
 TRIP_AUTO_CLOSE_AFTER_HOURS = int(os.getenv('TRIP_AUTO_CLOSE_AFTER_HOURS', '12'))
 

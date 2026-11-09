@@ -124,11 +124,13 @@ class MoveBookingTests(MoveBase):
         b.refresh_from_db()
         self.assertEqual(b.trip_id, self.trip_a.id)
 
-    def test_passenger_forbidden(self):
+    def test_other_passenger_forbidden(self):
+        # Owners may move their own booking before the cut-off
+        # (test_change_cutoff.py); anyone else's booking stays off-limits.
         b = self._booking(self.trip_a)
-        self.assertEqual(
-            self._move(b, self.trip_b.id, user=self.passenger).status_code, 403
-        )
+        other = User.objects.create_user(
+            username='mv_other', password='x', phone_number='+254711999001')
+        self.assertEqual(self._move(b, self.trip_b.id, user=other).status_code, 403)
 
     def test_full_target_refused(self):
         self.trip_b.capacity = 1

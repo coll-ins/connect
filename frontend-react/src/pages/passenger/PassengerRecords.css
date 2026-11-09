@@ -120,3 +120,7 @@
 .data-card-actions .btn {
   min-height: 44px;
 }
+.data-card-actions .change-note { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--text-2); }
+.change-picker { flex-basis: 100%; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-2); }
+.change-picker span { color: var(--text-2); font-size: 13px; }
+.change-picker .btn { justify-content: flex-start; min-height: 44px; }

@@ -64,6 +64,7 @@ def serialize_session_user(user):
         'is_superuser': user.is_superuser,
         'integrity_score': user.integrity_score,
         'can_pay_cash': user.can_pay_cash,
+        'cash_enabled': settings.CASH_ENABLED,
         'trips_counted': user.boarded_count + user.no_show_count,
     }
 

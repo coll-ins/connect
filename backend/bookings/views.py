@@ -39,6 +39,7 @@ from .services import (
     settle_booking_fault,
     cancel_dead_pending_bookings,
     cash_due_on_board,
+    before_change_cutoff,
     cash_still_payable,
     trip_has_departed,
     create_booking_hold,
@@ -1295,9 +1296,12 @@ def initialize_cash_payment(request, booking_id):
         return Response(
             {
                 'error': (
-                    'Cash on board unlocks after '
-                    f'{settings.CASH_MIN_TRIPS} trips with an integrity score of '
-                    f'{settings.CASH_MIN_INTEGRITY:g}% or more. Pay with M-Pesa or card for now.'
+                    'Cash on board is not available yet. Pay with M-Pesa or card.'
+                    if not settings.CASH_ENABLED else
+                    'Cash on board is for regular riders: '
+                    f'{settings.CASH_MIN_TRIPS} trips, an integrity score of '
+                    f'{settings.CASH_MIN_INTEGRITY:g}% or more and an account at least '
+                    f'{settings.CASH_MIN_ACCOUNT_DAYS} days old. Pay with M-Pesa or card for now.'
                 ),
                 'code': 'cash_locked',
             },
@@ -1844,6 +1848,12 @@ def get_my_bookings(request):
             'trip_id': trip.id if trip else None,
             'departure_at': trip.departure_at if trip else None,
             'trip_status': trip.status if trip else None,
+            # Free cancel / change of bus until this moment (see before_change_cutoff).
+            'can_change': before_change_cutoff(trip),
+            'change_cutoff_at': (
+                trip.departure_at - timezone.timedelta(minutes=settings.BOOKING_CHANGE_CUTOFF_MINUTES)
+                if trip else None
+            ),
 
             'company_name': (
                 route.company.name
@@ -1852,6 +1862,8 @@ def get_my_bookings(request):
             ),
 
             'route_name': route.name if route else None,
+            'route_id': route.id if route else None,
+            'company_id': route.company_id if route else None,
             'route_start_point': route.start_point if route else None,
             'route_end_point': route.end_point if route else None,
 
@@ -2317,7 +2329,7 @@ def move_booking_to_trip(request, booking_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    is_allowed = (
+    is_staff_move = (
         user.is_superuser
         or (
             user.role in {'company_manager', 'company_operator'}
@@ -2325,7 +2337,8 @@ def move_booking_to_trip(request, booking_id):
             and can_handle_route(user, booking.route_id)
         )
     )
-    if not is_allowed:
+    is_own_move = booking.user_id == user.id
+    if not (is_staff_move or is_own_move):
         return Response(
             {'error': 'Manager or Operator authorization required'},
             status=status.HTTP_403_FORBIDDEN
@@ -2391,6 +2404,18 @@ def move_booking_to_trip(request, booking_id):
         if old_trip.status not in ('scheduled', 'boarding'):
             return Response(
                 {'error': 'The current trip has already left.'},
+                status=status.HTTP_409_CONFLICT
+            )
+        if not is_staff_move and not before_change_cutoff(old_trip):
+            return Response(
+                {
+                    'error': (
+                        'Your bus leaves in less than '
+                        f'{settings.BOOKING_CHANGE_CUTOFF_MINUTES} minutes, so '
+                        'the booking can no longer be moved to another trip.'
+                    ),
+                    'code': 'change_cutoff',
+                },
                 status=status.HTTP_409_CONFLICT
             )
 
@@ -2629,13 +2654,15 @@ def cancel_booking(request, booking_id):
             )
 
             previous_status = booking.status
-
+            refund_party = fault_party
+            if fault_party == 'passenger' and before_change_cutoff(trip):
+                refund_party = 'passenger_early'
             # Reserve the refund inside this transaction but do NOT call
             # Paystack here: a rollback after Paystack accepted the refund
             # would erase the reservation and allow a second refund.
             refund_amount, refund_claim = claim_booking_refund(
                 booking,
-                fault_party
+                refund_party
             )
 
             booking.status = 'cancelled'
@@ -2726,6 +2753,7 @@ def cancel_booking(request, booking_id):
     response_body = {
         'message': 'Booking cancelled successfully.',
         'fault_party': fault_party,
+        'free_cancellation': refund_party == 'passenger_early',
         'refund_amount': str(refund_amount),
     }
 

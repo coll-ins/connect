@@ -261,6 +261,9 @@ class LatePaymentTests(_Fixture, APITestCase):
 class RefundOutcomeTests(_Fixture, APITestCase):
     def setUp(self):
         self.build('301')
+        # Inside the 15-minute change cut-off, so a passenger cancel is the 50% refund.
+        self.trip.departure_at = timezone.now() + timezone.timedelta(minutes=10)
+        self.trip.save(update_fields=['departure_at'])
         self.booking_obj, self.payment = self.booking(
             'confirmed', 'REF_OUT', payment_status='confirmed', hold=True
         )

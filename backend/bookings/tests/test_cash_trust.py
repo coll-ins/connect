@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -14,8 +15,9 @@ from drivers.models import Driver
 User = get_user_model()
 
 
+@override_settings(CASH_ENABLED=True)
 class CashUnlockTests(APITestCase):
-    """Cash on board needs 10+ finished trips and 90%+ integrity."""
+    """Cash is for proven riders: 30+ trips, 95%+ integrity, 60+ day account."""
 
     def setUp(self):
         co = Company.objects.create(name="A", description="d", areas_served="N")
@@ -24,13 +26,14 @@ class CashUnlockTests(APITestCase):
         trip = Trip.objects.create(route=route, driver=driver,
                                    departure_at=timezone.now() + timedelta(hours=2), capacity=10)
         self.user = User.objects.create_user(username="p", password="x", phone_number="+254711000222")
+        User.objects.filter(pk=self.user.pk).update(date_joined=timezone.now() - timedelta(days=61))
         self.booking = Booking.objects.create(
             user=self.user, route=route, trip=trip, seats=1, total_amount=Decimal("100"), status="pending")
         self.client.force_authenticate(user=self.user)
         self.url = reverse("bookings:initialize-cash-payment", args=[self.booking.id])
 
-    def _set(self, boarded, no_show):
-        User.objects.filter(pk=self.user.pk).update(boarded_count=boarded, no_show_count=no_show)
+    def _set(self, boarded, no_show, **extra):
+        User.objects.filter(pk=self.user.pk).update(boarded_count=boarded, no_show_count=no_show, **extra)
         self.user.refresh_from_db()
 
     def test_new_passenger_must_pay_online(self):
@@ -39,17 +42,28 @@ class CashUnlockTests(APITestCase):
         self.assertEqual(r.json()["code"], "cash_locked")
         self.assertFalse(Payment.objects.filter(booking=self.booking).exists())
 
-    def test_nine_of_ten_unlocks_cash(self):
-        self._set(9, 1)
+    def test_proven_rider_unlocks_cash(self):
+        self._set(29, 1)  # 96.7%
         self.assertEqual(self.client.post(self.url).status_code, 200)
 
-    def test_eight_of_ten_stays_locked(self):
-        self._set(8, 2)
+    def test_two_no_shows_in_thirty_stays_locked(self):
+        self._set(28, 2)  # 93.3%
         self.assertEqual(self.client.post(self.url).status_code, 403)
 
-    def test_perfect_but_too_few_trips_stays_locked(self):
-        self._set(9, 0)
+    def test_too_few_trips_stays_locked(self):
+        self._set(29, 0)
         self.assertEqual(self.client.post(self.url).status_code, 403)
+
+    def test_new_account_stays_locked_even_with_trips(self):
+        self._set(40, 0, date_joined=timezone.now() - timedelta(days=10))
+        self.assertEqual(self.client.post(self.url).status_code, 403)
+
+    @override_settings(CASH_ENABLED=False)
+    def test_cash_off_at_launch_even_for_proven_rider(self):
+        self._set(40, 0)
+        r = self.client.post(self.url)
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("not available", r.json()["error"])
 
 
 class CashPaidAtPinTests(APITestCase):
