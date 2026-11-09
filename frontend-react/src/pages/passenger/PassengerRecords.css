@@ -42,6 +42,8 @@
 .record-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 .record-info-grid span { display: flex; flex-direction: column; gap: 4px; color: var(--text-3); font-size: 11px; letter-spacing: 0; }
 .record-info-grid strong { color: var(--text); font-size: 13px; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.record-section > p { margin: 12px 0 0; font-size: 13px; }
+.record-info-grid a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
 .record-section.record-issue { padding: 14px; border: 1px solid rgb(var(--warn-rgb) / 0.3); border-radius: 14px; background: rgb(var(--warn-rgb) / 0.07); }
 .record-issue p { margin: 0 0 12px; color: var(--text); }
 

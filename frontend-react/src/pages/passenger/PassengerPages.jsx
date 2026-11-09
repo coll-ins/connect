@@ -253,6 +253,28 @@ export function PassengerRecords({ mode = 'receipts' }) {
               </div>
 
               <div className="record-section">
+                <h3>Driver</h3>
+                {selected.driver ? (
+                  <div className="record-info-grid">
+                    <span>Name<strong>{selected.driver.name}</strong></span>
+                    <span>Bus<strong>{selected.driver.bus_number || '—'}</strong></span>
+                    <span>Phone
+                      <strong>
+                        {selected.driver.phone_number
+                          ? <a href={`tel:${selected.driver.phone_number}`}>{selected.driver.phone_number}</a>
+                          : 'Shared only on paid trips'}
+                      </strong>
+                    </span>
+                  </div>
+                ) : (
+                  <p className="muted">No driver was assigned to this trip yet.</p>
+                )}
+                {selected.driver?.phone_number && (
+                  <p className="muted">Left something on the bus? Call the driver with your trip reference.</p>
+                )}
+              </div>
+
+              <div className="record-section">
                 <h3>Booking</h3>
                 <div className="record-info-grid">
                   <span>Status<strong>{selected.booking?.status}</strong></span>

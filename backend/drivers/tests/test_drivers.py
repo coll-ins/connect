@@ -192,7 +192,7 @@ class DriversAppTests(APITestCase):
                 "phone_number": "+254733333333",
                 "bus_number": "KDD 004D",
                 "company": self.company.id,
-                "password": "driverpass123",
+                "password": "Driver-pass123",
             },
             format="json",
         )
@@ -226,7 +226,7 @@ class DriversAppTests(APITestCase):
         )
 
         self.assertTrue(
-            driver_user.check_password("driverpass123")
+            driver_user.check_password("Driver-pass123")
         )
 
         self.assertTrue(
@@ -239,7 +239,7 @@ class DriversAppTests(APITestCase):
         response = self.client.post(
             reverse("drivers:driver-list"),
             {"name": "Form Driver", "phone_number": "+254733333390",
-             "bus_number": "KDD 090D", "password": "driverpass123"},
+             "bus_number": "KDD 090D", "password": "Driver-pass123"},
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
@@ -284,7 +284,7 @@ class DriversAppTests(APITestCase):
                 "phone_number": self.manager.phone_number,
                 "bus_number": "KFF 006F",
                 "company": self.company.id,
-                "password": "driverpass123",
+                "password": "Driver-pass123",
             },
             format="json",
         )
@@ -312,7 +312,7 @@ class DriversAppTests(APITestCase):
                 "phone_number": "+254744444444",
                 "bus_number": "KEE 005E",
                 "company": self.other_company.id,
-                "password": "driverpass123",
+                "password": "Driver-pass123",
             },
             format="json",
         )

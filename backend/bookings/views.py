@@ -4950,7 +4950,8 @@ def passenger_records(request):
         .filter(user=request.user)
         .select_related(
             'route__company',
-            'trip',
+            'trip__driver',
+            'driver',
             'payment',
             'boarding_event',
             'financial_hold',
@@ -5055,6 +5056,14 @@ def passenger_records(request):
                 ),
             }
 
+        driver = booking.driver or (booking.trip.driver if booking.trip else None)
+        # Phone only for passengers who actually paid or rode (lost property,
+        # complaints); unpaid cash holds and cancelled bookings never see it.
+        show_driver_phone = (
+            booking.status in ('confirmed', 'completed')
+            and not cash_due_on_board(booking, payment)
+        )
+
         records.append({
             'booking_id': booking.id,
             'booking_number': booking.booking_number,
@@ -5084,6 +5093,14 @@ def passenger_records(request):
                 'pickup_location': booking.pickup_location,
                 'seats': booking.seats,
             },
+
+            'driver': {
+                'name': driver.name,
+                'phone_number': (
+                    driver.phone_number if show_driver_phone else None
+                ),
+                'bus_number': driver.bus_number,
+            } if driver else None,
 
             'booking': {
                 'status': booking.status,
