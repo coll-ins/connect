@@ -7,6 +7,7 @@ import AppShell from '../../components/layout/AppShell';
 import { label, money, when } from '../shared/serviceUtils';
 import FieldNote from '../../components/FieldNote';
 import { checkName, checkPhone, checkText, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
+import useHistoryStep from '../../hooks/useHistoryStep';
 import '../shared/Services.css';
 
 const STEPS = ['Company', 'Route', 'Bus', 'Stops', 'Parcel', 'Receiver'];
@@ -34,7 +35,7 @@ export function DeliveryNew() {
   const [options, setOptions] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0);
+  const [step, setStep, stepBack] = useHistoryStep();
   const [f, setF] = useState({
     company: '', route: '', trip: '', pickup: '', dropoff: '', size: '',
     description: '', receiverName: '', receiverPhone: '', ok: false,
@@ -65,7 +66,7 @@ export function DeliveryNew() {
     setError('');
     if (next !== undefined) setStep(next);
   };
-  const back = () => (step > 0 ? setStep(step - 1) : navigate('/passenger/delivery'));
+  const back = () => (step > 0 ? stepBack() : navigate('/passenger/delivery'));
 
   const submit = async (e) => {
     e.preventDefault();
@@ -96,8 +97,8 @@ export function DeliveryNew() {
       <div className="svc-page">
         <div className="svc-head">
           <div>
-            <button type="button" className="btn btn-ghost" onClick={back}>
-              <ArrowLeft size={16} /> {step === 0 ? 'Parcels' : 'Back'}
+            <button type="button" className="journey-back" onClick={back}>
+              <ArrowLeft size={18} aria-hidden="true" /> {step === 0 ? 'Parcels' : 'Back'}
             </button>
             <h1>Send a parcel</h1>
             <p>Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>

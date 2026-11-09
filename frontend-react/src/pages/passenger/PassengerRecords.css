@@ -124,3 +124,12 @@
 .change-picker { flex-basis: 100%; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-2); }
 .change-picker span { color: var(--text-2); font-size: 13px; }
 .change-picker .btn { justify-content: flex-start; min-height: 44px; }
+
+.close-account {
+  margin-top: 32px; padding: 20px; max-width: 560px;
+  border: 1px solid rgb(var(--danger-rgb) / 0.4); border-radius: var(--radius-card); background: var(--surface);
+}
+.close-account h2 { margin: 0 0 8px; font-size: 18px; }
+.close-account p { margin: 0 0 16px; color: var(--text-2); line-height: 1.5; }
+.close-account a { color: var(--text); text-underline-offset: 3px; }
+.close-account .btn { min-height: 44px; }

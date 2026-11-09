@@ -1,0 +1,9 @@
+# Signing keys never go in git: lose this file and you cannot update the app.
+*.keystore
+*.jks
+# Everything Bubblewrap generates from twa-manifest.json
+*
+!.gitignore
+!README.md
+!twa-manifest.json
+!assetlinks.template.json

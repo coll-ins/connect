@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 
 import { LAST_UPDATED } from './business';
 import { DOCUMENTS, documentBySlug } from './documents';
@@ -26,6 +27,7 @@ function Block({ item }) {
 export default function LegalPage() {
   const { slug } = useParams();
   const doc = documentBySlug(slug);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (doc) document.title = `${doc.title} · CONNECT`;
@@ -37,7 +39,7 @@ export default function LegalPage() {
   return (
     <div className="legal-page">
       <header className="legal-top">
-        <Link to="/login" className="legal-brand"><span className="brand-mark" aria-hidden="true">C</span>CONNECT</Link>
+        <Link to="/" className="legal-brand"><span className="brand-mark" aria-hidden="true">C</span>CONNECT</Link>
         <nav aria-label="Legal documents" className="legal-nav">
           {DOCUMENTS.map((d) => (
             <Link key={d.slug} to={`/legal/${d.slug}`}
@@ -50,6 +52,14 @@ export default function LegalPage() {
       </header>
 
       <main className="legal-doc">
+        <button
+          type="button"
+          className="journey-back"
+          // Opened from a link inside the app: go back there. Opened directly: go home.
+          onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/', { replace: true }))}
+        >
+          <ChevronLeft size={20} aria-hidden="true" /> Back
+        </button>
         <h1>{doc.title}</h1>
         <p className="legal-meta">Last updated {LAST_UPDATED}</p>
         <p className="legal-summary">{doc.summary}</p>

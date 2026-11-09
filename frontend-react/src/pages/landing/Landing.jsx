@@ -6,6 +6,8 @@ import { dashboardPath } from '../../utils/roleRoutes';
 import { webglOk } from '../../components/maps/webgl';
 import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
 import seatPhoto from '../../assets/journeys/bookaseat.jpeg';
+import { isInstalledApp } from '../../utils/installedApp';
+import Welcome from './Welcome';
 import './Landing.css';
 
 // three.js is large: fetched after the words and buttons are already on screen.
@@ -61,14 +63,14 @@ const STEPS = [
 export default function Landing() {
   const { user } = useAuth();
   if (user) return <Navigate to={dashboardPath(user)} replace />;
+  if (isInstalledApp()) return <Welcome />;
 
   return (
     <div className="lp">
       <header className="lp-nav lp-wrap">
         <Link to="/" className="lp-logo"><span className="brand-mark">C</span>CONNECT</Link>
         <nav className="lp-nav-actions">
-          <Link to="/login" className="lp-link">Sign in</Link>
-          <Link to="/signup" className="btn btn-primary">Get started</Link>
+          <Link to="/login" className="btn btn-primary">Get started</Link>
         </nav>
       </header>
 
@@ -80,8 +82,8 @@ export default function Landing() {
             No pushing at the stage, no waiting blind.
           </p>
           <div className="lp-cta">
-            <Link to="/signup" className="btn btn-primary lp-btn-lg">Get started</Link>
-            <Link to="/login" className="lp-link">I already have an account</Link>
+            <Link to="/login" className="btn btn-primary lp-btn-lg">Get started</Link>
+            <Link to="/signup" className="lp-link">New here? Create an account</Link>
           </div>
           <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
         </div>

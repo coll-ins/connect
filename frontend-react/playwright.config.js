@@ -13,6 +13,8 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    // API mocks (page.route) don't see requests a service worker makes.
+    serviceWorkers: 'block',
   },
   webServer: {
     // CI tests the production build (built in the step before), which is what

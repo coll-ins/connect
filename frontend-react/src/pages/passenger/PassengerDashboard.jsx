@@ -319,6 +319,21 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     });
   }, [navigate, paymentBooking]);
 
+  // Phone Back closes the payment sheet instead of leaving it open over the
+  // previous step. The sheet gets its own history entry while it is open.
+  const sheetOpen = Boolean(paymentBooking);
+  useEffect(() => {
+    if (!sheetOpen) return undefined;
+    const close = () => { setPaymentBooking(null); refresh(); };
+    window.history.pushState({ ...window.history.state, paymentSheet: true }, '');
+    window.addEventListener('popstate', close);
+    return () => {
+      window.removeEventListener('popstate', close);
+      // Closed with its own button: drop the entry we added.
+      if (window.history.state?.paymentSheet) window.history.back();
+    };
+  }, [sheetOpen, refresh]);
+
   useEffect(()=>{apiRequest('/companies/').then(d=>setCompanies(Array.isArray(d)?d:[])).catch(e=>setError(e.message));refresh()},[refresh]);
   useEffect(()=>{if(!company){setRoutes([]);setTrips([]);return} apiRequest(`/companies/${company}/routes/`).then(d=>setRoutes(d||[])).catch(e=>setError(e.message))},[company]);
   useEffect(() => {
@@ -1270,7 +1285,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               mode="pick"
               selected={pickedSeats}
               onChange={(next) => { setAutoCount(0); setPickedSeats(next); }}
-              max={Math.min(20, seatsLeft(bookingTrip))}
+              max={Math.min(10, seatsLeft(bookingTrip))}
               refreshKey={seatMapKey}
             />
             </div>
@@ -1292,7 +1307,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                         onClick={() => setAutoCount(autoCount - 1)}>−</button>
                       <strong aria-live="polite">{autoCount}</strong>
                       <button type="button" aria-label="One seat more"
-                        disabled={autoCount >= Math.min(20, seatsLeft(bookingTrip))}
+                        disabled={autoCount >= Math.min(10, seatsLeft(bookingTrip))}
                         onClick={() => setAutoCount(autoCount + 1)}>+</button>
                     </span>
                   </div>

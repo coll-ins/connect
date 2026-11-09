@@ -376,5 +376,39 @@ const privacy = {
   ],
 };
 
-export const DOCUMENTS = [terms, privacy, refunds, parcels, hire];
+const deletion = {
+  slug: 'delete-account',
+  title: 'Delete your account',
+  summary: 'How to close your CONNECT account and what happens to your data when you do.',
+  sections: [
+    {
+      h: 'In the app',
+      body: [
+        {
+          list: [
+            'Sign in and open Profile.',
+            'Under "Close account", enter your password and press "Delete my account".',
+            'You are signed out at once and cannot sign in again with that account.',
+          ],
+        },
+        'The app refuses to close the account while you still have money in your wallet, a booking that is not finished, a parcel on its way or an open bus hire. It tells you which one, so you can settle it first and no money is lost.',
+      ],
+    },
+    {
+      h: 'Without the app',
+      body: [
+        `If you cannot sign in, ask us to close it: ${contact()} Send from the phone number on the account, or tell us that number. We close it within 30 days and confirm when it is done.`,
+      ],
+    },
+    {
+      h: 'What is deleted and what is kept',
+      body: [
+        'Deleted straight away: your name, phone number, email, usual location and password. Your phone number is freed, so you can open a new account with it later.',
+        'Kept for 7 years, without your name or number on them: booking, payment, refund and parcel records. Kenyan tax and financial record-keeping law requires them, and transport companies need them for their accounts. They are not used for anything else.',
+      ],
+    },
+  ],
+};
+
+export const DOCUMENTS = [terms, privacy, refunds, parcels, hire, deletion];
 export const documentBySlug = (slug) => DOCUMENTS.find((d) => d.slug === slug);

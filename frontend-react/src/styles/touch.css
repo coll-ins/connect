@@ -55,3 +55,20 @@
 small {
   font-size: max(11px, 0.8em);
 }
+
+/* Links inside a sentence: grow the hit area without moving the text. */
+@media (pointer: coarse) {
+  .terms-check a,
+  .help-link,
+  .close-account a,
+  .wl-legal a {
+    display: inline-block;
+    padding: 12px 0;
+    margin: -12px 0;
+  }
+
+  .terms-check input[type='checkbox'] {
+    width: 24px;
+    height: 24px;
+  }
+}

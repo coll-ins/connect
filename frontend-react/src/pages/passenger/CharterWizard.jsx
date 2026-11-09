@@ -7,6 +7,7 @@ import AppShell from '../../components/layout/AppShell';
 import { localInput, localToIso, when } from '../shared/serviceUtils';
 import FieldNote from '../../components/FieldNote';
 import { checkName, checkPhone, checkPlace, checkText, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
+import useHistoryStep from '../../hooks/useHistoryStep';
 import '../shared/Services.css';
 
 const STEPS = ['Company', 'Trip', 'When', 'Contact', 'Review'];
@@ -31,7 +32,7 @@ export function CharterNew() {
   const [companies, setCompanies] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0);
+  const [step, setStep, stepBack] = useHistoryStep();
   const [f, setF] = useState({
     company: '', purpose: '', pickup: '', destination: '', depart: '', ret: '',
     count: '', contactName: '', contactPhone: '', notes: '',
@@ -48,7 +49,7 @@ export function CharterNew() {
 
   const set = (patch) => { setF((v) => ({ ...v, ...patch })); setError(''); };
   const company = companies?.find((c) => String(c.id) === f.company);
-  const back = () => (step > 0 ? setStep(step - 1) : navigate('/passenger/charter'));
+  const back = () => (step > 0 ? stepBack() : navigate('/passenger/charter'));
 
   const err = {
     purpose: checkText(f.purpose, 'the purpose of the hire', { maxLength: 200 }),
@@ -59,8 +60,9 @@ export function CharterNew() {
     notes: checkText(f.notes, 'the notes', { required: false }),
   };
   const tripOk = !err.purpose && !err.pickup && !err.destination;
-  const whenOk = f.depart && (!f.ret || f.ret > f.depart);
-  const contactOk = Number(f.count) >= 1 && Number(f.count) <= 200
+  const whenOk = f.depart && f.depart >= earliest && (!f.ret || f.ret > f.depart);
+  const countOk = Number.isInteger(Number(f.count)) && Number(f.count) >= 1 && Number(f.count) <= 200;
+  const contactOk = countOk
     && !err.contactName && !err.contactPhone && !err.notes;
 
   const submit = async (e) => {
@@ -94,8 +96,8 @@ export function CharterNew() {
       <div className="svc-page">
         <div className="svc-head">
           <div>
-            <button type="button" className="btn btn-ghost" onClick={back}>
-              <ArrowLeft size={16} /> {step === 0 ? 'Bus hire' : 'Back'}
+            <button type="button" className="journey-back" onClick={back}>
+              <ArrowLeft size={18} aria-hidden="true" /> {step === 0 ? 'Bus hire' : 'Back'}
             </button>
             <h1>Request a bus</h1>
             <p>Step {step + 1} of {STEPS.length}: {STEPS[step]}. Nothing is charged until you accept the company&apos;s price and pay.</p>
@@ -176,6 +178,9 @@ export function CharterNew() {
                       onChange={(e) => set({ ret: e.target.value })} />
                   </label>
                 </div>
+                {f.depart && f.depart < earliest && (
+                  <div className="svc-error" style={{ marginTop: 12 }}>Departure must be at least 25 hours from now, so the company can prepare the bus.</div>
+                )}
                 {f.ret && f.depart && f.ret <= f.depart && (
                   <div className="svc-error" style={{ marginTop: 12 }}>The return must be after the departure.</div>
                 )}
@@ -191,7 +196,7 @@ export function CharterNew() {
                     <input className="input" type="number" inputMode="numeric" min="1" max="200" step="1" value={f.count}
                       aria-describedby="ch-count" onChange={(e) => set({ count: e.target.value })} />
                     <FieldNote id="ch-count" value={f.count}
-                      error={Number(f.count) >= 1 && Number(f.count) <= 200 ? '' : 'Enter a whole number from 1 to 200.'}
+                      error={countOk ? '' : 'Enter a whole number from 1 to 200.'}
                       hint="Everyone travelling, adults and children, from 1 to 200." />
                   </label>
                   <label className="svc-field">Contact name

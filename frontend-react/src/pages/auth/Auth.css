@@ -41,3 +41,18 @@
 @media (max-width: 360px) {
   .name-row { grid-template-columns: 1fr; }
 }
+
+.auth-card .auth-back { margin-bottom: 24px; }
+
+/* Segmented control: which way in, always visible at the top. */
+.auth-switch {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 24px;
+  border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid var(--border);
+}
+.auth-switch a {
+  display: flex; align-items: center; justify-content: center; min-height: 44px;
+  border-radius: 7px; color: var(--text-2); font-weight: 600; text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.auth-switch a[aria-current='page'] { background: var(--surface-3); color: var(--text); }
+.auth-switch a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
