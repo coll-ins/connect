@@ -23,7 +23,7 @@ import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPositi
 import { nextStageAhead, stagesAlongRoute } from '../../components/maps/wazeNav';
 import { buildRoute as buildRoadRoute, snapToRoute as snapPointToRoute } from '../../components/maps/route';
 import { stopIcon } from '../../components/maps/StopMarker';
-import { webglOk } from '../../components/maps/webgl';
+import { gpuWebglOk } from '../../components/maps/webgl';
 import {
   estimateBusSpeedKmh,
   OFF_ROUTE_KM,
@@ -148,7 +148,7 @@ function formatEta(minutes) {
   return `${Math.round(minutes)} min`;
 }
 
-const Vehicle3D = webglOk ? lazy(() => import('../../components/maps/Vehicle3D')) : null;
+const Vehicle3D = gpuWebglOk ? lazy(() => import('../../components/maps/Vehicle3D')) : null;
 
 function Bus3D(props) {
   const map = useMap();

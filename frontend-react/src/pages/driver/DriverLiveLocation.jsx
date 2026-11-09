@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
 import ConnectMap from '../../components/maps/ConnectMap';
 import './DriverLiveLocation.css';
-import { webglOk } from '../../components/maps/webgl';
+import { gpuWebglOk } from '../../components/maps/webgl';
 
 const formatDate = (value) =>
   value
@@ -43,7 +43,7 @@ export default function DriverLiveLocation() {
   const [busHeading, setBusHeading] = useState(null);
 
   useEffect(() => {
-    if (!webglOk) return undefined;
+    if (!gpuWebglOk) return undefined;
     let alive = true;
     import('../../components/maps/Vehicle3D')
       .then((m) => alive && setVehicle3D(() => m.default))
