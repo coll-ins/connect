@@ -47,7 +47,9 @@ export default function PassengerMapPage() {
   const [trackingAvailable, setTrackingAvailable] = useState(
     Boolean(
       hasInitialBooking &&
-        String(initialBooking.status || '').toLowerCase() === 'confirmed' &&
+        (String(initialBooking.status || '').toLowerCase() === 'confirmed' ||
+          (initialBooking.payment_method === 'cash' &&
+            initialBooking.payment_status === 'pending')) &&
         ['boarding', 'departed'].includes(
           String(initialBooking.trip_status || '').toLowerCase(),
         ) &&
@@ -80,8 +82,16 @@ export default function PassengerMapPage() {
         const bookingStatus = String(item.status || '').toLowerCase();
         const tripStatus = String(item.trip_status || '').toLowerCase();
 
+        // Cash on board holds the seat like a paid booking: the passenger
+        // needs to see the bus to meet it and pay.
+        const cashOnBoard =
+          bookingStatus === 'pending' &&
+          item.payment_method === 'cash' &&
+          item.payment_status === 'pending';
+
         return (
           (bookingStatus === 'confirmed' ||
+            cashOnBoard ||
             (bookingStatus === 'completed' && item.boarded === true)) &&
           ['boarding', 'departed'].includes(tripStatus) &&
           Boolean(item.driver_id)

@@ -93,7 +93,6 @@
   .lp-steps li:not(:last-child)::after { left: 32px; right: -24px; top: 13px; bottom: auto; width: auto; height: 2px; background: repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 12px); }
 }
 
-.lp-final { display: grid; justify-items: start; gap: 32px; }
 
 .lp-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-top: 32px; padding-bottom: 32px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 14px; }
 .lp-footer nav { display: flex; gap: 24px; }
@@ -108,4 +107,49 @@
 @media (prefers-reduced-motion: reduce) {
   .lp-ticket { animation: none; }
   .lp .btn { transition: none; }
+}
+
+/* --- Polish pass --- */
+.lp .lp-fact { margin-top: 20px; font-size: 14px; color: var(--text-3); }
+
+.lp .lp-fix { display: flex; gap: 8px; align-items: flex-start; }
+.lp-fix svg { flex: none; margin-top: 3px; color: var(--accent-text); }
+
+.lp-seat-photo { position: relative; }
+.lp-seatmap {
+  position: absolute; right: 16px; bottom: 16px; width: 200px;
+  padding: 16px; border-radius: var(--radius-card);
+  background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow-1);
+}
+.lp .lp-seatmap p { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.lp-seats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.lp-seat {
+  aspect-ratio: 1; display: grid; place-items: center; border-radius: 6px;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.lp-seat.is-free { border: 1px solid var(--border-strong); color: var(--text-2); }
+.lp-seat.is-taken { background: var(--surface-3); color: var(--text-3); }
+.lp-seat.is-mine { background: var(--accent); color: var(--accent-ink); }
+.lp-seat.is-aisle { visibility: hidden; }
+.lp-legend { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; color: var(--text-3); }
+.lp-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.lp-legend span::before { content: ''; width: 8px; height: 8px; border-radius: 2px; }
+.lp-legend .is-free::before { border: 1px solid var(--border-strong); }
+.lp-legend .is-taken::before { background: var(--surface-3); }
+.lp-legend .is-mine::before { background: var(--accent); }
+@media (min-width: 960px) { .lp-seatmap { right: -32px; bottom: 32px; } }
+
+.lp-final {
+  display: grid; gap: 24px; justify-items: start;
+  padding: 32px 24px; border-radius: var(--radius-panel);
+  background: var(--surface); border: 1px solid var(--border-strong);
+}
+.lp .lp-final p { margin-top: 12px; color: var(--text-2); font-size: 17px; }
+@media (min-width: 768px) {
+  .lp-final { grid-template-columns: 1fr auto; align-items: center; gap: 48px; padding: 48px; }
+}
+@media (max-width: 959px) {
+  .lp-seat-photo img { aspect-ratio: 1; }
+  .lp-seatmap { width: 168px; padding: 12px; right: 12px; bottom: 12px; }
+  .lp-seats { gap: 6px; }
 }

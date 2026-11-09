@@ -1291,6 +1291,19 @@ def initialize_cash_payment(request, booking_id):
     This serializes simultaneous cash-payment requests for the same
     booking and prevents OneToOne races.
     """
+    if not request.user.can_pay_cash:
+        return Response(
+            {
+                'error': (
+                    'Cash on board unlocks after '
+                    f'{settings.CASH_MIN_TRIPS} trips with an integrity score of '
+                    f'{settings.CASH_MIN_INTEGRITY:g}% or more. Pay with M-Pesa or card for now.'
+                ),
+                'code': 'cash_locked',
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     _release_dead_digital_attempt(booking_id, request.user)
 
     try:
@@ -3188,7 +3201,32 @@ def verify_boarding(request, booking_id):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            if booking.status != 'confirmed':
+            payment = (
+                Payment.objects.select_for_update()
+                .filter(booking=booking).first()
+            )
+            # Cash on board: the passenger hands over the fare and the driver
+            # checks their PIN. That PIN check is the cash receipt; there is
+            # no separate "confirm cash" step.
+            pays_cash_now = (
+                cash_due_on_board(booking, payment)
+                and cash_still_payable(trip)
+            )
+
+            # Taking cash follows the same rule as confirm_cash_payment:
+            # operators only when OPERATORS_CAN_CONFIRM_CASH is on.
+            if (
+                pays_cash_now
+                and not user.is_superuser
+                and user.role == 'company_operator'
+                and not getattr(settings, 'OPERATORS_CAN_CONFIRM_CASH', False)
+            ):
+                return Response(
+                    {'error': 'Operators cannot take cash payments.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if booking.status != 'confirmed' and not pays_cash_now:
                 return Response(
                     {
                         'error': (
@@ -3199,9 +3237,7 @@ def verify_boarding(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            try:
-                payment = booking.payment
-            except Payment.DoesNotExist:
+            if payment is None:
                 return Response(
                     {
                         'error': (
@@ -3211,7 +3247,7 @@ def verify_boarding(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            if payment.status != 'confirmed':
+            if payment.status != 'confirmed' and not pays_cash_now:
                 return Response(
                     {
                         'error': (
@@ -3342,9 +3378,12 @@ def verify_boarding(request, booking_id):
             # Boarding makes the payment eligible for settlement.
             # It does NOT transfer money between Django wallets.
             payment.settlement_status = 'eligible'
-            payment.save(
-                update_fields=['settlement_status']
-            )
+            update_fields = ['settlement_status']
+            if pays_cash_now:
+                payment.status = 'confirmed'
+                payment.confirmed_at = timezone.now()
+                update_fields += ['status', 'confirmed_at']
+            payment.save(update_fields=update_fields)
 
             # Mark the booking as completed.
             booking.status = 'completed'
@@ -3370,7 +3409,10 @@ def verify_boarding(request, booking_id):
                         verification_method
                     ),
                     'override_used': is_override,
-                    'booking_id': booking.id
+                    'booking_id': booking.id,
+                    'cash_collected': (
+                        str(payment.amount) if pays_cash_now else None
+                    ),
                 },
                 status=status.HTTP_200_OK
             )
@@ -4411,6 +4453,7 @@ def get_driver_bookings(request, driver_id):
             "booking_id": booking.id,
             "booking_number": booking.booking_number,
             "seats": booking.seats,
+            "total_amount": str(booking.total_amount),
             "status": booking.status,
             "passenger": booking.user.display_name,
             "passenger_name": (

@@ -1,5 +1,5 @@
 import { Link, Navigate } from 'react-router-dom';
-import { Armchair, MapPinned, Package, Bus, Receipt, ShieldCheck } from 'lucide-react';
+import { Armchair, MapPinned, Package, Bus, Receipt, ShieldCheck, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
 import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
@@ -17,7 +17,7 @@ const PROBLEMS = [
   },
   {
     pain: 'Cash, no change, no receipt.',
-    fix: 'Pay with M-Pesa or card, or cash on board with a boarding PIN. Every trip gets a receipt.',
+    fix: 'Pay with M-Pesa or card and get a receipt for every trip. Regular riders unlock cash on board.',
   },
   {
     pain: 'You left something on the bus and nobody to call.',
@@ -34,10 +34,20 @@ const FEATURES = [
   { icon: ShieldCheck, title: 'Boarding PIN', text: 'Only you can board on your seat. The driver checks your PIN.' },
 ];
 
+// A 14-seater, 3 across with an aisle; seat 7 matches the hero ticket.
+const SEATS = [
+  'taken', 'free', 'aisle', 'taken',
+  'free', 'taken', 'aisle', 'free',
+  'mine', 'taken', 'aisle', 'free',
+  'free', 'taken', 'taken', 'free',
+];
+let seatNo = 0;
+const SEAT_LABELS = SEATS.map((state) => (state === 'aisle' ? '' : String(++seatNo)));
+
 const STEPS = [
   { title: 'Create your account', text: 'Your name, phone number and a password. Takes a minute.' },
   { title: 'Choose route and seat', text: 'Pick the company, the trip time and the seat you want.' },
-  { title: 'Pay', text: 'M-Pesa, card or cash on board.' },
+  { title: 'Pay', text: 'M-Pesa or card. Regulars with a high integrity score can pay cash on board.' },
   { title: 'Board with your PIN', text: 'Track the bus, walk to your stage, show your PIN, ride.' },
 ];
 
@@ -66,6 +76,7 @@ export default function Landing() {
             <Link to="/signup" className="btn btn-primary lp-btn-lg">Get started</Link>
             <Link to="/login" className="lp-link">I already have an account</Link>
           </div>
+          <p className="lp-fact">Free to join. Pay with M-Pesa or card, cash once you are a regular.</p>
         </div>
 
         <div className="lp-hero-visual">
@@ -93,7 +104,7 @@ export default function Landing() {
           {PROBLEMS.map((p) => (
             <li key={p.pain}>
               <p className="lp-pain">{p.pain}</p>
-              <p className="lp-fix">{p.fix}</p>
+              <p className="lp-fix"><Check size={18} aria-hidden="true" />{p.fix}</p>
             </li>
           ))}
         </ul>
@@ -102,6 +113,13 @@ export default function Landing() {
       <section className="lp-section lp-wrap lp-split">
         <div className="lp-seat-photo">
           <img src={seatPhoto} alt="Reclining bus seats with seat belts" width="736" height="981" loading="lazy" />
+          <div className="lp-seatmap" aria-hidden="true">
+            <p>Pick a seat</p>
+            <div className="lp-seats">
+              {SEATS.map((state, i) => <span key={i} className={`lp-seat is-${state}`}>{SEAT_LABELS[i]}</span>)}
+            </div>
+            <div className="lp-legend"><span className="is-free">Free</span><span className="is-taken">Taken</span><span className="is-mine">Yours</span></div>
+          </div>
         </div>
         <div>
           <h2>Everything for the trip, in one app</h2>
@@ -125,9 +143,14 @@ export default function Landing() {
         </ol>
       </section>
 
-      <section className="lp-section lp-wrap lp-final">
-        <h2>Next time, skip the queue at the stage.</h2>
-        <Link to="/signup" className="btn btn-primary lp-btn-lg">Create your free account</Link>
+      <section className="lp-section lp-wrap">
+        <div className="lp-final">
+          <div>
+            <h2>Next time, skip the queue at the stage.</h2>
+            <p>Create an account in a minute and book your first seat today.</p>
+          </div>
+          <Link to="/signup" className="btn btn-primary lp-btn-lg">Create your free account</Link>
+        </div>
       </section>
 
       <footer className="lp-footer lp-wrap">

@@ -77,6 +77,8 @@ function normalizeUser(data) {
     is_staff: Boolean(u.is_staff),
     is_superuser: Boolean(u.is_superuser),
     integrity_score: u.integrity_score ?? null,
+    can_pay_cash: Boolean(u.can_pay_cash),
+    trips_counted: u.trips_counted ?? 0,
   };
 }
 

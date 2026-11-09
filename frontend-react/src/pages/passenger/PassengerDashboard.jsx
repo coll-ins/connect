@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Armchair, ArrowUpRight, Banknote, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
 
 import { apiRequest } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 import { canOpenTripMap, isActiveBooking } from './liveMapUtils';
 import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
@@ -34,6 +35,12 @@ function PaymentModal({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState('');
+  const { user } = useAuth();
+  // Mirrors backend settings CASH_MIN_TRIPS / CASH_MIN_INTEGRITY; the server enforces it.
+  const cashLocked = !user?.can_pay_cash;
+  const cashLockedReason = user?.integrity_score == null
+    ? 'Pay online for your first trips. Cash unlocks after 10 trips with an integrity score of 90% or more.'
+    : `Unlocks after 10 trips with 90%+ integrity. You: ${Math.min(user.trips_counted, 10)} of 10 trips, ${user.integrity_score}%.`;
 
   const cash = async () => {
     setBusy(true);
@@ -121,8 +128,8 @@ function PaymentModal({
       </NoticeStack>
     )}
     {step==='method' && <div className="stack" style={{marginTop:18}}>
-      <button className="pay-option" onClick={cash} disabled={busy}><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay with cash</strong><span>Pay the driver/conductor according to the trip rules.</span></div></button>
       <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
+      <button className="pay-option" onClick={cash} disabled={busy || cashLocked} aria-describedby="cash-note"><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay cash on board</strong><span id="cash-note">{cashLocked ? cashLockedReason : 'Get your PIN now, track the bus, and pay the driver when you board.'}</span></div></button>
     </div>}
     {step==='online' && <div className="stack" style={{marginTop:18}}>
       <button className="pay-option" onClick={()=>setStep('mpesa-number')} disabled={busy}><div className="pay-icon"><Smartphone size={20} aria-hidden="true" /></div><div><strong>M-PESA</strong><span>Choose which phone number will receive the payment prompt.</span></div></button>
@@ -193,7 +200,7 @@ function PaymentModal({
     </div>}
 
     {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">Authorize the M-PESA prompt on the phone that received it.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
-    {step==='cash-success' && <div className="success">Cash selected. Pay the driver in cash. Your boarding PIN will appear on your trip card as soon as the driver confirms the payment.</div>}
+    {step==='cash-success' && <div className="success">Seat held. Your boarding PIN is on your trip card now. Track the bus, then pay the driver in cash and show your PIN when you board.</div>}
   </div></div>, document.body);
 }
 
@@ -347,8 +354,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     };
   }, [company, route, selectedDate]);
 
-  // Cash bookings stay pending until the driver confirms the cash. Poll so the
-  // boarding PIN appears on the passenger's screen without a manual reload.
+  // Cash bookings stay pending until the driver checks the PIN on board. Poll
+  // so the trip card flips to boarded without a manual reload.
   const awaitingCash = bookings.some((b) => (
     b.payment_method === 'cash'
     && b.payment_status === 'pending'

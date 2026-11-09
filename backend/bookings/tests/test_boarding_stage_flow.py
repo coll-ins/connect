@@ -40,6 +40,7 @@ class Base(TestCase):
         self.passenger = User.objects.create_user(
             username='pax_r25', password='password123',
             phone_number='+254700000902',
+            boarded_count=10,  # trusted: cash unlocked
         )
         self.driver = Driver.objects.create(
             name='Driver R25', phone_number='+254700000903',

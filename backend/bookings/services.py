@@ -612,11 +612,37 @@ def settle_unboarded_no_shows(trip, claims=None):
 
     log = logging.getLogger(__name__)
 
+    from django.db.models import F as _F
+
+    from .models import Payment
+
+    incident = trip.incidents.filter(
+        status__in=['reported', 'investigating']
+    ).exists()
+
+    # A cash hold that never boarded is a no-show too: it held a seat for the
+    # whole trip. Without this, cash could be reserved and skipped for free.
+    if not incident:
+        holds = trip.bookings.filter(
+            status='pending',
+            payment__method='cash',
+            payment__status='pending',
+        ).select_for_update()
+        for booking in holds:
+            booking.status = 'no_show'
+            booking.save(update_fields=['status'])
+            Payment.objects.filter(booking=booking, status='pending').update(
+                status='failed'
+            )
+            type(booking.user).objects.filter(pk=booking.user_id).update(
+                no_show_count=_F('no_show_count') + 1
+            )
+
     trip.bookings.filter(status='pending').update(status='cancelled')
 
     confirmed = trip.bookings.filter(status='confirmed')
 
-    if trip.incidents.filter(status__in=['reported', 'investigating']).exists():
+    if incident:
         return 0, confirmed.count()
 
     settled = 0

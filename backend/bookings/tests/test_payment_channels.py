@@ -36,6 +36,7 @@ class PaymentChannelTests(TestCase):
             username='payment_passenger',
             password='password123',
             phone_number='+254700000001',
+            boarded_count=10,  # trusted: cash unlocked
         )
         self.driver = Driver.objects.create(
             company=self.company,
@@ -432,6 +433,7 @@ class ConcurrentCashInitializationTests(TransactionTestCase):
             username='concurrent_cash_user',
             password='password123',
             phone_number='+254700000002',
+            boarded_count=10,  # trusted: cash unlocked
         )
 
         self.booking = Booking.objects.create(
@@ -839,7 +841,8 @@ class DeadDigitalAttemptTests(TestCase):
         company = Company.objects.create(name='Retry Line')
         self.passenger = User.objects.create_user(
             username='retry_passenger', password='password123',
-            phone_number='+254700000077')
+            phone_number='+254700000077',
+            boarded_count=10)  # trusted: cash unlocked
         route = Route.objects.create(
             company=company, name='CBD - Retry', start_point='CBD',
             end_point='Retry', price=Decimal('200.00'))

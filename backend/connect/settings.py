@@ -345,6 +345,9 @@ if 'test' in sys.argv:
 # Bump when the Terms/Privacy text changes materially (and LAST_UPDATED in frontend src/legal/business.js).
 TERMS_VERSION = '2026-11-08'
 MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
+# Cash on board is unlocked at 9 out of 10: at least 10 finished trips, 90%+ boarded.
+CASH_MIN_TRIPS = int(os.getenv('CASH_MIN_TRIPS', '10'))
+CASH_MIN_INTEGRITY = float(os.getenv('CASH_MIN_INTEGRITY', '90'))
 PENDING_BOOKING_TTL_MINUTES = 20    # expire_pending_bookings cancels unpaid bookings older than this
 TRIP_AUTO_CLOSE_AFTER_HOURS = int(os.getenv('TRIP_AUTO_CLOSE_AFTER_HOURS', '12'))
 
