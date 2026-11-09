@@ -35,6 +35,8 @@ const sectionByPath = {
   '/company-operator/drivers': 'drivers',
   '/company-operator/capacity': 'capacity',
   '/company-operator/operations': 'operations',
+  // The sidebar's Boarding link: walk-in Book & board lives on the capacity desk.
+  '/company-operator/boarding': 'capacity',
 };
 
 const pathBySection = {

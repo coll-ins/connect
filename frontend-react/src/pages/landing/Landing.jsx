@@ -1,10 +1,15 @@
+import { lazy, Suspense } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { Armchair, MapPinned, Package, Bus, Receipt, ShieldCheck, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
+import { webglOk } from '../../components/maps/webgl';
 import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
 import seatPhoto from '../../assets/journeys/bookaseat.jpeg';
 import './Landing.css';
+
+// three.js is large: fetched after the words and buttons are already on screen.
+const HeroBus3D = lazy(() => import('./HeroBus3D'));
 
 const PROBLEMS = [
   {
@@ -82,7 +87,14 @@ export default function Landing() {
         </div>
 
         <div className="lp-hero-visual">
-          <img src={matatuPhoto} alt="A red and white Nairobi matatu parked at a stage" width="736" height="1308" />
+          {webglOk ? (
+            <div className="lp-stage">
+              <Suspense fallback={null}><HeroBus3D /></Suspense>
+              <p className="lp-stage-caption">The bus you book, on its way to your stage.</p>
+            </div>
+          ) : (
+            <img src={matatuPhoto} alt="A red and white Nairobi matatu parked at a stage" width="736" height="1308" />
+          )}
           <div className="lp-ticket" aria-hidden="true">
             <div className="lp-ticket-row">
               <span>CBD → Rongai</span>
