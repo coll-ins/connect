@@ -56,6 +56,7 @@ export default function InstallApp() {
                 <li>In Chrome, tap ⋮ at the top right.</li>
                 <li>Tap “Install app”. If you only see “Add to Home screen”, tap it, then pick Install, not “Create shortcut”.</li>
                 <li>Tap Install. CONNECT then shows in your app drawer and opens without the Chrome address bar.</li>
+                <li>No “Install app”, or nothing appears? Use Google Chrome, not the phone’s own browser. On Xiaomi, Redmi, Oppo or Vivo, go to Settings › Apps › Chrome and allow “Home screen shortcuts”, then try again.</li>
               </>
             )}
           </ol>
