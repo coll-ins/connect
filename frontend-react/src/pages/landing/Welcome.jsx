@@ -12,7 +12,7 @@ export default function Welcome() {
       <div className="wl-brand"><span className="brand-mark">C</span>CONNECT</div>
       <div className="wl-visual">
         {webglOk
-          ? <Suspense fallback={null}><HeroBus3D /></Suspense>
+          ? <Suspense fallback={null}><HeroBus3D autoplay frame="center" /></Suspense>
           : <img src={matatuPhoto} alt="A red and white Nairobi matatu at a stage" />}
       </div>
       <div className="wl-copy">

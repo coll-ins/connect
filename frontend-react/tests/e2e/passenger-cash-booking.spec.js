@@ -368,3 +368,106 @@ test('cash booking automatically enables live tracking when its driver starts bo
   await expect(page.getByText('Live trip')).toBeVisible();
   expect(bookingRequests).toBeGreaterThan(1);
 });
+
+test('closing the payment sheet before paying books nothing and frees the seat', async ({ page }) => {
+  const calls = [];
+  let cancelled = false;
+  let mpesaSent = false;
+  let mpesaBusy = false;
+  const pendingBooking = {
+    id: 42, booking_id: 42, booking_number: 'CN-0042', status: 'pending',
+    payment_status: 'unpaid', trip_status: 'scheduled', route_name: 'Nairobi to Mombasa',
+  };
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    const method = route.request().method();
+    calls.push(`${method} ${path}`);
+    let body = [];
+    if (path === '/api/users/csrf/') body = { csrfToken: 'e2e-csrf-token' };
+    else if (path === '/api/users/profile/') body = { user: passenger };
+    else if (path === '/api/companies/') body = [{ id: 1, name: 'Express Line' }];
+    else if (path === '/api/companies/1/routes/') {
+      body = [{
+        id: 11, name: 'Nairobi to Mombasa', start_point: 'Nairobi', end_point: 'Mombasa',
+        price: '800.00', pickup_stages: [{ id: 5, name: 'Westlands', is_active: true }],
+      }];
+    } else if (path === '/api/companies/1/trips/') {
+      body = [{
+        id: 22, departure_at: `${url.searchParams.get('date')}T09:00:00+03:00`, status: 'scheduled',
+        capacity: 14, route_details: { name: 'Nairobi to Mombasa', price: '800.00' },
+      }];
+    } else if (path === '/api/bookings/trips/22/seat-map/') body = seatMap;
+    else if (path === '/api/bookings/create/' && method === 'POST') {
+      body = { booking_id: 42, booking_number: 'CN-0042', total_amount: '800.00' };
+    } else if (path === '/api/bookings/42/cancel/' && method === 'POST') {
+      cancelled = true;
+      body = { message: 'Booking cancelled' };
+    } else if (path === '/api/bookings/payments/42/mpesa/' && method === 'POST') {
+      mpesaSent = true;
+      if (mpesaBusy) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'A digital payment is already in progress' }) });
+        return;
+      }
+      body = { display_text: 'Check your phone.' };
+    } else if (path === '/api/bookings/payments/42/status/') body = { payment_status: 'pending' };
+    else if (path === '/api/bookings/my/') body = calls.includes('POST /api/bookings/create/') && !cancelled ? [pendingBooking] : [];
+    else if (path === '/api/wallet/') body = {};
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.addInitScript((user) => {
+    localStorage.setItem('user_session', JSON.stringify(user));
+  }, passenger);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  const bookSeatFive = async () => {
+    await page.goto('/passenger');
+    await page.getByRole('button', { name: /Book a seat/ }).click();
+    await page.getByRole('button', { name: /Express Line/ }).click();
+    await page.getByRole('button', { name: /Nairobi.*Mombasa/ }).click();
+    await page.getByRole('button', { name: /Westlands/ }).click();
+    await page.getByRole('button', { name: /Select trip/ }).click();
+    await page.getByRole('button', { name: 'Seat 5, free' }).click();
+    await page.getByRole('button', { name: 'Book seat 5' }).click();
+    await expect(page.getByRole('button', { name: /Pay online/ })).toBeVisible();
+  };
+
+  // Left before choosing how to pay: the booking is cancelled.
+  await bookSeatFive();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect.poll(() => cancelled).toBe(true);
+  await expect(page.getByText('nothing was booked')).toBeVisible();
+
+  // Phone Back does the same.
+  cancelled = false;
+  calls.length = 0;
+  await bookSeatFive();
+  await page.goBack();
+  await expect.poll(() => cancelled).toBe(true);
+
+  // An M-PESA prompt already sent: money may be on its way, so keep the booking.
+  cancelled = false;
+  calls.length = 0;
+  await bookSeatFive();
+  await page.getByRole('button', { name: /Pay online/ }).click();
+  await page.getByRole('button', { name: /M-PESA/ }).click();
+  await page.getByLabel('M-PESA phone number').fill('0712345678');
+  await page.getByRole('button', { name: 'Proceed' }).click();
+  await expect.poll(() => mpesaSent).toBe(true);
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(500);
+  expect(cancelled).toBe(false);
+
+  // 409: a payment for this booking is already running elsewhere. Keep it.
+  mpesaBusy = true;
+  mpesaSent = false;
+  await bookSeatFive();
+  await page.getByRole('button', { name: /Pay online/ }).click();
+  await page.getByRole('button', { name: /M-PESA/ }).click();
+  await page.getByLabel('M-PESA phone number').fill('0712345678');
+  await page.getByRole('button', { name: 'Proceed' }).click();
+  await expect.poll(() => mpesaSent).toBe(true);
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(500);
+  expect(cancelled).toBe(false);
+});
