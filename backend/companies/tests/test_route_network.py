@@ -73,6 +73,11 @@ class RouteNetworkInstalledTests(TestCase):
         self.assertEqual(back.price, out.price)
         self.assertEqual(line_health(back.geometry, [])['spurs'], 0)
 
+    def test_kisumu_stops_at_the_towns_on_the_highway(self):
+        route = Route.objects.get(company__name='Supermetro', name='Nairobi to Kisumu')
+        names = list(route.pickup_stages.filter(is_active=True).values_list('name', flat=True))
+        self.assertEqual(names[1:-1], ['Naivasha', 'Gilgil', 'Nakuru', 'Kericho', 'Awasi', 'Ahero'])
+
     def test_the_way_back_is_listed_under_the_way_out(self):
         user = get_user_model().objects.create_user(
             username='pax_net', password='password123', phone_number='+254700000971')
@@ -156,3 +161,38 @@ class OpenBookingsFollowTheNewStagesTests(TestCase):
         self.assertEqual(booking.pickup_stage.name, 'Kencom')
         self.assertEqual(booking.pickup_location, 'Kencom')
 
+
+
+class LongDistanceUpgradeTests(TestCase):
+    """0020 on a database that ran 0019 before the town stages existed."""
+
+    def test_open_booking_on_a_dropped_stage_moves_to_a_new_one(self):
+        import importlib
+
+        from django.apps import apps
+        migration = importlib.import_module('companies.migrations.0020_long_distance_town_stages')
+        route = Route.objects.get(company__name='Supermetro', name='Nairobi to Kisumu')
+        old = PickupStage.objects.create(
+            route=route, name='Old Narok Stop', order=2, latitude=-1.08, longitude=35.87)
+        driver = Driver.objects.create(
+            name='LD Driver', phone_number='+254700000981', bus_number='KDL 001A',
+            company=route.company)
+        trip = Trip.objects.create(
+            route=route, driver=driver, capacity=14, status='scheduled',
+            departure_at=timezone.now() + dt.timedelta(hours=2))
+        rider = get_user_model().objects.create_user(
+            username='ld_rider', password='password123', phone_number='+254700000982')
+        booking = Booking.objects.create(
+            user=rider, route=route, trip=trip, pickup_stage=old,
+            pickup_location=old.name, seats=1, total_amount=1000, status='confirmed')
+
+        migration.install(apps, None)
+
+        old.refresh_from_db()
+        booking.refresh_from_db()
+        active = list(route.pickup_stages.filter(is_active=True).order_by('order'))
+        self.assertFalse(old.is_active)
+        self.assertEqual([s.name for s in active][1:-1],
+                         ['Naivasha', 'Gilgil', 'Nakuru', 'Kericho', 'Awasi', 'Ahero'])
+        self.assertIn(booking.pickup_stage, active[:-1])
+        self.assertEqual(booking.pickup_location, booking.pickup_stage.name)

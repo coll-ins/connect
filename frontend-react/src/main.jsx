@@ -14,6 +14,14 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
+// Kept for the landing page's "Install the app" button, which may mount
+// after Chrome has already fired this.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.connectInstallPrompt = e;
+  window.dispatchEvent(new Event('connect-install-ready'));
+});
+
 // Offline page for the installed app. Skipped in dev so Vite's reloads stay plain.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

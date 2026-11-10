@@ -10,7 +10,9 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
   cursor: grab;
 }
-.rp2-dot.inactive { background: #64748b; }
+.rp-removed { margin-top: 14px; }
+.rp-removed summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--muted, #94a3b8); }
+.rp-removed .svc-list { margin-top: 8px; }
 .rp2-dot.moved { background: var(--warn); }
 .rp2-live {
   position: absolute;
