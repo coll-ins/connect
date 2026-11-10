@@ -32,6 +32,7 @@ function PaymentModal({
   onPaid,
   onPaymentConfirmed,
   onCashReserved,
+  onStarted,
 }) {
   const [step, setStep] = useState('method');
   const [busy, setBusy] = useState(false);
@@ -45,9 +46,13 @@ function PaymentModal({
   const cashLocked = !user?.can_pay_cash;
   const cashLockedReason = 'For regular riders only: 30 trips, an integrity score of 95% or more and an account at least 60 days old.';
 
+  // A 4xx means the server refused it: no payment is in flight.
+  const refused = (e) => { if (e.status >= 400 && e.status < 500) onStarted(false); };
+
   const cash = async () => {
     setBusy(true);
     setError('');
+    onStarted(true);
     try {
       await apiRequest(`/bookings/payments/${booking.booking_id}/cash/`, {
         method: 'POST',
@@ -62,13 +67,14 @@ function PaymentModal({
       });
     } catch (e) {
       setError(e.message);
+      refused(e);
     } finally {
       setBusy(false);
     }
   };
 
   const mpesa = async (phoneNumber) => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); onStarted(true);
     try {
       const data = await apiRequest(`/bookings/payments/${booking.booking_id}/mpesa/`, {
         method:'POST',
@@ -76,17 +82,17 @@ function PaymentModal({
       });
       setMessage(data.display_text || 'Check your phone and complete the M-PESA prompt.');
       setStep('mpesa-wait');
-    } catch(e){setError(e.message)} finally{setBusy(false)}
+    } catch(e){setError(e.message);refused(e)} finally{setBusy(false)}
   };
 
   const card = async () => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); onStarted(true);
     try {
       const data = await apiRequest(`/bookings/payments/${booking.booking_id}/paystack/`, {
         method:'POST', body:{callback_url:`${window.location.origin}/passenger/payment/${booking.booking_id}`}
       });
       window.location.href = data.authorization_url;
-    } catch(e){setError(e.message);setBusy(false)}
+    } catch(e){setError(e.message);refused(e);setBusy(false)}
   };
 
   useEffect(() => {
@@ -99,7 +105,7 @@ function PaymentModal({
         if (!active) return;
         setError('');
         if (status.payment_status === 'confirmed') { onPaymentConfirmed(booking); return; }
-        if (status.payment_status === 'failed') { setError('The M-PESA payment failed. You can try again.'); setStep('method'); return; }
+        if (status.payment_status === 'failed') { setError('The M-PESA payment failed. You can try again.'); onStarted(false); setStep('method'); return; }
       } catch (error) {
         if (!active) return;
         setError(error.message || 'We could not check your M-PESA payment. Try again.');
@@ -109,7 +115,7 @@ function PaymentModal({
     };
     poll();
     return () => { active = false; };
-  }, [step, booking.booking_id, onPaid, onPaymentConfirmed]);
+  }, [step, booking.booking_id, onPaid, onPaymentConfirmed, onStarted]);
 
   const verify = async () => {
     setBusy(true); setError('');
@@ -319,12 +325,32 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     });
   }, [navigate, paymentBooking]);
 
+  // A booking made a moment ago but left before any payment was started is
+  // abandoned: cancel it so its seats free up and it never shows as booked.
+  // Once a payment is in flight it stays; the server expires it if unpaid.
+  const sheet = useRef({ booking: null, started: false });
+  useEffect(() => { sheet.current = { booking: paymentBooking, started: false }; }, [paymentBooking]);
+  const markPaymentStarted = useCallback((started) => { sheet.current.started = started; }, []);
+  const closePayment = useCallback(async () => {
+    const { booking, started } = sheet.current;
+    setPaymentBooking(null);
+    if (booking?.fresh && !started) {
+      try {
+        await apiRequest(`/bookings/${booking.booking_id}/cancel/`, { method: 'POST', body: {} });
+        setSuccess('Booking not finished, so nothing was booked. Your seats are free again.');
+      } catch (e) {
+        setError(`We could not release booking ${booking.booking_number}: ${e.message} Cancel it from My bookings.`);
+      }
+    }
+    refresh();
+  }, [refresh]);
+
   // Phone Back closes the payment sheet instead of leaving it open over the
   // previous step. The sheet gets its own history entry while it is open.
   const sheetOpen = Boolean(paymentBooking);
   useEffect(() => {
     if (!sheetOpen) return undefined;
-    const close = () => { setPaymentBooking(null); refresh(); };
+    const close = closePayment;
     window.history.pushState({ ...window.history.state, paymentSheet: true }, '');
     window.addEventListener('popstate', close);
     return () => {
@@ -332,7 +358,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       // Closed with its own button: drop the entry we added.
       if (window.history.state?.paymentSheet) window.history.back();
     };
-  }, [sheetOpen, refresh]);
+  }, [sheetOpen, closePayment]);
 
   useEffect(()=>{apiRequest('/companies/').then(d=>setCompanies(Array.isArray(d)?d:[])).catch(e=>setError(e.message));refresh()},[refresh]);
   useEffect(()=>{if(!company){setRoutes([]);setTrips([]);return} apiRequest(`/companies/${company}/routes/`).then(d=>setRoutes(d||[])).catch(e=>setError(e.message))},[company]);
@@ -456,7 +482,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         ...b,
         booking_id: b.booking_id ?? b.id,
         booking_number: b.booking_number,
-        total_amount: b.total_amount
+        total_amount: b.total_amount,
+        fresh: true,
       });
     } catch(e) {
       setError(e.message);
@@ -1359,10 +1386,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       {paymentBooking && (
         <PaymentModal
           booking={paymentBooking}
-          onClose={() => {
-            setPaymentBooking(null);
-            refresh();
-          }}
+          onClose={closePayment}
+          onStarted={markPaymentStarted}
           onPaid={refresh}
           onPaymentConfirmed={handleBookingMapEntry}
           onCashReserved={handleBookingMapEntry}
