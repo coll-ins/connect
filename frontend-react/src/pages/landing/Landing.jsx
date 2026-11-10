@@ -9,6 +9,7 @@ import seatPhoto from '../../assets/journeys/bookaseat.jpeg';
 import { isInstalledApp } from '../../utils/installedApp';
 import Welcome from './Welcome';
 import InstallApp from './InstallApp';
+import HowItWorks from './HowItWorks';
 import './Landing.css';
 
 // three.js is large: fetched after the words and buttons are already on screen.
@@ -196,13 +197,6 @@ const SEATS = [
 let seatNo = 0;
 const SEAT_LABELS = SEATS.map((state) => (state === 'driver' ? '' : String(++seatNo)));
 
-const STEPS = [
-  { title: 'Create your account', text: 'Your name, phone number and a password. Takes a minute.' },
-  { title: 'Choose route and seat', text: 'Pick the company, the trip time and the seat you want.' },
-  { title: 'Pay', text: 'M-Pesa or card. Your seat is confirmed the moment it is paid.' },
-  { title: 'Board with your PIN', text: 'Track the bus, walk to your stage, show your PIN, ride.' },
-];
-
 export default function Landing() {
   const { user } = useAuth();
   if (user) return <Navigate to={dashboardPath(user)} replace />;
@@ -251,14 +245,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="lp-section lp-wrap">
-        <h2>How it works</h2>
-        <ol className="lp-steps">
-          {STEPS.map((s) => (
-            <li key={s.title}><h3>{s.title}</h3><p>{s.text}</p></li>
-          ))}
-        </ol>
-      </section>
+      <HowItWorks />
 
       <section className="lp-section lp-wrap">
         <div className="lp-final">

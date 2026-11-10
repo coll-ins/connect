@@ -55,19 +55,36 @@ test.describe('CONNECT public entry and access guards', () => {
     await expect(page.getByRole('link', { name: 'Get started' }).first()).toBeVisible();
   });
 
-  test('installed app opens on one welcome screen; Get started signs in, Back returns', async ({ page }) => {
+  test('installed app: Get started walks through seat, parcel and bus hire before sign-up', async ({ page }) => {
+    // The 3D street renders in software on CI machines: the walkthrough is slow there, not stuck.
+    test.setTimeout(90000);
     await page.addInitScript(() => sessionStorage.setItem('installedApp', '1'));
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /Your matatu seat, booked/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'What it fixes' })).toHaveCount(0);
-    await page.getByRole('link', { name: 'Get started' }).click();
-    await expect(page).toHaveURL(/\/login$/);
+
+    await page.getByRole('button', { name: 'Get started' }).click();
+    await expect(page.getByRole('heading', { name: 'Book a seat' })).toBeVisible();
     const back = page.getByRole('button', { name: 'Back' });
-    const box = await back.boundingBox();
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect((await back.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByRole('heading', { name: 'Send a parcel' })).toBeVisible();
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByRole('heading', { name: 'Hire a whole bus' })).toBeVisible();
+
+    // Phone Back steps back through the walkthrough, not out of it.
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'Send a parcel' })).toBeVisible();
     await back.click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('link', { name: 'Get started' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Book a seat' })).toBeVisible();
+    await back.click();
+    await expect(page.getByRole('button', { name: 'Get started' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Get started' }).click();
+    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('link', { name: 'Create your free account' }).click();
+    await expect(page).toHaveURL(/\/signup$/);
   });
 
   test('signup link opens account creation route', async ({ page }) => {
