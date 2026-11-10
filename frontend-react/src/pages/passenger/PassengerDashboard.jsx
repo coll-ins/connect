@@ -400,6 +400,11 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
   const selectedRoute=useMemo(()=>routes.find(r=>String(r.id)===String(route)),[routes,route]);
   const firstStageId=(selectedRoute?.pickup_stages||[]).filter(st=>st.is_active!==false)[0]?.id;
+  // The last stage is where the trip ends: riders get off there, nobody boards.
+  const boardingStages=useMemo(()=>{
+    const active=(selectedRoute?.pickup_stages||[]).filter(st=>st.is_active!==false);
+    return active.length>1?active.slice(0,-1):active;
+  },[selectedRoute]);
   const seatsLeft=(t)=>Math.max(0,(t.capacity||0)-(t.booked_seats||0));
   const canBookTrip=(t)=>seatsLeft(t)>0&&(t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId)));
   const tripButtonLabel=(t)=>{
@@ -1003,15 +1008,12 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         </div>
 
         <span className="pickup-stage-count">
-          {(selectedRoute?.pickup_stages || [])
-            .filter(stage => stage.is_active !== false).length} stages
+          {boardingStages.length} stages
         </span>
       </div>
 
       <div className="pickup-stage-grid">
-        {(selectedRoute?.pickup_stages || [])
-          .filter(stage => stage.is_active !== false)
-          .map((stage, index) => (
+        {boardingStages.map((stage, index) => (
             <button
               key={stage.id}
               type="button"

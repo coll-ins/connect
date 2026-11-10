@@ -180,6 +180,12 @@ def get_routes(request, company_id=None, *args, **kwargs):
     routes = routes.select_related('company').prefetch_related(
         'pickup_stages'
     )
+    # A route and the same road back sit together, the way out first.
+    routes = sorted(routes, key=lambda r: (
+        r.company_id,
+        sorted([r.start_point.strip().lower(), r.end_point.strip().lower()]),
+        r.id,
+    ))
 
     data = []
 
