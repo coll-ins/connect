@@ -4,6 +4,10 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
+  // CI has no GPU: the 3D bus renders in software and, with parallel workers
+  // fighting for CPU, freezes the page for seconds (driver live-location test
+  // saw its trip at 0.9 s but drew it after 5 s). One worker removes the race.
+  workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
   timeout: 30000,
   expect: { timeout: 5000 },
