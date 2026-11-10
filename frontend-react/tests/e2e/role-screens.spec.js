@@ -267,7 +267,7 @@ test('driver live-location screen shows its route, styles the panel, and sends G
   expect(sheetBackground).toBe('rgb(16, 25, 29)');
 
   await expect.poll(() => capturedGpsPayload, { timeout: 10000 })
-    .toEqual(simulatedLocation);
+    .toEqual({ ...simulatedLocation, accuracy: expect.any(Number) });
   expect(gpsPostCount).toBeGreaterThan(0);
 
   await expect(page.getByText('GPS live', { exact: true })).toBeVisible();
