@@ -46,8 +46,11 @@ function PaymentModal({
   const cashLocked = !user?.can_pay_cash;
   const cashLockedReason = 'For regular riders only: 30 trips, an integrity score of 95% or more and an account at least 60 days old.';
 
-  // A 4xx means the server refused it: no payment is in flight.
-  const refused = (e) => { if (e.status >= 400 && e.status < 500) onStarted(false); };
+  // A 4xx means the server refused it: no payment is in flight. Not 409: that
+  // one says a payment for this booking is already in progress.
+  const refused = (e) => {
+    if (e.status >= 400 && e.status < 500 && e.status !== 409) onStarted(false, booking.booking_id);
+  };
 
   const cash = async () => {
     setBusy(true);
@@ -105,7 +108,7 @@ function PaymentModal({
         if (!active) return;
         setError('');
         if (status.payment_status === 'confirmed') { onPaymentConfirmed(booking); return; }
-        if (status.payment_status === 'failed') { setError('The M-PESA payment failed. You can try again.'); onStarted(false); setStep('method'); return; }
+        if (status.payment_status === 'failed') { setError('The M-PESA payment failed. You can try again.'); onStarted(false, booking.booking_id); setStep('method'); return; }
       } catch (error) {
         if (!active) return;
         setError(error.message || 'We could not check your M-PESA payment. Try again.');
@@ -330,9 +333,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   // Once a payment is in flight it stays; the server expires it if unpaid.
   const sheet = useRef({ booking: null, started: false });
   useEffect(() => { sheet.current = { booking: paymentBooking, started: false }; }, [paymentBooking]);
-  const markPaymentStarted = useCallback((started) => { sheet.current.started = started; }, []);
+  // A reply that lands after the sheet closed must not touch the next sheet.
+  const markPaymentStarted = useCallback((started, bookingId) => {
+    if (bookingId === undefined || sheet.current.booking?.booking_id === bookingId) sheet.current.started = started;
+  }, []);
   const closePayment = useCallback(async () => {
     const { booking, started } = sheet.current;
+    // Cleared now, so Back and Close together cancel only once.
+    sheet.current = { booking: null, started: false };
     setPaymentBooking(null);
     if (booking?.fresh && !started) {
       try {

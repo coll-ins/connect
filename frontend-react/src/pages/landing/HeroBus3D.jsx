@@ -2,6 +2,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CanvasTexture, Color, Object3D, RepeatWrapping, SRGBColorSpace, Vector3 } from 'three';
 import { StudioEnvironment, VehicleModel } from '../../components/maps/Vehicle3D';
+import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
 
 // A Nairobi street at dusk: the same matatu model the live map uses drives up
 // the road to the passenger's stage. `progress` (a ref, 0..1) comes from the
@@ -177,6 +178,26 @@ function Street({ street }) {
   );
 }
 
+// The rider: waits under the shelter, then walks to the door and boards.
+function Rider({ rider }) {
+  return (
+    <group ref={rider}>
+      <mesh position={[0, 0, 0.62]} rotation={[Math.PI / 2, 0, 0]}>
+        <capsuleGeometry args={[0.2, 0.62, 4, 12]} />
+        <meshStandardMaterial color="#c8553d" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 0, 1.22]}>
+        <sphereGeometry args={[0.15, 16, 12]} />
+        <meshStandardMaterial color="#6b4430" roughness={0.6} />
+      </mesh>
+      <mesh position={[-0.2, 0.05, 0.75]}>
+        <boxGeometry args={[0.12, 0.3, 0.4]} />
+        <meshStandardMaterial color="#2b343b" roughness={0.8} />
+      </mesh>
+    </group>
+  );
+}
+
 // The passenger's stage: shelter, bench and the green stage marker.
 function Stage({ stage }) {
   return (
@@ -217,8 +238,9 @@ function Framing({ frame }) {
     const { width: w, height: h } = size;
     camera.fov = w < h ? 44 : 34;
     if (frame === 'center') camera.clearViewOffset();
-    else if (w >= 960) camera.setViewOffset(w, h, -w * 0.2, 0, w, h);
-    else camera.setViewOffset(w, h, 0, h * 0.22, w, h);
+    else if (w >= 960 || w > h * 1.3) camera.setViewOffset(w, h, -w * 0.22, 0, w, h);
+    // Phones: the bus rides in the top half, the words sit under it.
+    else camera.setViewOffset(w, h, 0, h * 0.3, w, h);
     camera.updateProjectionMatrix();
   }, [get, size, frame]);
   return null;
@@ -233,6 +255,8 @@ function Ride({ progress, autoplay }) {
   const route = useRef(null);
   const street = useRef(null);
   const stage = useRef(null);
+  const rider = useRef(null);
+  const boarded = useRef(0); // seconds since the bus stopped at the stage
   const camera = useThree((s) => s.camera);
   const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height));
   // A tall phone screen is narrow: step back so the whole bus fits across it.
@@ -244,7 +268,7 @@ function Ride({ progress, autoplay }) {
   const pos = useMemo(() => new Vector3(), []);
   const look = useMemo(() => new Vector3(), []);
 
-  useFrame((_, raw) => {
+  useFrame((state, raw) => {
     const delta = Math.min(raw, 0.1);
     clock.current += delta;
     if (autoplay) {
@@ -265,6 +289,9 @@ function Ride({ progress, autoplay }) {
     let busY;
     if (f <= 0) {
       if (!STILL) d.odo += CRUISE * delta;
+      // Wrap by whole blocks: the street repeats, so this is invisible, and
+      // positions stay small enough for float32 on a tab left open for hours.
+      if (d.odo > TILE * 100) d.odo -= TILE * 100;
       d.from = d.odo;
       busY = d.odo;
     } else {
@@ -283,6 +310,20 @@ function Ride({ progress, autoplay }) {
     }
     if (street.current) street.current.position.y = Math.floor(busY / TILE) * TILE;
     if (stage.current) stage.current.position.y = stageY;
+
+    // Once the bus has stopped, the rider walks from the shelter to the door.
+    boarded.current = f >= 0.995 ? boarded.current + delta : 0;
+    if (rider.current) {
+      const w = STILL ? (f >= 0.995 ? 1 : 0) : clamp01((boarded.current - 0.5) / 1.8);
+      const k = smooth(w);
+      const r = rider.current;
+      r.visible = w < 1;
+      r.position.set(-5 + (LANE_X - 0.95 + 5) * k, stageY + 0.4 + (-1.6 - 0.4) * k, (1 - k) * 0.13);
+      r.rotation.z = w > 0 ? Math.atan2(-2, LANE_X - 0.95 + 5) - Math.PI / 2 : 0;
+      r.children[0].position.z = 0.62 + (w > 0 && w < 1 ? Math.abs(Math.sin(boarded.current * 9)) * 0.05 : 0);
+    }
+    // The installed app plays once: keep drawing until the rider is aboard, then rest.
+    if (autoplay && (f < 1 || boarded.current < 2.6)) state.invalidate();
     if (route.current) {
       const len = Math.max(0.001, stageY - busY - 2.4);
       route.current.scale.y = len;
@@ -305,6 +346,7 @@ function Ride({ progress, autoplay }) {
     <>
       <Street street={street} />
       <Stage stage={stage} />
+      <Rider rider={rider} />
       {/* The route still to drive, from the bus nose to the stage. */}
       <mesh ref={route} position={[LANE_X, STAGE_Y / 2, 0.004]}>
         <planeGeometry args={[0.16, 1]} />
@@ -319,10 +361,13 @@ function Ride({ progress, autoplay }) {
   );
 }
 
+const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+
 export default function HeroBus3D({ progress, autoplay = false, frame }) {
   const wrap = useRef(null);
   const fallback = useRef(0);
   const [visible, setVisible] = useState(true);
+  const [lost, setLost] = useState(false);
 
   useEffect(() => {
     const el = wrap.current;
@@ -332,11 +377,18 @@ export default function HeroBus3D({ progress, autoplay = false, frame }) {
     return () => io.disconnect();
   }, []);
 
+  // The GPU dropped the scene (low memory, driver reset): show the photo instead.
+  if (lost) return <img className="lp-story-photo" src={matatuPhoto} alt="" aria-hidden="true" />;
+
   return (
     <div ref={wrap} className="lp-3d" aria-hidden="true">
       <Canvas
-        frameloop={visible ? 'always' : 'never'}
-        dpr={[1, 1.75]}
+        frameloop={autoplay ? 'demand' : visible ? 'always' : 'never'}
+        dpr={[1, COARSE ? 1.25 : 1.75]}
+        onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault();
+          setLost(true);
+        })}
         camera={{ position: [6, 8, 2.6], up: [0, 0, 1], fov: 34, near: 0.1, far: 140 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >

@@ -65,7 +65,10 @@ function Story() {
     const read = () => {
       frame = 0;
       const r = el.getBoundingClientRect();
-      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - window.innerHeight)));
+      // The pinned stage's own height (100svh), not innerHeight, which
+      // changes as a phone's address bar slides away.
+      const pinned = el.firstElementChild.offsetHeight;
+      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - pinned)));
       progress.current = p;
       el.style.setProperty('--p', p.toFixed(4));
       let c = 0;
@@ -83,11 +86,18 @@ function Story() {
     };
   }, []);
 
-  // Hidden chapters are inert so Tab never lands on an invisible link.
-  const at = (i) => {
-    const on = STILL || chapter === i;
-    return { className: `lp-chapter${on ? ' is-on' : ''}`, inert: on ? undefined : true };
-  };
+  // Every chapter stays in the reading order for screen readers. Tabbing into
+  // one that is not showing scrolls the story to it, so focus is never invisible.
+  const at = (i) => ({
+    className: `lp-chapter${STILL || chapter === i ? ' is-on' : ''}`,
+    onFocus: () => {
+      const el = section.current;
+      if (STILL || !el || chapter === i) return;
+      const span = el.offsetHeight - el.firstElementChild.offsetHeight;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: top + span * (CHAPTER_AT[i] + 0.04) });
+    },
+  });
 
   return (
     <section ref={section} className={`lp-story${STILL ? ' is-still' : ''}`}>

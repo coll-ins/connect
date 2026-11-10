@@ -75,6 +75,28 @@
 @media (max-width: 959px) {
   .lp-chapter .lp-seatmap, .lp-chapter .lp-ticket { display: none; }
 }
+/* Landscape phones and short laptops: words left, bus right, as on desktop. */
+@media (max-width: 959px) and (min-aspect-ratio: 13/10) {
+  .lp-story-scrim { background: linear-gradient(to right, var(--bg) 0%, rgb(11 18 21 / 0.82) 36%, rgb(11 18 21 / 0) 62%); }
+  .lp-chapter { top: calc(50% + 28px); bottom: auto; right: auto; width: min(440px, 48%); transform: translate(0, calc(-50% + 24px)); }
+  .lp-chapter.is-on { transform: translate(0, -50%); }
+}
+/* Short screens: the first chapter keeps the headline and the button, and
+   the type scales with the height so nothing slides under the nav. */
+@media (max-height: 720px) {
+  .lp-chapter h1 { font-size: min(clamp(2.5rem, 1.5rem + 4.2vw, 4.75rem), 9svh); }
+  .lp-chapter h2 { font-size: min(clamp(2.25rem, 1.4rem + 3.6vw, 4rem), 9svh); }
+  .lp .lp-lead { font-size: 1rem; margin-top: 12px; }
+  .lp-chapter .lp-install, .lp-chapter .lp-fact, .lp-scroll-cue { display: none; }
+  .lp-cta { margin-top: 16px; }
+  .lp-chapter .lp-seatmap, .lp-chapter .lp-ticket { display: none; }
+}
+@media (max-height: 600px) {
+  .lp-chapter .lp-lead { display: none; }
+}
+@media (max-width: 480px) {
+  .lp-chapter { right: 40px; }
+}
 @media (max-width: 480px) {
   .lp-nav .lp-link { display: none; }
   .lp-cta .btn { width: 100%; }

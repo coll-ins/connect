@@ -4849,7 +4849,9 @@
   .connect-app {
     width: 100%;
     max-width: 100%;
-    /* clip, not hidden: hidden makes #root a scroll box and breaks position: sticky. */
+    /* clip, not hidden: hidden makes #root a scroll box and breaks position: sticky.
+       hidden stays as the fallback for browsers without clip (iOS < 16). */
+    overflow-x: hidden;
     overflow-x: clip;
   }
 }

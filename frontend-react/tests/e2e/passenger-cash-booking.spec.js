@@ -373,6 +373,7 @@ test('closing the payment sheet before paying books nothing and frees the seat',
   const calls = [];
   let cancelled = false;
   let mpesaSent = false;
+  let mpesaBusy = false;
   const pendingBooking = {
     id: 42, booking_id: 42, booking_number: 'CN-0042', status: 'pending',
     payment_status: 'unpaid', trip_status: 'scheduled', route_name: 'Nairobi to Mombasa',
@@ -404,6 +405,10 @@ test('closing the payment sheet before paying books nothing and frees the seat',
       body = { message: 'Booking cancelled' };
     } else if (path === '/api/bookings/payments/42/mpesa/' && method === 'POST') {
       mpesaSent = true;
+      if (mpesaBusy) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'A digital payment is already in progress' }) });
+        return;
+      }
       body = { display_text: 'Check your phone.' };
     } else if (path === '/api/bookings/payments/42/status/') body = { payment_status: 'pending' };
     else if (path === '/api/bookings/my/') body = calls.includes('POST /api/bookings/create/') && !cancelled ? [pendingBooking] : [];
@@ -443,6 +448,19 @@ test('closing the payment sheet before paying books nothing and frees the seat',
   // An M-PESA prompt already sent: money may be on its way, so keep the booking.
   cancelled = false;
   calls.length = 0;
+  await bookSeatFive();
+  await page.getByRole('button', { name: /Pay online/ }).click();
+  await page.getByRole('button', { name: /M-PESA/ }).click();
+  await page.getByLabel('M-PESA phone number').fill('0712345678');
+  await page.getByRole('button', { name: 'Proceed' }).click();
+  await expect.poll(() => mpesaSent).toBe(true);
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(500);
+  expect(cancelled).toBe(false);
+
+  // 409: a payment for this booking is already running elsewhere. Keep it.
+  mpesaBusy = true;
+  mpesaSent = false;
   await bookSeatFive();
   await page.getByRole('button', { name: /Pay online/ }).click();
   await page.getByRole('button', { name: /M-PESA/ }).click();
