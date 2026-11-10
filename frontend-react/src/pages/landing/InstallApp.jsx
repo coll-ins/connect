@@ -54,8 +54,8 @@ export default function InstallApp() {
             ) : (
               <>
                 <li>In Chrome, tap ⋮ at the top right.</li>
-                <li>Tap “Install app” or “Add to Home screen”.</li>
-                <li>Tap Install. Already see CONNECT on your home screen? It’s installed.</li>
+                <li>Tap “Install app”. If you only see “Add to Home screen”, tap it, then pick Install, not “Create shortcut”.</li>
+                <li>Tap Install. CONNECT then shows in your app drawer and opens without the Chrome address bar.</li>
               </>
             )}
           </ol>
