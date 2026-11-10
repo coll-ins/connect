@@ -241,21 +241,13 @@ def user_profile(request):
     return Response(serialize_session_user(request.user))
 
 
-# The server POSTs to the endpoint, so only real browser push services are accepted.
-PUSH_HOSTS = ('fcm.googleapis.com', 'updates.push.services.mozilla.com',
-              '.push.apple.com', '.notify.windows.com')
 MAX_PHONES = 5
 
 
 def _push_endpoint_ok(endpoint):
-    from urllib.parse import urlsplit
+    from notifications.push import endpoint_allowed
 
-    if not isinstance(endpoint, str) or len(endpoint) > 1000:
-        return False
-    parts = urlsplit(endpoint)
-    host = (parts.hostname or '').lower()
-    return parts.scheme == 'https' and parts.port in (None, 443) and any(
-        host == h or (h.startswith('.') and host.endswith(h)) for h in PUSH_HOSTS)
+    return endpoint_allowed(endpoint)
 
 
 def _push_key_ok(value, size):

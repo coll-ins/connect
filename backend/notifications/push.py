@@ -8,6 +8,7 @@ import base64
 import json
 import logging
 import os
+import re
 import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -91,10 +92,30 @@ def encrypt(payload, p256dh, auth, _sender_key=None, _salt=None):
     return salt + struct.pack('!IB', 4096, len(as_public)) + as_public + body
 
 
+# The server POSTs to the endpoint, so only real browser push services, written
+# plainly: no userinfo, backslashes, spaces or odd ports that parsers read differently.
+PUSH_HOSTS = ('fcm.googleapis.com', 'updates.push.services.mozilla.com',
+              '.push.apple.com', '.notify.windows.com')
+_ENDPOINT = re.compile(r'https://([a-z0-9.-]+)(?::443)?/[A-Za-z0-9._~%/:=+?&-]*', re.ASCII)
+
+
+def endpoint_allowed(endpoint):
+    if not isinstance(endpoint, str) or len(endpoint) > 1000:
+        return False
+    match = _ENDPOINT.fullmatch(endpoint)
+    if not match:
+        return False
+    host = match.group(1)
+    return any(host == h or (h.startswith('.') and host.endswith(h)) for h in PUSH_HOSTS)
+
+
 def _deliver(sub_id, endpoint, p256dh, auth, data):
     from users.models import PushSubscription
 
     try:
+        if not endpoint_allowed(endpoint):
+            PushSubscription.objects.filter(pk=sub_id).delete()
+            return
         resp = requests.post(
             endpoint,
             data=encrypt(data, p256dh, auth),
@@ -106,6 +127,7 @@ def _deliver(sub_id, endpoint, p256dh, auth, data):
                 'Urgency': 'high',
             },
             timeout=8,
+            allow_redirects=False,
         )
         if resp.status_code in (404, 410):
             # The phone unsubscribed or reinstalled: forget it.

@@ -116,7 +116,8 @@ def _auto_depart(driver, prev_lat, prev_lng, new_lat, new_lng):
         trip = (
             Trip.objects.select_for_update(of=('self',))
             .select_related('route')
-            .filter(driver=driver, status='boarding')
+            .filter(driver=driver, status='boarding',
+                    departure_at__gte=timezone.now() - timedelta(hours=12))
             .order_by('departure_at', 'id')
             .first()
         )

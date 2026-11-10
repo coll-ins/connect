@@ -131,15 +131,19 @@ class PushSubscribeTests(APITestCase):
         self.keys = {'p256dh': push.public_key(), 'auth': push.b64u(b'0123456789abcdef')}
 
     def test_saves_real_push_service(self):
-        r = self.client.post('/api/users/push/', {
-            'endpoint': 'https://fcm.googleapis.com/fcm/send/abc', 'keys': self.keys}, format='json')
-        self.assertEqual(r.status_code, 201)
+        for url in ('https://fcm.googleapis.com/fcm/send/abc:APA91b-x_y',
+                    'https://wns2-par02p.notify.windows.com/w/?token=BQYAAAD%2b',
+                    'https://web.push.apple.com/QGuQyavXutnMH'):
+            r = self.client.post('/api/users/push/', {'endpoint': url, 'keys': self.keys}, format='json')
+            self.assertEqual(r.status_code, 201, url)
         self.assertTrue(PushSubscription.objects.filter(user=self.user).exists())
 
     def test_rejects_other_hosts(self):
         for url in ('http://fcm.googleapis.com/x', 'https://127.0.0.1/x',
                     'https://evil.com/fcm.googleapis.com', 'https://fcm.googleapis.com.evil.com/x',
-                    'https://fcm.googleapis.com:8443/x'):
+                    'https://fcm.googleapis.com:8443/x', 'https://fcm.googleapis.com:99999/x',
+                    'https://127.0.0.1\\.notify.windows.com/x', 'https://evil.com\\@fcm.googleapis.com/x',
+                    'https://evil.com@fcm.googleapis.com/x', 'https://fcm.googleapis.com/x y'):
             r = self.client.post('/api/users/push/', {'endpoint': url, 'keys': self.keys}, format='json')
             self.assertEqual(r.status_code, 400, url)
         self.assertFalse(PushSubscription.objects.exists())
