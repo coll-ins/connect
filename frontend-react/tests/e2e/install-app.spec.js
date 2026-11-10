@@ -15,7 +15,7 @@ test.describe('android', () => {
     await signedOut(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Install the app' }).click();
-    await expect(page.getByText('In Chrome, tap ⋮ at the top right.')).toBeVisible();
+    await expect(page.getByText('Open your browser menu (⋮ or ☰, top or bottom right).')).toBeVisible();
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt', { cancelable: true });
       e.prompt = () => { window.prompted = true; };
