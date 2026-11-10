@@ -1,0 +1,25 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'ke.connectmatatu.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'ke.connectmatatu.app'
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+    // The key lives outside the repo; see android/README.md.
+    signingConfigs {
+        release {
+            storeFile System.getenv('CONNECT_KEYSTORE') ? file(System.getenv('CONNECT_KEYSTORE')) : null
+            storePassword System.getenv('CONNECT_KEYSTORE_PASSWORD')
+            keyAlias 'connect'
+            keyPassword System.getenv('CONNECT_KEYSTORE_PASSWORD')
+        }
+    }
+    buildTypes { release { signingConfig signingConfigs.release } }
+}
+
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0' }

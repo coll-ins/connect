@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "ke.connectmatatu.app",
+    "sha256_cert_fingerprints": ["9E:6E:22:EC:80:C4:85:A4:4C:AC:5A:CF:8F:F3:30:D0:83:BB:F2:55:58:B0:3D:68:42:40:56:D6:B7:2D:F0:20"]
+  }
+}]

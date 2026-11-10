@@ -71,3 +71,24 @@ Until step 3 is live, the app works but shows a thin browser bar at the top.
 
 Bump `appVersionCode` (+1) and `appVersionName` in `twa-manifest.json`, then
 `bubblewrap update && bubblewrap build`, and upload the new `.aab`.
+
+## Direct download APK (live now, no Play Store)
+
+`apk/` is a hand-built TWA (android-browser-helper) of the same app. The landing page's
+Install button downloads it from `frontend-react/public/connect.apk` when the browser gives
+no install prompt (Firefox, Brave, Chrome holding back). Phones with no TWA browser open it
+in a WebView. It is signed with a sideload key kept outside git (`connect-release.jks`);
+its SHA-256 is in `frontend-react/public/.well-known/assetlinks.json`.
+
+Rebuild (bump `versionCode` in `apk/app/build.gradle` first, or phones won't update):
+
+```bash
+cd android/apk
+export ANDROID_HOME=/path/to/android-sdk CONNECT_KEYSTORE=/path/to/connect-release.jks CONNECT_KEYSTORE_PASSWORD=...
+./gradlew assembleRelease
+cp app/build/outputs/apk/release/app-release.apk ../../frontend-react/public/connect.apk
+```
+
+When the Play version ships, add its app-signing SHA-256 to `assetlinks.json` (keep this
+one). Same package id, different key: phones with this APK must uninstall it once before
+installing from Play.
