@@ -128,6 +128,7 @@
 .lp-install { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 24px; }
 .lp .lp-install p { margin: 0; font-size: 0.875rem; color: var(--text-2); }
 .lp-install-btn { min-height: 44px; }
+.lp-install-steps { flex-basis: 100%; margin: 0; list-style: decimal; padding-left: 20px; font-size: 0.875rem; color: var(--text-2); line-height: 1.6; }
 
 .lp .lp-fix { display: flex; gap: 8px; align-items: flex-start; }
 .lp-fix svg { flex: none; margin-top: 3px; color: var(--accent-text); }
