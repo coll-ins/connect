@@ -72,7 +72,7 @@ const mkIcon = (cls) => L.divIcon({
   iconSize: [24, 24],
   iconAnchor: [12, 12],
 });
-const ICONS = { on: mkIcon(''), off: mkIcon('inactive'), moved: mkIcon('moved') };
+const ICONS = { on: mkIcon(''), moved: mkIcon('moved') };
 
 function Clicks({ onPick }) {
   useMapEvents({ click: (e) => onPick(e.latlng) });
@@ -88,15 +88,15 @@ function Fit({ points, tick }) {
   return null;
 }
 
-function StagePin({ stage, position, moved, onLive, onDrop }) {
+function StagePin({ stage, number, position, moved, onLive, onDrop }) {
   const handlers = useMemo(() => ({
     drag: (e) => onLive(stage.name, e.target.getLatLng()),
     dragend: (e) => onDrop(stage.id, e.target.getLatLng()),
   }), [stage.id, stage.name, onLive, onDrop]);
   return (
-    <Marker position={position} draggable icon={moved ? ICONS.moved : stage.is_active ? ICONS.on : ICONS.off}
+    <Marker position={position} draggable icon={moved ? ICONS.moved : ICONS.on}
       eventHandlers={handlers} zIndexOffset={500}>
-      <Tooltip>{stage.order}. {stage.name}{stage.is_active ? '' : ' (off)'}</Tooltip>
+      <Tooltip>{number}. {stage.name}</Tooltip>
     </Marker>
   );
 }
@@ -204,7 +204,10 @@ export default function RoutePlanner() {
     [alts],
   );
 
-  const pins = useMemo(() => stages.map((s) => {
+  // Removed stages stay in the database (old bookings point at them) but
+  // never on the map: only active stages are pins, measured or snapped.
+  const removed = useMemo(() => stages.filter((s) => !s.is_active), [stages]);
+  const pins = useMemo(() => stages.filter((s) => s.is_active).map((s) => {
     const m = moved[s.id];
     return {
       s,
@@ -360,6 +363,10 @@ export default function RoutePlanner() {
       await apiRequest(`/companies/pickup-stages/${s.id}/`, {
         method: 'PATCH', body: { is_active: !s.is_active },
       });
+      setMoved((m) => { const rest = { ...m }; delete rest[s.id]; return rest; });
+      setNote(s.is_active
+        ? `${s.name} removed: passengers can no longer choose it.`
+        : `${s.name} is back on the route.`);
       await loadStages();
     } catch (e) { fail('Could not change the stage', e); } finally { setBusy(false); }
   };
@@ -374,7 +381,6 @@ export default function RoutePlanner() {
     if (!snapLine) return;
     const next = {};
     pins.forEach(({ s, pos }) => {
-      if (!s.is_active) return;
       const n = nearestOnLine(snapLine, pos[0], pos[1]);
       if (n && n.metres > 1 && n.metres <= SNAP_ALL_M) {
         next[s.id] = { latitude: round6(n.lat), longitude: round6(n.lng) };
@@ -414,7 +420,7 @@ export default function RoutePlanner() {
 
   let fitPoints = draftLine || savedLine;
   if (!fitPoints) {
-    fitPoints = stages.map((s) => [Number(s.latitude), Number(s.longitude)]);
+    fitPoints = pins.map(({ pos }) => pos);
     if (start) fitPoints.push([start.latitude, start.longitude]);
     if (end) fitPoints.push([end.latitude, end.longitude]);
     fitPoints = fitPoints.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
@@ -506,8 +512,8 @@ export default function RoutePlanner() {
                       </CircleMarker>
                     ))}
 
-                    {pins.map(({ s, pos, isMoved }) => (
-                      <StagePin key={s.id} stage={s} position={pos} moved={isMoved}
+                    {pins.map(({ s, pos, isMoved }, i) => (
+                      <StagePin key={s.id} stage={s} number={i + 1} position={pos} moved={isMoved}
                         onLive={onLive} onDrop={onDrop} />
                     ))}
                     {start && (
@@ -688,16 +694,16 @@ export default function RoutePlanner() {
                       </div>
                     </div>
                   )}
-                  {!stages.length ? (
-                    <p className="svc-muted">No stages yet. Choose “Add stage” and tap the road.</p>
+                  {!pins.length ? (
+                    <p className="svc-muted">No stages on this route. Choose “Add stage” and tap the road.</p>
                   ) : (
                     <div className="svc-list">
-                      {pins.map(({ s, pos, isMoved }) => {
+                      {pins.map(({ s, pos, isMoved }, i) => {
                         const off = offsets[s.id];
                         return (
-                          <div key={s.id} className={`rp-stage ${s.is_active ? '' : 'off'}`}>
+                          <div key={s.id} className="rp-stage">
                             <span>
-                              <strong>{s.order}.</strong> {s.name}
+                              <strong>{i + 1}.</strong> {s.name}
                               {s.source === 'automatic' ? ' · auto' : ''}
                               {isMoved ? ' · moved, not saved' : ''}
                               {off !== undefined && (
@@ -715,12 +721,27 @@ export default function RoutePlanner() {
                               </button>
                             )}
                             <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => toggleStage(s)}>
-                              {s.is_active ? 'Remove' : 'Bring back'}
+                              Remove
                             </button>
                           </div>
                         );
                       })}
                     </div>
+                  )}
+                  {removed.length > 0 && (
+                    <details className="rp-removed">
+                      <summary>Removed stages ({removed.length})</summary>
+                      <div className="svc-list">
+                        {removed.map((s) => (
+                          <div key={s.id} className="rp-stage off">
+                            <span>{s.name}</span>
+                            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => toggleStage(s)}>
+                              Bring back
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   )}
                   <p className="svc-muted" style={{ marginTop: 12 }}>
                     “Remove” hides a stage from passengers without deleting it, so existing bookings and parcels stay valid.

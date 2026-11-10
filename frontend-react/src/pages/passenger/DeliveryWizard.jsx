@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Package } from 'lucide-react';
 
@@ -10,7 +10,8 @@ import { checkName, checkPhone, checkText, NAME_HINT, PHONE_HINT } from '../../u
 import useHistoryStep from '../../hooks/useHistoryStep';
 import '../shared/Services.css';
 
-const STEPS = ['Company', 'Route', 'Bus', 'Stops', 'Parcel', 'Receiver'];
+const STEPS = ['Places', 'Bus', 'Parcel', 'Receiver'];
+const key = (name) => name.trim().toLowerCase();
 const SIZE_INFO = {
   small: ['Small', 'Fits in a bag'],
   medium: ['Medium', 'A box'],
@@ -37,7 +38,7 @@ export function DeliveryNew() {
   const [busy, setBusy] = useState(false);
   const [step, setStep, stepBack] = useHistoryStep();
   const [f, setF] = useState({
-    company: '', route: '', trip: '', pickup: '', dropoff: '', size: '',
+    from: '', to: '', query: '', company: '', route: '', trip: '', pickup: '', dropoff: '', size: '',
     description: '', receiverName: '', receiverPhone: '', ok: false,
   });
   const errDesc = checkText(f.description, 'what is in the parcel', { maxLength: 200 });
@@ -58,8 +59,29 @@ export function DeliveryNew() {
   const stages = route?.stages || [];
   const pickupStage = stages.find((s) => String(s.id) === f.pickup);
   const dropStage = stages.find((s) => String(s.id) === f.dropoff);
-  const dropoffs = pickupStage ? stages.filter((s) => s.order > pickupStage.order) : [];
   const price = route && f.size ? route.rates[f.size] : null;
+
+  // Senders know where the parcel goes, not which company or route serves
+  // it: every route that passes "from" and later "to" is a match, across all
+  // companies, and its buses are offered soonest first.
+  const legs = useMemo(() => {
+    const out = [];
+    (options || []).forEach((c) => c.routes.forEach((r) => {
+      r.stages.forEach((a, i) => r.stages.slice(i + 1).forEach((b) => {
+        out.push({ company: c, route: r, pickup: a, dropoff: b });
+      }));
+    }));
+    return out;
+  }, [options]);
+  const names = (list) => [...new Map(list.map((n) => [key(n), n])).values()]
+    .sort((a, b) => a.localeCompare(b));
+  const q = key(f.query);
+  const froms = names(legs.map((l) => l.pickup.name)).filter((n) => !q || key(n).includes(q));
+  const tos = f.from ? names(legs.filter((l) => key(l.pickup.name) === key(f.from)).map((l) => l.dropoff.name)) : [];
+  const departures = (f.from && f.to ? legs.filter(
+    (l) => key(l.pickup.name) === key(f.from) && key(l.dropoff.name) === key(f.to),
+  ) : []).flatMap((l) => l.route.trips.map((t) => ({ ...l, trip: t })))
+    .sort((a, b) => new Date(a.trip.departure_at) - new Date(b.trip.departure_at));
 
   const pick = (patch, next) => {
     setF((v) => ({ ...v, ...patch }));
@@ -121,78 +143,52 @@ export function DeliveryNew() {
           <div className="svc-card">
             {step === 0 && (
               <>
-                <h2 className="svc-q">Which company will carry your parcel?</h2>
+                <h2 className="svc-q">Where will you hand the parcel to the bus?</h2>
+                <label className="svc-field">Find a stage
+                  <input className="input" maxLength={60} value={f.query} placeholder="e.g. Kencom or Rongai"
+                    onChange={(e) => pick({ query: e.target.value })} />
+                </label>
                 <div className="svc-pick-grid">
-                  {options.map((c) => (
-                    <Pick key={c.id} title={c.name} sub={`${c.routes.length} route${c.routes.length === 1 ? '' : 's'}`}
-                      selected={f.company === String(c.id)}
-                      onClick={() => pick({ company: String(c.id), route: '', trip: '', pickup: '', dropoff: '', size: '' }, 1)} />
+                  {froms.map((n) => (
+                    <Pick key={n} title={n} selected={key(f.from) === key(n)}
+                      onClick={() => pick({ from: n, to: '', trip: '', size: '' })} />
                   ))}
                 </div>
-                {!options.length && <p className="muted">No company carries parcels right now. Check back later.</p>}
-              </>
-            )}
-
-            {step === 1 && company && (
-              <>
-                <h2 className="svc-q">Which route?</h2>
-                <div className="svc-pick-grid">
-                  {company.routes.map((r) => {
-                    const prices = Object.values(r.rates).map(Number);
-                    return (
-                      <Pick key={r.id} title={r.name}
-                        sub={`${r.trips.length} upcoming bus${r.trips.length === 1 ? '' : 'es'}`}
-                        meta={prices.length ? `from ${money(Math.min(...prices))}` : ''}
-                        selected={f.route === String(r.id)}
-                        onClick={() => pick({ route: String(r.id), trip: '', pickup: '', dropoff: '', size: '' }, 2)} />
-                    );
-                  })}
-                </div>
-                {!company.routes.length && <p className="muted">This company has no parcel routes yet. Go back and pick another company.</p>}
-              </>
-            )}
-
-            {step === 2 && route && (
-              <>
-                <h2 className="svc-q">Which bus will take it?</h2>
-                <div className="svc-pick-grid">
-                  {route.trips.map((t) => (
-                    <Pick key={t.id} title={when(t.departure_at)} sub={`Bus ${t.bus_number}`}
-                      selected={f.trip === String(t.id)}
-                      onClick={() => pick({ trip: String(t.id) }, 3)} />
-                  ))}
-                </div>
-                {!route.trips.length && <p className="muted">No bus is scheduled on this route yet. Go back and pick another route.</p>}
-              </>
-            )}
-
-            {step === 3 && route && (
-              <>
-                <h2 className="svc-q">Where will you hand the parcel to the driver?</h2>
-                <div className="svc-pick-grid">
-                  {stages.slice(0, -1).map((s) => (
-                    <Pick key={s.id} title={s.name} selected={f.pickup === String(s.id)}
-                      onClick={() => pick({ pickup: String(s.id), dropoff: '' })} />
-                  ))}
-                </div>
-                {pickupStage && (
+                {!froms.length && <p className="muted">No stage matches “{f.query}”. Try a shorter name.</p>}
+                {f.from && (
                   <>
                     <h2 className="svc-q">Where will the receiver collect it?</h2>
                     <div className="svc-pick-grid">
-                      {dropoffs.map((s) => (
-                        <Pick key={s.id} title={s.name} selected={f.dropoff === String(s.id)}
-                          onClick={() => pick({ dropoff: String(s.id) })} />
+                      {tos.map((n) => (
+                        <Pick key={n} title={n} selected={key(f.to) === key(n)}
+                          onClick={() => pick({ to: n, trip: '', size: '' }, 1)} />
                       ))}
                     </div>
                   </>
                 )}
-                <div className="svc-actions">
-                  <button type="button" className="btn btn-primary" disabled={!f.pickup || !f.dropoff} onClick={() => setStep(4)}>Next</button>
-                </div>
               </>
             )}
 
-            {step === 4 && route && (
+            {step === 1 && f.from && f.to && (
+              <>
+                <h2 className="svc-q">Which bus will take it?</h2>
+                <p className="muted">{f.from} to {f.to}. The soonest bus is first.</p>
+                <div className="svc-pick-grid">
+                  {departures.map((d) => (
+                    <Pick key={`${d.route.id}-${d.trip.id}`} title={when(d.trip.departure_at)}
+                      sub={`${d.company.name} · ${d.route.name} · Bus ${d.trip.bus_number}`}
+                      selected={f.trip === String(d.trip.id)}
+                      onClick={() => pick({
+                        company: String(d.company.id), route: String(d.route.id), trip: String(d.trip.id),
+                        pickup: String(d.pickup.id), dropoff: String(d.dropoff.id), size: '',
+                      }, 2)} />
+                  ))}
+                </div>
+                {!departures.length && <p className="muted">No bus is scheduled between these stages yet. Go back and pick other stages.</p>}
+              </>
+            )}
+
+            {step === 2 && route && (
               <>
                 <h2 className="svc-q">How big is the parcel?</h2>
                 <div className="svc-pick-grid">
@@ -210,12 +206,12 @@ export function DeliveryNew() {
                     hint="Say what is inside in plain words. The driver checks it matches when collecting." />
                 </label>
                 <div className="svc-actions">
-                  <button type="button" className="btn btn-primary" disabled={!f.size || Boolean(errDesc)} onClick={() => setStep(5)}>Next</button>
+                  <button type="button" className="btn btn-primary" disabled={!f.size || Boolean(errDesc)} onClick={() => setStep(3)}>Next</button>
                 </div>
               </>
             )}
 
-            {step === 5 && route && (
+            {step === 3 && route && (
               <form onSubmit={submit}>
                 <h2 className="svc-q">Who is receiving it?</h2>
                 <div className="svc-form">
