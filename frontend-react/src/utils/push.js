@@ -13,6 +13,14 @@ export function pushPermission() {
   return pushSupported() ? Notification.permission : 'unsupported';
 }
 
+// `ready` never settles when no service worker is registered (dev server).
+function swReady() {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('No service worker')), 5000)),
+  ]);
+}
+
 function toBytes(base64url) {
   const pad = '='.repeat((4 - (base64url.length % 4)) % 4);
   const raw = atob((base64url + pad).replace(/-/g, '+').replace(/_/g, '/'));
@@ -27,7 +35,7 @@ export async function enablePush({ ask = false } = {}) {
   if (permission === 'default' && ask) permission = await Notification.requestPermission();
   if (permission !== 'granted') return false;
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await swReady();
   const { public_key: key } = await apiRequest('/users/push/', { silent: true });
   let subscription = await registration.pushManager.getSubscription();
   const current = subscription?.options?.applicationServerKey;
@@ -52,7 +60,7 @@ export async function enablePush({ ask = false } = {}) {
 export async function showLocalNotification(title, body, tag) {
   if (pushPermission() !== 'granted') return;
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await swReady();
     await registration.showNotification(title, { body, tag, icon: '/icon-192.png' });
   } catch {
     // Alerts are a convenience; the live map still shows the bus.

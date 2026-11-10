@@ -25,7 +25,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = {};
+  let data;
   try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
   event.waitUntil(self.registration.showNotification(data.title || 'CONNECT', {
     body: data.body || '',
@@ -39,15 +39,16 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const path = (event.notification.data && event.notification.data.url) || '/';
-  const target = new URL(path, self.location.origin).href;
+  let target = new URL(path, self.location.origin);
+  if (target.origin !== self.location.origin) target = new URL('/', self.location.origin);
   event.waitUntil((async () => {
     const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const tab = open.find((c) => c.url.startsWith(self.location.origin));
+    // An open app is only brought forward: navigating would drop a payment in progress.
+    const tab = open.find((c) => new URL(c.url).origin === self.location.origin);
     if (tab) {
       await tab.focus();
-      if ('navigate' in tab) await tab.navigate(target).catch(() => {});
       return;
     }
-    await self.clients.openWindow(target);
+    await self.clients.openWindow(target.href);
   })());
 });
