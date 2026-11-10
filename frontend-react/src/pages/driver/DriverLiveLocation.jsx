@@ -28,6 +28,9 @@ const formatDate = (value) =>
 const EMPTY_GEOMETRY = { type: 'LineString', coordinates: [] };
 const EMPTY_LIST = [];
 
+// Same limit as the server (drivers/views.py MAX_FIX_ACCURACY_M).
+const MAX_ACCURACY_M = 50;
+
 export default function DriverLiveLocation() {
   const navigate = useNavigate();
 
@@ -140,11 +143,22 @@ export default function DriverLiveLocation() {
     }
   }, [driver]);
 
+  const [weakAccuracy, setWeakAccuracy] = useState(null);
+
   const sendLocation = useCallback(async (position, force = false) => {
     const currentDriver = driverRef.current;
     const driverId = currentDriver?.id ?? driverIdRef.current;
 
     if (!driverId || sendingRef.current) return;
+
+    // Wi-Fi/IP guesses (laptops, phones indoors) can be hundreds of metres
+    // off. Only real GPS fixes move the bus; the server checks this too.
+    const accuracy = position.coords.accuracy;
+    if (Number.isFinite(accuracy) && accuracy > MAX_ACCURACY_M) {
+      setWeakAccuracy(Math.round(accuracy));
+      return;
+    }
+    setWeakAccuracy(null);
 
     const now = Date.now();
 
@@ -170,6 +184,7 @@ export default function DriverLiveLocation() {
           body: {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
+            accuracy,
           },
         },
       );
@@ -569,6 +584,9 @@ export default function DriverLiveLocation() {
               : gpsStatus === 'LOST'
                 ? `GPS lost · last seen ${gpsAgeSec >= 60 ? Math.round(gpsAgeSec / 60) + ' min' : Math.round(gpsAgeSec) + ' s'} ago`
                 : 'Waiting for GPS'}
+          {gpsStatus !== 'LIVE' && weakAccuracy != null
+            ? ` · signal ±${weakAccuracy} m, needs open sky`
+            : ''}
         </div>
       </div>
 

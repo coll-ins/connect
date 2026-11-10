@@ -124,6 +124,64 @@ class LiveTripTests(TestCase):
         self.assertEqual([c.args[0] for c in sent.call_args_list], [[junction.id]])
 
 
+class AutoCompleteTests(LiveTripTests):
+    def test_trip_ends_itself_at_last_stage_and_cannot_rerun(self):
+        self.trip.status = 'departed'
+        self.trip.departure_at = timezone.now() - timedelta(minutes=40)
+        self.trip.save()
+        rider = self.rider(self.stages[1], '+254712300013')
+        Booking.objects.filter(user=rider).update(status='completed')  # PIN verified on board
+
+        self.fix(STAGES[2][1:])
+        self.assertEqual(self.trip.status, 'departed')  # not the end yet
+
+        sent = self.fix(STAGES[3][1:])
+        self.assertEqual(self.trip.status, 'completed')
+        end = [c for c in sent.call_args_list if c.args[1] == 'You have arrived']
+        self.assertEqual(end[0].args[0], [rider.id])
+
+        self.fix(STAGES[0][1:])  # back at the first stage: a finished trip never reboards
+        self.assertEqual(self.trip.status, 'completed')
+
+    def test_short_hop_does_not_end_early(self):
+        self.trip.status = 'departed'
+        self.trip.departure_at = timezone.now() - timedelta(minutes=5)
+        self.trip.save()
+        self.fix(STAGES[3][1:])
+        self.assertEqual(self.trip.status, 'departed')
+
+
+class GpsPrecisionTests(APITestCase):
+    def setUp(self):
+        co = Company.objects.create(name='GPS Co', areas_served='X')
+        self.driver = Driver.objects.create(
+            company=co, name='D', phone_number='+254712300030', bus_number='KA 2')
+        user = User.objects.create_user(
+            username='gd', password='x', phone_number='+254712300030', role='driver', company=co)
+        self.client.force_authenticate(user)
+        self.url = f'/api/drivers/{self.driver.id}/location/'
+
+    def post(self, lat, lng, accuracy=None):
+        body = {'latitude': lat, 'longitude': lng}
+        if accuracy is not None:
+            body['accuracy'] = accuracy
+        r = self.client.post(self.url, body, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.driver.refresh_from_db()
+        return r.data
+
+    def test_wifi_guess_is_ignored(self):
+        self.assertEqual(self.post(-1.2856, 36.8250, accuracy=900)['ignored'], 'low_accuracy')
+        self.assertIsNone(self.driver.latitude)
+        self.post(-1.2856, 36.8250, accuracy=8)
+        self.assertAlmostEqual(float(self.driver.latitude), -1.2856, places=4)
+
+    def test_teleport_is_ignored(self):
+        self.post(-1.2856, 36.8250, accuracy=8)
+        self.assertEqual(self.post(-1.2387, 36.6009, accuracy=8)['ignored'], 'jump')  # Kamangu in 0 s
+        self.assertAlmostEqual(float(self.driver.longitude), 36.8250, places=4)
+
+
 class PushSubscribeTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='p', password='x', phone_number='+254712300020')

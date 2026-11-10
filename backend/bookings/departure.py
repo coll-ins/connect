@@ -42,7 +42,8 @@ def auto_depart_on_movement(driver, prev_lat, prev_lng, new_lat, new_lng):
 
     scheduled -> boarding when the bus reaches its first stage near departure time,
     boarding -> departed once two consecutive fixes are away from that stage,
-    and riders hear when the bus passes the stage before theirs.
+    riders hear when the bus passes the stage before theirs,
+    and departed -> completed when the bus reaches the last stage.
 
     Never raises: a failure here must not break saving the driver's location.
     """
@@ -50,6 +51,7 @@ def auto_depart_on_movement(driver, prev_lat, prev_lng, new_lat, new_lng):
         _auto_board(driver, new_lat, new_lng)
         _auto_depart(driver, prev_lat, prev_lng, new_lat, new_lng)
         _approach_alerts(driver, new_lat, new_lng)
+        _auto_complete(driver, new_lat, new_lng)
     except Exception:
         logger.exception('auto-depart failed for driver %s', driver.pk)
 
@@ -198,3 +200,56 @@ def _approach_alerts(driver, lat, lng):
             title = 'Your bus is at your stage'
             body = f'The bus is at {passed.name} now.'
         push.notify_users([user_id], title, body, url='/passenger', tag=f'booking-{booking_id}-near')
+
+
+def _auto_complete(driver, lat, lng):
+    """End the trip at its last stage, settled exactly like the driver's End trip."""
+    if None in (lat, lng):
+        return
+    from companies.models import Trip
+    from bookings.services import run_refund_claims, settle_unboarded_no_shows
+
+    radius = float(getattr(settings, 'AUTO_DEPART_DISTANCE_M', 150))
+    min_minutes = int(getattr(settings, 'TRIP_MIN_DURATION_MINUTES', 20))
+    now = timezone.now()
+    trip = (
+        Trip.objects.select_related('route', 'route__company')
+        .filter(driver=driver, status='departed',
+                departure_at__gte=now - timedelta(hours=12),
+                departure_at__lte=now - timedelta(minutes=min_minutes))
+        .order_by('departure_at', 'id')
+        .first()
+    )
+    if trip is None:
+        return
+    last = trip.route.pickup_stages.filter(is_active=True).order_by('-order', '-id').first()
+    if last is not None:
+        end = (float(last.latitude), float(last.longitude), last.name)
+    elif trip.route.end_latitude is not None and trip.route.end_longitude is not None:
+        end = (float(trip.route.end_latitude), float(trip.route.end_longitude), trip.route.end_point)
+    else:
+        return
+    if _metres(lat, lng, end[0], end[1]) > radius:
+        return
+
+    claims = []
+    with transaction.atomic():
+        trip = Trip.objects.select_for_update().get(pk=trip.pk)
+        if trip.status != 'departed':
+            return
+        settle_unboarded_no_shows(trip, claims=claims)
+        trip.status = 'completed'
+        trip.save(update_fields=['status'])
+        on_board = list(trip.bookings.filter(status='completed').values_list('user_id', flat=True))
+        company = trip.route.company.name
+
+        def _after():
+            # Paystack only after the trip lock is released, as in driver_end_trip.
+            run_refund_claims(claims)
+            push.notify_users(
+                on_board, 'You have arrived',
+                f'{trip.route.name}: the bus reached {end[2]}. Trip complete. '
+                f'Thank you for riding with {company}.',
+                url='/passenger', tag=f'trip-{trip.id}-end')
+
+        transaction.on_commit(_after)

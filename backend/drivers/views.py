@@ -528,6 +528,33 @@ def record_driver_fix(driver, latitude, longitude, simulated=False):
         logging.getLogger(__name__).exception('auto-depart hook failed')
 
 
+# A phone GPS fix outdoors is 3-20 m; Wi-Fi/IP guesses are 100 m to km off.
+MAX_FIX_ACCURACY_M = 50
+# No matatu covers ground faster than this between two fixes.
+MAX_FIX_SPEED_KMH = 140
+
+
+def _imprecise_fix(driver, latitude, longitude, accuracy):
+    """Why this fix must not move the bus, or None if it is fine."""
+    if accuracy not in (None, ''):
+        try:
+            accuracy = float(accuracy)
+        except (TypeError, ValueError):
+            return 'bad_accuracy'
+        if not 0 <= accuracy <= MAX_FIX_ACCURACY_M:
+            return 'low_accuracy'
+    if driver.latitude is None or driver.location_updated_at is None:
+        return None
+    seconds = (timezone.now() - driver.location_updated_at).total_seconds()
+    if seconds <= 0 or seconds > 120:
+        return None  # an old last fix says nothing about speed
+    from bookings.departure import _metres
+    metres = _metres(float(driver.latitude), float(driver.longitude), latitude, longitude)
+    if metres > 100 and metres / seconds * 3.6 > MAX_FIX_SPEED_KMH:
+        return 'jump'
+    return None
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 @throttle_classes([DriverLocationThrottle])
@@ -585,6 +612,16 @@ def driver_location(request, driver_id):
         return Response(
             {'error': 'Coordinates are out of range.'},
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    ignored = _imprecise_fix(driver, latitude, longitude, request.data.get('accuracy'))
+    if ignored:
+        # Not an error: the phone keeps sending and the next good fix counts.
+        return Response(
+            {'ignored': ignored, 'driver_id': driver.id,
+             'latitude': driver.latitude, 'longitude': driver.longitude,
+             'location_updated_at': driver.location_updated_at},
+            status=status.HTTP_200_OK,
         )
 
     record_driver_fix(driver, latitude, longitude)
