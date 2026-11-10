@@ -49,8 +49,8 @@ export default function InstallApp() {
     // No browser install prompt (Firefox, Brave, or Chrome holding it back): hand over the real app.
     body = (
       <>
-        <a href="/connect.apk" download="CONNECT.apk" className="btn btn-ghost lp-install-btn" onClick={() => setSteps(true)}>{label}</a>
-        <p>{steps ? 'Downloading. Tap CONNECT.apk when it finishes, then Install.' : 'Opens from your home screen, full screen, like any app.'}</p>
+        <a href="/connect.apk" download="connect.apk" className="btn btn-ghost lp-install-btn" onClick={() => setSteps(true)}>{label}</a>
+        <p>{steps ? 'Downloading. Tap connect.apk when it finishes, then Install.' : 'Opens from your home screen, full screen, like any app.'}</p>
       </>
     );
   } else if (ios) {
