@@ -249,7 +249,7 @@
 .wl-film .lp-3d { position: absolute; inset: 0; }
 .wl-scrim {
   position: fixed; inset: 0; pointer-events: none;
-  background: linear-gradient(to top, var(--bg) 0%, rgb(11 18 21 / 0.9) 34%, rgb(11 18 21 / 0) 60%),
+  background: linear-gradient(to top, var(--bg) 0%, rgb(11 18 21 / 0.9) 40%, rgb(11 18 21 / 0) 72%),
               linear-gradient(to bottom, rgb(11 18 21 / 0.7) 0%, rgb(11 18 21 / 0) 18%);
   transition: background-color 400ms var(--ease);
 }
@@ -295,8 +295,23 @@
 .wl-dots { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }
 .wl-dots i { width: 8px; height: 8px; border-radius: 4px; background: rgb(255 255 255 / 0.25); transition: width var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease); }
 .wl-dots i.is-on { width: 24px; background: var(--accent); }
+/* Small phones: the walkthrough keeps step titles and drops their details. */
+@media (max-height: 600px) {
+  .wl-how-steps span { display: none; }
+  .wl-how h1 { font-size: 1.875rem; }
+  .wl-how-icon { width: 40px; height: 40px; }
+}
+@media (max-height: 700px) {
+  .wl-how h1 { font-size: 1.875rem; margin-top: 12px; }
+  .wl-how-icon { width: 40px; height: 40px; }
+  .wl .wl-how-line { font-size: 1rem; }
+  .wl-how-steps { gap: 8px; margin-top: 16px; }
+  .wl-how-steps span { font-size: 0.8125rem; line-height: 1.35; }
+  .wl-dots { margin-top: 16px; }
+  .wl-how .wl-start { margin-top: 16px; }
+  .wl-how .wl-login { min-height: 44px; margin-top: 4px; }
+}
 @media (max-height: 640px) {
-  .wl-how-steps { gap: 10px; margin-top: 16px; }
   .wl-how-steps span { font-size: 0.875rem; }
   .wl-scene { min-height: 8rem; }
 }

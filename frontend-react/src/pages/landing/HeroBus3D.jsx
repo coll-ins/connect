@@ -359,7 +359,7 @@ function Ride({ progress }) {
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
-export default function HeroBus3D({ progress, frame }) {
+export default function HeroBus3D({ progress, frame, paused = false }) {
   const wrap = useRef(null);
   const fallback = useRef(0);
   const [visible, setVisible] = useState(true);
@@ -379,7 +379,7 @@ export default function HeroBus3D({ progress, frame }) {
   return (
     <div ref={wrap} className="lp-3d" aria-hidden="true">
       <Canvas
-        frameloop={visible ? 'always' : 'never'}
+        frameloop={visible && !paused ? 'always' : 'never'}
         dpr={[1, COARSE ? 1.25 : 1.75]}
         onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', (e) => {
           e.preventDefault();

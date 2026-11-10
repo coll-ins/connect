@@ -1,8 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { webglOk } from '../../components/maps/webgl';
-import useHistoryStep from '../../hooks/useHistoryStep';
 import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
 import { SERVICES } from './howItWorks';
 
@@ -35,13 +34,20 @@ const sceneAt = (s) => SCENES.reduce((n, sc, i) => (s >= sc.at ? i : n), 0);
 // First screen of the installed app: the street plays like a film behind
 // everything, then Get started walks through the three services.
 export default function Welcome() {
-  const [step, goTo, back] = useHistoryStep();
-  const progress = useRef(STILL ? 1 : 0);
+  // The slide lives in the URL, so phone Back, reload and returning from
+  // sign-up all land on the same slide.
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const step = Math.min(SERVICES.length, Math.max(0, Number.parseInt(params.get('step') || '0', 10) || 0));
+  const goTo = (n) => setParams(n > 0 ? { step: String(n) } : {});
+  const back = () => navigate(-1);
+  const progress = useRef(0);
   const bars = useRef(null);
   const [scene, setScene] = useState(0);
 
+  // The film plays on the first screen only; behind the walkthrough it rests.
   useEffect(() => {
-    if (STILL) return undefined;
+    if (STILL || step > 0) return undefined;
     let frame = 0;
     const start = performance.now();
     const tick = (now) => {
@@ -55,7 +61,7 @@ export default function Welcome() {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [step]);
 
   const how = step > 0 ? SERVICES[Math.min(step, SERVICES.length) - 1] : null;
   const last = step >= SERVICES.length;
@@ -64,7 +70,7 @@ export default function Welcome() {
     <main className={`wl${how ? ' is-how' : ''}`}>
       <div className="wl-film" aria-hidden="true">
         {webglOk
-          ? <Suspense fallback={null}><HeroBus3D progress={progress} /></Suspense>
+          ? <Suspense fallback={null}><HeroBus3D progress={progress} paused={step > 0} /></Suspense>
           : <img className="lp-story-photo" src={matatuPhoto} alt="" />}
       </div>
       <div className="wl-scrim" />
@@ -87,7 +93,7 @@ export default function Welcome() {
               {SCENES.map((_, i) => <li key={i} className={i < scene ? 'is-done' : i === scene ? 'is-now' : ''}><i /></li>)}
             </ol>
           )}
-          <div className="wl-scene" key={scene} aria-live="polite">
+          <div className="wl-scene" key={scene}>
             <h1>{SCENES[scene].title}</h1>
             <p>{SCENES[scene].text}</p>
           </div>
