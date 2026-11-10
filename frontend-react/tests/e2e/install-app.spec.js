@@ -14,7 +14,8 @@ test.describe('android', () => {
   test('Chrome install prompt becomes an Install the app button', async ({ page }) => {
     await signedOut(page);
     await page.goto('/');
-    await expect(page.getByText('tap ⋮, then “Install app”')).toBeVisible();
+    await page.getByRole('button', { name: 'Install the app' }).click();
+    await expect(page.getByText('Open your browser menu (⋮ or ☰, top or bottom right).')).toBeVisible();
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt', { cancelable: true });
       e.prompt = () => { window.prompted = true; };
@@ -34,7 +35,8 @@ test.describe('iphone', () => {
   test('iPhone gets the Share, Add to Home Screen steps', async ({ page }) => {
     await signedOut(page);
     await page.goto('/');
-    await expect(page.getByText('tap Share, then “Add to Home Screen”')).toBeVisible();
+    await page.getByRole('button', { name: 'Install the app' }).click();
+    await expect(page.getByText('Tap “Add to Home Screen”.')).toBeVisible();
     await page.screenshot({ path: 'test-results/install-iphone.png' });
   });
 });
