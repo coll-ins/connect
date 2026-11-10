@@ -14,8 +14,8 @@ test.describe('android', () => {
   test('Chrome install prompt becomes an Install the app button', async ({ page }) => {
     await signedOut(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Install the app' }).click();
-    await expect(page.getByText('Open your browser menu (⋮ or ☰, top or bottom right).')).toBeVisible();
+    const apk = page.getByRole('link', { name: 'Install the app' });
+    await expect(apk).toHaveAttribute('href', '/connect.apk');
     await page.evaluate(() => {
       const e = new Event('beforeinstallprompt', { cancelable: true });
       e.prompt = () => { window.prompted = true; };
@@ -27,6 +27,17 @@ test.describe('android', () => {
     expect(await page.evaluate(() => window.prompted)).toBe(true);
     await page.screenshot({ path: 'test-results/install-android.png' });
   });
+
+  test('Without a browser prompt, Install the app downloads the APK', async ({ page }) => {
+    await signedOut(page);
+    await page.goto('/');
+    const [file] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('link', { name: 'Install the app' }).click(),
+    ]);
+    expect(file.suggestedFilename()).toBe('CONNECT.apk');
+    await expect(page.getByText('Tap CONNECT.apk when it finishes, then Install.')).toBeVisible();
+  });
 });
 
 test.describe('iphone', () => {
@@ -36,7 +47,7 @@ test.describe('iphone', () => {
     await signedOut(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Install the app' }).click();
-    await expect(page.getByText('Tap “Add to Home Screen”.')).toBeVisible();
+    await expect(page.getByText('Tap Share (square with an arrow), then “Add to Home Screen”.')).toBeVisible();
     await page.screenshot({ path: 'test-results/install-iphone.png' });
   });
 });

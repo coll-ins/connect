@@ -3,7 +3,8 @@ import { Download } from 'lucide-react';
 
 // Chrome on Android fires beforeinstallprompt (caught in main.jsx) only when its
 // own heuristics allow (not after a dismissal, not on every first visit), and
-// iPhones never do. So phones always get the button; without a prompt it shows the steps.
+// iPhones never do. So phones always get the button: Android without a prompt
+// downloads the real app (public/connect.apk, built from android/), iPhone gets the Share step.
 export default function InstallApp() {
   const [prompt, setPrompt] = useState(() => window.connectInstallPrompt || null);
   const [installed, setInstalled] = useState(false);
@@ -21,7 +22,6 @@ export default function InstallApp() {
   }, []);
 
   const install = async () => {
-    if (!prompt) return setSteps((v) => !v);
     prompt.prompt();
     const { outcome } = await prompt.userChoice;
     window.connectInstallPrompt = null;
@@ -32,35 +32,32 @@ export default function InstallApp() {
   const ua = navigator.userAgent;
   const ios = /iPhone|iPad|iPod/.test(ua);
   const android = /Android/.test(ua);
-  if (window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone) return null;
+  // Hidden inside the installed app: standalone (Chrome/TWA) or Android WebView ("; wv)").
+  if (window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone || /; wv\)/.test(ua)) return null;
 
+  const label = <><Download size={18} aria-hidden="true" /> Install the app</>;
   let body = null;
   if (installed) body = <p>Installed. Open CONNECT from your home screen.</p>;
-  else if (prompt || ios || android) {
+  else if (prompt) {
     body = (
       <>
-        <button type="button" className="btn btn-ghost lp-install-btn" onClick={install} aria-expanded={prompt ? undefined : steps}>
-          <Download size={18} aria-hidden="true" /> Install the app
-        </button>
+        <button type="button" className="btn btn-ghost lp-install-btn" onClick={install}>{label}</button>
         <p>Opens from your home screen, full screen, like any app.</p>
-        {steps && !prompt && (
-          <ol className="lp-install-steps">
-            {ios ? (
-              <>
-                <li>In Safari, tap Share (the square with an arrow).</li>
-                <li>Tap “Add to Home Screen”.</li>
-                <li>Tap Add.</li>
-              </>
-            ) : (
-              <>
-                <li>Open your browser menu (⋮ or ☰, top or bottom right).</li>
-                <li>Tap “Install app”, “Install” or “Add to Home screen”. If asked, pick Install, not “Create shortcut”.</li>
-                <li>Tap Install. CONNECT then shows in your app drawer and opens without an address bar.</li>
-                <li>Nothing appears? On Xiaomi, Redmi, Oppo or Vivo, go to Settings › Apps › your browser and allow “Home screen shortcuts”, then try again.</li>
-              </>
-            )}
-          </ol>
-        )}
+      </>
+    );
+  } else if (android) {
+    // No browser install prompt (Firefox, Brave, or Chrome holding it back): hand over the real app.
+    body = (
+      <>
+        <a href="/connect.apk" download="CONNECT.apk" className="btn btn-ghost lp-install-btn" onClick={() => setSteps(true)}>{label}</a>
+        <p>{steps ? 'Downloading. Tap CONNECT.apk when it finishes, then Install.' : 'Opens from your home screen, full screen, like any app.'}</p>
+      </>
+    );
+  } else if (ios) {
+    body = (
+      <>
+        <button type="button" className="btn btn-ghost lp-install-btn" onClick={() => setSteps((v) => !v)} aria-expanded={steps}>{label}</button>
+        <p>{steps ? 'Tap Share (square with an arrow), then “Add to Home Screen”.' : 'Opens from your home screen, full screen, like any app.'}</p>
       </>
     );
   }

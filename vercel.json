@@ -5,6 +5,14 @@
   "outputDirectory": "frontend-react/dist",
   "routes": [
     {
+      "src": "/connect\\.apk",
+      "headers": {
+        "Content-Type": "application/vnd.android.package-archive",
+        "Content-Disposition": "attachment; filename=\"CONNECT.apk\""
+      },
+      "continue": true
+    },
+    {
       "src": "/api/(.*)",
       "dest": "https://connect-lhqy.onrender.com/api/$1"
     },

@@ -7,3 +7,10 @@
 !README.md
 !twa-manifest.json
 !assetlinks.template.json
+# Hand-built APK for the site's Install button (see README: Direct download APK)
+!apk/
+!apk/**
+apk/.gradle/
+apk/**/build/
+*.keystore
+*.jks
