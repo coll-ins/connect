@@ -8,6 +8,7 @@ import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
 import seatPhoto from '../../assets/journeys/bookaseat.jpeg';
 import { isInstalledApp } from '../../utils/installedApp';
 import Welcome from './Welcome';
+import InstallApp from './InstallApp';
 import './Landing.css';
 
 // three.js is large: fetched after the words and buttons are already on screen.
@@ -86,6 +87,7 @@ export default function Landing() {
             <Link to="/signup" className="lp-link">New here? Create an account</Link>
           </div>
           <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
+          <InstallApp />
         </div>
 
         <div className="lp-hero-visual">
