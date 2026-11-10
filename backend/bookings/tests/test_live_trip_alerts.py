@@ -15,7 +15,7 @@ from rest_framework.test import APITestCase
 from bookings.departure import auto_depart_on_movement
 from bookings.models import Booking
 from companies.models import Company, PickupStage, Route, Trip
-from drivers.models import Driver
+from drivers.models import Driver, LocationPing
 from notifications import push
 from users.models import PushSubscription
 
@@ -125,6 +125,40 @@ class LiveTripTests(TestCase):
 
 
 class AutoCompleteTests(LiveTripTests):
+    def fix(self, at, prev=None):
+        # record_driver_fix keeps each real fix as a ping before the hook runs.
+        LocationPing.objects.create(driver=self.driver, latitude=at[0], longitude=at[1],
+                                    recorded_at=timezone.now())
+        return super().fix(at, prev)
+
+    def test_stale_earlier_trip_does_not_block_the_current_one(self):
+        r2 = Route.objects.create(company=self.route.company, name='Other', price=Decimal('100'))
+        PickupStage.objects.create(route=r2, name='A', latitude=-1.0, longitude=36.0, order=1)
+        PickupStage.objects.create(route=r2, name='B', latitude=-1.1, longitude=36.1, order=2)
+        Trip.objects.create(route=r2, driver=self.driver, status='departed', capacity=14,
+                            departure_at=timezone.now() - timedelta(hours=5))
+        self.trip.status = 'departed'
+        self.trip.departure_at = timezone.now() - timedelta(hours=1)
+        self.trip.save()
+        for stage in STAGES[1:]:
+            self.fix(stage[1:])
+        self.assertEqual(self.trip.status, 'completed')
+
+    def test_route_with_close_ends_does_not_finish_on_pulling_out(self):
+        PickupStage.objects.filter(route=self.route).delete()
+        PickupStage.objects.create(route=self.route, name='S', latitude=-1.2900, longitude=36.8200, order=1)
+        PickupStage.objects.create(route=self.route, name='M', latitude=-1.3500, longitude=36.9000, order=2)
+        PickupStage.objects.create(route=self.route, name='E', latitude=-1.2900, longitude=36.8216, order=3)
+        self.trip.status = 'boarding'
+        self.trip.departure_at = timezone.now() - timedelta(minutes=30)
+        self.trip.save()
+        pt = (-1.2900, 36.8225)
+        self.fix(pt, prev=pt)
+        self.assertEqual(self.trip.status, 'departed')
+        self.fix((-1.3500, 36.9000))
+        self.fix(pt)
+        self.assertEqual(self.trip.status, 'completed')
+
     def test_trip_ends_itself_at_last_stage_and_cannot_rerun(self):
         self.trip.status = 'departed'
         self.trip.departure_at = timezone.now() - timedelta(minutes=40)
@@ -132,6 +166,7 @@ class AutoCompleteTests(LiveTripTests):
         rider = self.rider(self.stages[1], '+254712300013')
         Booking.objects.filter(user=rider).update(status='completed')  # PIN verified on board
 
+        self.fix(STAGES[0][1:])
         self.fix(STAGES[2][1:])
         self.assertEqual(self.trip.status, 'departed')  # not the end yet
 
@@ -171,6 +206,7 @@ class GpsPrecisionTests(APITestCase):
         return r.data
 
     def test_wifi_guess_is_ignored(self):
+        self.assertEqual(self.post(-1.2856, 36.8250)['ignored'], 'no_accuracy')
         self.assertEqual(self.post(-1.2856, 36.8250, accuracy=900)['ignored'], 'low_accuracy')
         self.assertIsNone(self.driver.latitude)
         self.post(-1.2856, 36.8250, accuracy=8)

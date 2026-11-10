@@ -217,11 +217,12 @@ def _auto_complete(driver, lat, lng):
         .filter(driver=driver, status='departed',
                 departure_at__gte=now - timedelta(hours=12),
                 departure_at__lte=now - timedelta(minutes=min_minutes))
-        .order_by('departure_at', 'id')
+        .order_by('-departure_at', '-id')
         .first()
     )
     if trip is None:
         return
+    stages = list(trip.route.pickup_stages.filter(is_active=True).order_by('order', 'id'))
     last = trip.route.pickup_stages.filter(is_active=True).order_by('-order', '-id').first()
     if last is not None:
         end = (float(last.latitude), float(last.longitude), last.name)
@@ -230,6 +231,8 @@ def _auto_complete(driver, lat, lng):
     else:
         return
     if _metres(lat, lng, end[0], end[1]) > radius:
+        return
+    if not _drove_the_route(driver, trip, stages, end):
         return
 
     claims = []
@@ -253,3 +256,26 @@ def _auto_complete(driver, lat, lng):
                 url='/passenger', tag=f'trip-{trip.id}-end')
 
         transaction.on_commit(_after)
+
+
+def _drove_the_route(driver, trip, stages, end):
+    """Real GPS shows this run went out (over 1 km from the end) and then
+    passed the stage before the last, so a route whose ends are close
+    together cannot finish the moment the bus pulls out."""
+    from drivers.models import LocationPing
+
+    pings = list(
+        LocationPing.objects.filter(
+            driver=driver, recorded_at__gte=trip.departure_at - timedelta(minutes=30))
+        .values_list('latitude', 'longitude')
+    )
+    went_out = any(_metres(float(a), float(b), end[0], end[1]) > 1000 for a, b in pings)
+    if not went_out:
+        return False
+    if len(stages) < 3:
+        return True
+    before = stages[-2]
+    return any(
+        _metres(float(a), float(b), float(before.latitude), float(before.longitude)) <= 300
+        for a, b in pings
+    )

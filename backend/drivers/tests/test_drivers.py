@@ -597,6 +597,7 @@ class DriversAppTests(APITestCase):
             {
                 "latitude": -1.2921,
                 "longitude": 36.8219,
+                "accuracy": 10,
             },
             format="json",
         )

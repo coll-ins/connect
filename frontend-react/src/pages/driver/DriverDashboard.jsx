@@ -308,6 +308,7 @@ export default function DriverDashboard() {
             body: {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
             },
           },
         );

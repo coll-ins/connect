@@ -536,13 +536,13 @@ MAX_FIX_SPEED_KMH = 140
 
 def _imprecise_fix(driver, latitude, longitude, accuracy):
     """Why this fix must not move the bus, or None if it is fine."""
-    if accuracy not in (None, ''):
-        try:
-            accuracy = float(accuracy)
-        except (TypeError, ValueError):
-            return 'bad_accuracy'
-        if not 0 <= accuracy <= MAX_FIX_ACCURACY_M:
-            return 'low_accuracy'
+    # Every browser reports accuracy; a fix without it cannot be trusted.
+    try:
+        accuracy = float(accuracy)
+    except (TypeError, ValueError):
+        return 'no_accuracy'
+    if not 0 <= accuracy <= MAX_FIX_ACCURACY_M:
+        return 'low_accuracy'
     if driver.latitude is None or driver.location_updated_at is None:
         return None
     seconds = (timezone.now() - driver.location_updated_at).total_seconds()

@@ -206,7 +206,7 @@ class TripSimulationApiTests(TestCase):
         sim_id = self.start().json()['simulation']['id']
         self.client.post(
             f'/api/drivers/{self.driver.id}/location/',
-            {'latitude': -1.29, 'longitude': 36.83}, format='json',
+            {'latitude': -1.29, 'longitude': 36.83, 'accuracy': 10}, format='json',
         )
         self.assertEqual(TripSimulation.objects.get(pk=sim_id).status, 'stopped')
 
