@@ -241,6 +241,56 @@ def user_profile(request):
     return Response(serialize_session_user(request.user))
 
 
+MAX_PHONES = 5
+
+
+def _push_endpoint_ok(endpoint):
+    from notifications.push import endpoint_allowed
+
+    return endpoint_allowed(endpoint)
+
+
+def _push_key_ok(value, size):
+    from notifications.push import unb64u
+
+    try:
+        raw = unb64u(value)
+    except Exception:
+        return False
+    return isinstance(value, str) and len(raw) == size and (size != 65 or raw[0] == 4)
+
+
+@api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def push_subscription(request):
+    """GET: key to subscribe with. POST: save this phone. DELETE: forget it."""
+    from notifications.push import public_key
+    from .models import PushSubscription
+
+    if request.method == 'GET':
+        return Response({'public_key': public_key()})
+
+    endpoint = request.data.get('endpoint')
+    if request.method == 'DELETE':
+        PushSubscription.objects.filter(user=request.user, endpoint=endpoint).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    keys = request.data.get('keys') or {}
+    if not isinstance(keys, dict) or not _push_endpoint_ok(endpoint) or not (
+            _push_key_ok(keys.get('p256dh'), 65) and _push_key_ok(keys.get('auth'), 16)):
+        return Response({'error': 'This browser sent an invalid push subscription.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    with transaction.atomic():
+        # A phone that switches account moves with the endpoint.
+        PushSubscription.objects.update_or_create(
+            endpoint=endpoint,
+            defaults={'user': request.user, 'p256dh': keys['p256dh'], 'auth': keys['auth']},
+        )
+        stale = PushSubscription.objects.filter(user=request.user).order_by('-created_at')[MAX_PHONES:]
+        PushSubscription.objects.filter(pk__in=list(stale.values_list('pk', flat=True))).delete()
+    return Response({'subscribed': True}, status=status.HTTP_201_CREATED)
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def user_api_root(request):

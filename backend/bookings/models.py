@@ -52,6 +52,8 @@ class Booking(models.Model):
     passenger_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     passenger_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     stage_departure_at = models.DateTimeField(null=True, blank=True)
+    # Set once the rider was told the bus passed the stage before theirs.
+    approach_alert_at = models.DateTimeField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

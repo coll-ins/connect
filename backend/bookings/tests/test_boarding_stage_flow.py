@@ -202,7 +202,7 @@ class GpsAutoDepartTests(Base):
         url = reverse('drivers:driver-location',
                       kwargs={'driver_id': self.driver.id})
         resp = self.client.post(
-            url, {'latitude': STAGE_LAT, 'longitude': lng}, format='json'
+            url, {'latitude': STAGE_LAT, 'longitude': lng, 'accuracy': 10}, format='json'
         )
         self.assertEqual(resp.status_code, 200, resp.content)
 

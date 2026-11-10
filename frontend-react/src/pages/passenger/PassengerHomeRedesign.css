@@ -130,3 +130,24 @@
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
 }
 .booking-seat-note { margin: 0; font-size: 14px; color: var(--text-2); }
+
+/* One-tap bus alerts (Web Push). */
+.passenger-home .bus-alerts {
+  display: flex; align-items: center; gap: 12px;
+  margin: -12px 0 24px; padding: 12px 16px;
+  border: 1px solid var(--ph-line); border-radius: 12px; background: var(--ph-card);
+}
+.passenger-home .bus-alerts svg { flex: none; color: var(--ph-accent); }
+.passenger-home .bus-alerts p { flex: 1; margin: 0; color: var(--ph-muted); font-size: 14px; line-height: 1.5; }
+.passenger-home .bus-alerts button {
+  flex: none; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 8px;
+  background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600;
+  cursor: pointer; transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms;
+}
+.passenger-home .bus-alerts button:active { transform: scale(0.98); }
+.passenger-home .bus-alerts button:disabled { opacity: 0.6; cursor: progress; }
+.passenger-home .bus-alerts button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 560px) {
+  .passenger-home .bus-alerts { flex-wrap: wrap; }
+  .passenger-home .bus-alerts button { width: 100%; }
+}

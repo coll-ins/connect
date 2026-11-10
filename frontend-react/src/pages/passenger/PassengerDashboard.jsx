@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Armchair, ArrowUpRight, Banknote, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
+import { Armchair, ArrowUpRight, Banknote, Bell, Bus, Check, CreditCard, MapPin, Package, Smartphone } from 'lucide-react';
 
 import { apiRequest } from '../../api';
+import { enablePush, pushPermission } from '../../utils/push';
 import { useAuth } from '../../context/AuthContext';
 import { canOpenTripMap, isActiveBooking } from './liveMapUtils';
 import AppShell from '../../components/layout/AppShell';
@@ -626,6 +627,26 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     }
   };
 
+  const [alerts, setAlerts] = useState(pushPermission);
+  const [alertsBusy, setAlertsBusy] = useState(false);
+
+  useEffect(() => {
+    // Already allowed on this phone: keep the server's copy current, no prompt.
+    if (pushPermission() === 'granted') enablePush().catch(() => {});
+  }, []);
+
+  const turnOnAlerts = async () => {
+    setAlertsBusy(true);
+    try {
+      await enablePush({ ask: true });
+    } catch {
+      setError('Bus alerts could not be turned on. Check your connection and try again.');
+    } finally {
+      setAlerts(pushPermission());
+      setAlertsBusy(false);
+    }
+  };
+
   return <Shell>
     <div className="passenger-experience">
 
@@ -660,6 +681,22 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             </div>
 
           </div>
+
+          {(alerts === 'default' || alerts === 'denied') && (
+            <div className="bus-alerts" role="status">
+              <Bell size={18} aria-hidden="true" />
+              <p>
+                {alerts === 'denied'
+                  ? 'Bus alerts are blocked for CONNECT. Allow notifications for this app in your phone settings.'
+                  : 'Get a phone alert when your bus leaves and when it passes the stage before yours, even with CONNECT closed.'}
+              </p>
+              {alerts === 'default' && (
+                <button type="button" onClick={turnOnAlerts} disabled={alertsBusy}>
+                  {alertsBusy ? 'Turning on...' : 'Turn on bus alerts'}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="journey-choice-grid">
 
