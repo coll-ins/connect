@@ -99,6 +99,15 @@ class CustomUser(AbstractUser):
         return f"{self.username} - {self.phone_number}"
 
 
+class PushSubscription(models.Model):
+    """One phone/browser that accepts Web Push for this user."""
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='push_subscriptions')
+    endpoint = models.URLField(max_length=1000, unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 # --- Phone numbers are stored in one canonical format (+254...) -----------------
 from django.db.models.signals import pre_save  # noqa: E402
 

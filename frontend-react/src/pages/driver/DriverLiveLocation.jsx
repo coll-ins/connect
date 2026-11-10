@@ -308,6 +308,31 @@ export default function DriverLiveLocation() {
   }, [driver?.id, sendLocation]);
 
 
+  // A phone that sleeps stops sending GPS, and the passengers' map freezes.
+  // Keep the screen on while this page is open (Android Chrome / the app).
+  useEffect(() => {
+    if (!driver?.id || !('wakeLock' in navigator)) return undefined;
+    let lock = null;
+    let active = true;
+    const acquire = async () => {
+      if (document.visibilityState !== 'visible' || lock) return;
+      try {
+        lock = await navigator.wakeLock.request('screen');
+        lock.addEventListener('release', () => { lock = null; });
+        if (!active) lock.release().catch(() => {});
+      } catch {
+        lock = null; // Battery saver can refuse; GPS still works while the screen is on.
+      }
+    };
+    acquire();
+    document.addEventListener('visibilitychange', acquire);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', acquire);
+      lock?.release().catch(() => {});
+    };
+  }, [driver?.id]);
+
   /*
    * ------------------------------------------------------------
    * MANUAL GPS LOCATION

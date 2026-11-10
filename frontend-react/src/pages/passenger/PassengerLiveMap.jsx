@@ -5,6 +5,7 @@ import BaseTileLayer, { LIVE_TRAFFIC, TRAFFIC_RADIUS_M } from '../../components/
 import L from 'leaflet';
 import { ArrowLeft, LocateFixed, Navigation, Radio } from 'lucide-react';
 import { API_HOST, apiRequest } from '../../api';
+import { showLocalNotification } from '../../utils/push';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerLiveMap.css';
 import TiltedMapFrame, {
@@ -1350,28 +1351,13 @@ export default function PassengerLiveMap({
 
     pickupAlertSentRef.current = true;
 
-    if (
-      typeof window !== 'undefined' &&
-      'Notification' in window
-    ) {
-      const notify = () => {
-        new Notification('CONNECT — Your bus is close', {
-          body: `Your bus is approximately ${Math.max(
-            1,
-            Math.round(etaMinutes)
-          )} minutes from your pickup stage.`,
-        });
-      };
-
-      if (Notification.permission === 'granted') {
-        notify();
-      } else if (Notification.permission === 'default') {
-        Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') notify();
-        }).catch(() => {});
-      }
-    }
-  }, [etaMinutes]);
+    const minutes = Math.max(1, Math.round(etaMinutes));
+    showLocalNotification(
+      'CONNECT — Your bus is close',
+      `Your bus is approximately ${minutes} minutes from your pickup stage.`,
+      `booking-${bookingId}-near`,
+    );
+  }, [etaMinutes, bookingId]);
 
   return (
     <div

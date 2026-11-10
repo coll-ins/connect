@@ -76,6 +76,9 @@ R = [
  (C,'CBD to Karen','Karen','KEN',('Karen Shopping Centre',-1.3228991,36.7069392),'100.00',[],0),
  (C,'CBD to Upper Hill','Upper Hill','KEN',('Kenyatta National Hospital',-1.3009034,36.8085978),'70.00',[],0),
  (C,'CBD to Ngong Road','Ngong Road','KEN',('Ngong Road, Kimbo Stage',-1.302458,36.752073),'70.00',[],0),
+ # Kamangu: Ngong Road, then the Southern Bypass, then Thogoto. The bypass is
+ # divided here, so each way is steered on its own side (out at Lenana, back at the Ngong Road interchange).
+ (C,'CBD to Kamangu','Kamangu','KEN',('Kamangu',-1.2387313,36.600875),'150.00',[((-1.3083802,36.7258578),(-1.30978,36.727893))],0),
  (L,'CBD to Eastleigh','Eastleigh','ODE',('Eastleigh Section 3',-1.2847147,36.8558693),'60.00',[],0),
  (L,'CBD to Umoja','Umoja','ODE',('Umoja Innercore',-1.2823008,36.8913652),'80.00',[('Supermetro','Pipeline',(-1.2952187,36.8718614))],0),
  (L,'CBD to Waiyaki Way','Waiyaki Way','KEN',('Mountain View',-1.2642966,36.7382719),'70.00',[],0),
@@ -107,7 +110,7 @@ M = [
  ('Museum Hill','Museum Hill',['Nairobi National Museum']),('Chiromo','Chiromo',['Chiromo Bus Stage','Chiromo']),('Westlands','Westlands',['Westlands']),
  ('Safaricom House','Safaricom',['Safaricom/Saf']),('ABC Place','ABC',['ABC']),('Kangemi','Kangemi',['Kangemi']),('Mountain View','Mountain View',['Mountain View']),
  ('Uthiru','Uthiru',['Uthiru','Uthiru Bus Stop']),('Kinoo','Kinoo',['Kinoo Bus stop','Kinoo/Kikuyu']),('Muthiga','Muthiga',['Muthiga']),('Regen','Regen',['White House/Regen']),
- ('Gitaru','Gitaru',['Gitaru']),('Sarit Centre','Sarit',['Sarit Center']),
+ ('Gitaru','Gitaru',['Gitaru']),('Thogoto','Thogoto',['Thogoto']),('PCEA Kikuyu Hospital','PCEA Kikuyu hospital',['PCEA Kikuyu hospital']),('Gikambura','Gikambura',['Gikambura']),('Sarit Centre','Sarit',['Sarit Center']),
  ('Ngara','Ngara',['Ngara']),('Pangani','Pangani',['Pangani']),('Muthaiga','Muthaiga',['Muthaiga','Muthaiga Shopping Centre','Muthaiga Mini Market']),('Allsops','Allsops',['Allsops']),('Garden City','Garden City',['Garden City Mall']),
  ('Roysambu','Roysambu',['Roysambu']),('Githurai 45','Githurai',['Githurai']),('Kahawa Sukari','Kahawa Sukari',['Kahawa sukari']),('Kenyatta University','Kenyatta University',['Kenyatta University']),
  ('Kahawa Wendani','Wendani',['Kahawa Wendani']),('Ruiru','Ruiru',['Ruiru']),('Juja','Juja',['Juja']),('Thika Road Mall','Thika Road Mall',['Thika Road Mall TRM']),
@@ -369,7 +372,10 @@ def main():
         a, b = (tlat, tlng), (elat, elng)
         v_out, v_back = [], []
         for via in vias:
-            if isinstance(via[0], str):
+            if isinstance(via[0], tuple):
+                v_out.append(via[0])
+                v_back.append(via[1])
+            elif isinstance(via[0], str):
                 ref_out, ref_back = built[(via[0], via[1])]
                 v_out.append(project(ref_out, via[2])[2])
                 v_back.append(project(ref_back, via[2])[2])
