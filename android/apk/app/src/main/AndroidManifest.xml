@@ -15,6 +15,11 @@
             <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="https://connect-zj9i-gamma.vercel.app/" />
             <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/bg" />
             <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/bg" />
+            <!-- CONNECT's own splash while the browser engine starts, instead of the browser's logo. -->
+            <meta-data android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE" android:resource="@drawable/splash" />
+            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR" android:resource="@color/bg" />
+            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION" android:value="300" />
+            <meta-data android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY" android:value="ke.connectmatatu.app.fileprovider" />
             <!-- Phones with only Firefox or another non-TWA browser still open the app, in a WebView. -->
             <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="webview" />
             <intent-filter>
@@ -28,6 +33,13 @@
                 <data android:scheme="https" android:host="connect-zj9i-gamma.vercel.app" />
             </intent-filter>
         </activity>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="ke.connectmatatu.app.fileprovider"
+            android:grantUriPermissions="true"
+            android:exported="false">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths" />
+        </provider>
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
         <activity
             android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"

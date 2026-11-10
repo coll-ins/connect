@@ -6,7 +6,7 @@ import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
 
 // A Nairobi street at dusk: the same matatu model the live map uses drives up
 // the road to the passenger's stage. `progress` (a ref, 0..1) comes from the
-// page scroll; `autoplay` plays the arrival once instead (installed app).
+// page scroll, or from the installed app's film clock.
 export const STILL = typeof window !== 'undefined'
   && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -249,7 +249,7 @@ function Framing({ frame }) {
 const CRUISE = 9; // units a second, about 30 km/h for a bus this size
 const easeOut = (t) => 1 - (1 - t) ** 2;
 
-function Ride({ progress, autoplay }) {
+function Ride({ progress }) {
   const bus = useRef(null);
   const body = useRef(null);
   const route = useRef(null);
@@ -261,25 +261,23 @@ function Ride({ progress, autoplay }) {
   const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height));
   // A tall phone screen is narrow: step back so the whole bus fits across it.
   const pull = aspect < 1 ? Math.min(1.6, aspect ** -0.6) : 1;
-  const shown = useRef(autoplay ? 0.4 : progress.current);
+  const shown = useRef(progress.current);
   const clock = useRef(0);
   // How far the bus has cruised, and where it was when it began to slow.
   const drive = useRef({ odo: 0, from: 0 });
   const pos = useMemo(() => new Vector3(), []);
   const look = useMemo(() => new Vector3(), []);
 
-  useFrame((state, raw) => {
+  useFrame((_, raw) => {
     const delta = Math.min(raw, 0.1);
     clock.current += delta;
-    if (autoplay) {
-      // Cruise for a moment, then pull in to the stage.
-      const t = clamp01((clock.current - 1.1) / 3.4);
-      shown.current = STILL ? 1 : 0.4 + (1 - (1 - t) ** 3) * 0.6;
-    } else {
-      const target = progress.current;
-      // Eased toward the scroll position, so the camera glides like a dolly.
-      shown.current = STILL ? target : shown.current + (target - shown.current) * (1 - Math.exp(-delta / 0.18));
-    }
+    const target = progress.current;
+    // Eased toward the scroll position, so the camera glides like a dolly. A big
+    // jump (the film looping, a jump to the top) is a cut, so the bus never
+    // reverses back down the road.
+    shown.current = STILL || Math.abs(target - shown.current) > 0.5
+      ? target
+      : shown.current + (target - shown.current) * (1 - Math.exp(-delta / 0.18));
     const p = shown.current;
 
     // Before the stop the bus drives on by itself; scrolling on brings it in
@@ -322,8 +320,6 @@ function Ride({ progress, autoplay }) {
       r.rotation.z = w > 0 ? Math.atan2(-2, LANE_X - 0.95 + 5) - Math.PI / 2 : 0;
       r.children[0].position.z = 0.62 + (w > 0 && w < 1 ? Math.abs(Math.sin(boarded.current * 9)) * 0.05 : 0);
     }
-    // The installed app plays once: keep drawing until the rider is aboard, then rest.
-    if (autoplay && (f < 1 || boarded.current < 2.6)) state.invalidate();
     if (route.current) {
       const len = Math.max(0.001, stageY - busY - 2.4);
       route.current.scale.y = len;
@@ -363,7 +359,7 @@ function Ride({ progress, autoplay }) {
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
-export default function HeroBus3D({ progress, autoplay = false, frame }) {
+export default function HeroBus3D({ progress, frame, paused = false }) {
   const wrap = useRef(null);
   const fallback = useRef(0);
   const [visible, setVisible] = useState(true);
@@ -383,7 +379,7 @@ export default function HeroBus3D({ progress, autoplay = false, frame }) {
   return (
     <div ref={wrap} className="lp-3d" aria-hidden="true">
       <Canvas
-        frameloop={autoplay ? 'demand' : visible ? 'always' : 'never'}
+        frameloop={visible && !paused ? 'always' : 'never'}
         dpr={[1, COARSE ? 1.25 : 1.75]}
         onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', (e) => {
           e.preventDefault();
@@ -399,7 +395,7 @@ export default function HeroBus3D({ progress, autoplay = false, frame }) {
         <directionalLight position={[-8, 6, 14]} intensity={1.6} color="#ffe6c4" />
         <directionalLight position={[10, -12, 6]} intensity={0.5} color="#9bb7ff" />
         <Framing frame={frame} />
-        <Ride progress={progress || fallback} autoplay={autoplay} />
+        <Ride progress={progress || fallback} />
       </Canvas>
     </div>
   );

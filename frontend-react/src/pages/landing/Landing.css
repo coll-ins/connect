@@ -224,24 +224,95 @@
 }
 
 
-/* Installed-app welcome: one screen, one action. */
-.wl {
-  min-height: 100dvh; display: flex; flex-direction: column; gap: 16px;
-  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
-  background: var(--bg); color: var(--text); max-width: 560px; margin: 0 auto;
+/* Website: how it works, one service at a time */
+.lp-how-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 32px; }
+.lp-how-tabs button {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 16px;
+  border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; color: var(--text-2);
+  font-weight: 600; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
+.lp-how-tabs button:hover { color: var(--text); border-color: var(--text-3); }
+.lp-how-tabs button[aria-selected='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.lp-how-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lp .lp-how-line { margin-top: 24px; color: var(--text-2); font-size: 1.0625rem; max-width: 60ch; }
+.lp-how-line + .lp-steps { margin-top: 32px; }
+.lp-steps { animation: lp-swap 360ms var(--ease) both; }
+@keyframes lp-swap { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Installed app: the street plays full screen behind everything. */
+.wl {
+  position: relative; min-height: 100dvh; overflow-x: clip; display: flex; flex-direction: column;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background: var(--bg); color: var(--text);
+}
+.wl-film { position: fixed; inset: 0; }
+.wl-film .lp-3d { position: absolute; inset: 0; }
+.wl-scrim {
+  position: fixed; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, var(--bg) 0%, rgb(11 18 21 / 0.9) 40%, rgb(11 18 21 / 0) 72%),
+              linear-gradient(to bottom, rgb(11 18 21 / 0.7) 0%, rgb(11 18 21 / 0) 18%);
+  transition: background-color 400ms var(--ease);
+}
+.wl.is-how .wl-scrim { background-color: rgb(11 18 21 / 0.72); }
+.wl-top, .wl-copy, .wl-how { position: relative; z-index: 1; width: 100%; max-width: 520px; margin-left: auto; margin-right: auto; }
+.wl-top { display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
 .wl-brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.125rem; }
 .wl-brand .brand-mark { width: 40px; height: 40px; font-size: 1.25rem; border-radius: 10px; }
-.wl-visual { position: relative; aspect-ratio: 4 / 3; max-height: 40dvh; width: 100%; margin: auto auto 0; border-radius: var(--radius-panel); overflow: hidden; background: #121b21; border: 1px solid var(--border); }
-/* Taller than its box: the bus arrives in the upper part, above the words. */
-.wl-visual { aspect-ratio: auto; height: 46dvh; max-height: none; animation: wl-in 700ms var(--ease) both; }
-.wl-copy { animation: wl-in 600ms var(--ease) 900ms both; }
-@keyframes wl-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-.wl-visual img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+.wl-back {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px 8px 8px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: rgb(11 18 21 / 0.6);
+  color: var(--text); font-weight: 600;
+}
+.wl-skip { min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px; color: var(--text-2); font-weight: 600; }
+
 .wl-copy { margin-top: auto; }
-.wl-copy h1 { margin: 0; font-size: 2rem; line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; text-wrap: balance; }
-.wl-copy p { margin: 12px 0 0; color: var(--text-2); font-size: 1.0625rem; line-height: 1.5; }
+.wl-bars { list-style: none; display: flex; gap: 6px; margin: 0 0 20px; padding: 0; }
+.wl-bars li { flex: 1; height: 3px; border-radius: 2px; background: rgb(255 255 255 / 0.18); overflow: hidden; }
+.wl-bars i { display: block; height: 100%; background: var(--text); transform-origin: left; transform: scaleX(0); }
+.wl-bars .is-done i { transform: scaleX(1); }
+.wl-bars .is-now i { transform: scaleX(var(--fill, 0)); }
+.wl-scene { min-height: 9.5rem; animation: wl-in 520ms var(--ease) both; }
+.wl-scene h1 { margin: 0; font-size: clamp(2.25rem, 9vw, 3rem); line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; text-wrap: balance; }
+.wl-scene p { margin: 12px 0 0; color: var(--text-2); font-size: 1.0625rem; line-height: 1.5; }
 .wl-start { display: flex; width: 100%; min-height: 52px; margin-top: 24px; font-size: 1.0625rem; justify-content: center; align-items: center; }
 .wl-start:active { transform: scale(0.98); }
-.wl .wl-legal { margin-top: 16px; font-size: 0.875rem; color: var(--text-3); text-align: center; }
-.wl-legal a { color: var(--text-2); text-underline-offset: 3px; }
+.wl-login { display: flex; justify-content: center; align-items: center; min-height: 48px; margin-top: 8px; color: var(--text); font-weight: 600; }
+.wl .wl-legal { margin: 8px 0 0; font-size: 0.8125rem; color: var(--text-3); text-align: center; }
+.wl-legal a { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
+
+.wl-how { margin-top: auto; animation: wl-in 420ms var(--ease) both; }
+.wl-how-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--accent); color: var(--accent-ink); }
+.wl-how h1 { margin: 16px 0 0; font-size: 2.25rem; line-height: 1.05; letter-spacing: -0.035em; font-weight: 600; }
+.wl .wl-how-line { margin: 8px 0 0; color: var(--text-2); font-size: 1.0625rem; line-height: 1.5; }
+.wl-how-steps { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 16px; counter-reset: stage; }
+.wl-how-steps li { position: relative; display: grid; gap: 2px; padding-left: 40px; counter-increment: stage; }
+.wl-how-steps li::before {
+  content: counter(stage); position: absolute; left: 0; top: 0; width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); color: var(--accent-text); font-size: 0.8125rem; font-weight: 700;
+}
+.wl-how-steps li:not(:last-child)::after { content: ''; position: absolute; left: 12px; top: 28px; bottom: -16px; width: 2px; background: repeating-linear-gradient(180deg, var(--accent) 0 6px, transparent 6px 10px); }
+.wl-how-steps span { color: var(--text-2); line-height: 1.45; font-size: 0.9375rem; }
+.wl-dots { display: flex; justify-content: center; gap: 8px; margin-top: 24px; }
+.wl-dots i { width: 8px; height: 8px; border-radius: 4px; background: rgb(255 255 255 / 0.25); transition: width var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease); }
+.wl-dots i.is-on { width: 24px; background: var(--accent); }
+/* Small phones: the walkthrough keeps step titles and drops their details. */
+@media (max-height: 600px) {
+  .wl-how-steps span { display: none; }
+  .wl-how h1 { font-size: 1.875rem; }
+  .wl-how-icon { width: 40px; height: 40px; }
+}
+@media (max-height: 700px) {
+  .wl-how h1 { font-size: 1.875rem; margin-top: 12px; }
+  .wl-how-icon { width: 40px; height: 40px; }
+  .wl .wl-how-line { font-size: 1rem; }
+  .wl-how-steps { gap: 8px; margin-top: 16px; }
+  .wl-how-steps span { font-size: 0.8125rem; line-height: 1.35; }
+  .wl-dots { margin-top: 16px; }
+  .wl-how .wl-start { margin-top: 16px; }
+  .wl-how .wl-login { min-height: 44px; margin-top: 4px; }
+}
+@media (max-height: 640px) {
+  .wl-how-steps span { font-size: 0.875rem; }
+  .wl-scene { min-height: 8rem; }
+}
+@keyframes wl-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
