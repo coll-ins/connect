@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-// The whole seat journey against the real API: no step may leave the
-// passenger without a way forward (pay later, pay, track, cancel).
-test('passenger books, pays later from My bookings, then cancels', async ({ page }) => {
+// The whole seat journey against the real API: walking away books nothing,
+// and a real booking can be paid, tracked and cancelled.
+test('closing the payment window books nothing; a paid booking can be cancelled', async ({ page }) => {
   page.on('dialog', (d) => d.accept());
 
   await page.goto('/login');
@@ -38,21 +38,30 @@ test('passenger books, pays later from My bookings, then cancels', async ({ page
 
   const scheduled = page.locator('article', { hasText: 'scheduled' }).first();
   await expect(scheduled).toContainText('seats left');
-  await scheduled.getByRole('button', { name: 'Select trip' }).click();
-  await page.getByRole('radio', { name: 'Choose for me' }).click();
-  await page.getByRole('button', { name: 'Book 1 seat' }).click();
+  const bookOneSeat = async () => {
+    await scheduled.getByRole('button', { name: 'Select trip' }).click();
+    await page.getByRole('radio', { name: 'Choose for me' }).click();
+    await page.getByRole('button', { name: 'Book 1 seat' }).click();
+    await expect(page.getByRole('button', { name: /Pay cash on board/ })).toBeVisible();
+  };
 
-  // Walk away from the payment window: the booking must still be payable.
+  // Walk away before paying: nothing is booked and the seat is free again.
+  await bookOneSeat();
   await page.getByRole('button', { name: 'Close' }).first().click();
-  await page.goto('/passenger/bookings');
-  const card = page.locator('.passenger-data-card').first();
-  await card.getByRole('button', { name: 'Pay now' }).click();
+  await expect(page.getByText('nothing was booked')).toBeVisible();
+  const mine = await (await page.request.get('/api/bookings/my/')).json();
+  expect(mine.filter((b) => b.status === 'pending')).toHaveLength(0);
+
+  // Book again and pay cash on board this time.
+  await bookOneSeat();
   await page.getByRole('button', { name: /Pay cash on board/ }).click();
   await expect(page).toHaveURL(/\/passenger\/map\?booking=/);
   await expect(page.getByText('Seat reserved · awaiting payment')).toBeVisible();
 
   // Change of plans: cancel from My bookings frees the seat.
   await page.goto('/passenger/bookings');
+  // Newest first: the cash booking, above the one cancelled on close.
+  const card = page.locator('.passenger-data-card').first();
   await card.getByRole('button', { name: 'Cancel booking' }).click();
   await expect(card.locator('.passenger-status')).toHaveText(/cancelled/i);
   await expect(card.getByRole('button')).toHaveCount(0);

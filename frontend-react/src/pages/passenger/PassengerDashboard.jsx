@@ -481,9 +481,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         body
       });
 
+      // The stage stays chosen: closing the payment window before paying
+      // returns to this same trip list, not back to picking a stage.
       setBookingTrip(null);
-      setSelectedStage(null);
-      setOtherPickup('');
       await refresh();
 
       setPaymentBooking({
