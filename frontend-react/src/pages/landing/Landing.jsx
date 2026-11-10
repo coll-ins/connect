@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { Armchair, MapPinned, Package, Bus, Receipt, ShieldCheck, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -13,6 +13,138 @@ import './Landing.css';
 
 // three.js is large: fetched after the words and buttons are already on screen.
 const HeroBus3D = lazy(() => import('./HeroBus3D'));
+
+const STILL = typeof window !== 'undefined'
+  && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+// Scroll position where each chapter takes over (matches the camera stops in HeroBus3D).
+const CHAPTER_AT = [0, 0.22, 0.5, 0.8];
+
+function SeatCard() {
+  return (
+    <div className="lp-seatmap" aria-hidden="true">
+      <p>Pick a seat</p>
+      <div className="lp-seats">
+        {SEATS.map((state, i) => <span key={i} className={`lp-seat is-${state}`}>{SEAT_LABELS[i]}</span>)}
+      </div>
+      <div className="lp-legend"><span className="is-free">Free</span><span className="is-taken">Taken</span><span className="is-mine">Yours</span></div>
+    </div>
+  );
+}
+
+function Ticket({ arrived }) {
+  return (
+    <div className="lp-ticket" aria-hidden="true">
+      <div className="lp-ticket-row">
+        <span>CBD to Rongai</span>
+        <span className="lp-live"><i />{arrived ? 'At your stage' : 'Live'}</span>
+      </div>
+      <div className="lp-ticket-route"><b /><span /><b /></div>
+      <dl>
+        <div><dt>Seat</dt><dd>6</dd></div>
+        <div><dt>Leaves</dt><dd>17:40</dd></div>
+        <div><dt>Fare</dt><dd>KES 150</dd></div>
+        <div><dt>PIN</dt><dd>4 8 2 1</dd></div>
+      </dl>
+      <p>{arrived ? 'Show your PIN to the driver and board.' : 'Bus is 2 stages away, about 6 min'}</p>
+    </div>
+  );
+}
+
+// The first screens: the street stays pinned while the words change, and the
+// matatu drives up to the stage as the visitor scrolls.
+function Story() {
+  const section = useRef(null);
+  const progress = useRef(0);
+  const [chapter, setChapter] = useState(0);
+
+  useEffect(() => {
+    const el = section.current;
+    if (!el || STILL) return undefined;
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      const r = el.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - window.innerHeight)));
+      progress.current = p;
+      el.style.setProperty('--p', p.toFixed(4));
+      let c = 0;
+      while (c < CHAPTER_AT.length - 1 && p >= CHAPTER_AT[c + 1]) c += 1;
+      setChapter(c);
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(read); };
+    read();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  // Hidden chapters are inert so Tab never lands on an invisible link.
+  const at = (i) => {
+    const on = STILL || chapter === i;
+    return { className: `lp-chapter${on ? ' is-on' : ''}`, inert: on ? undefined : true };
+  };
+
+  return (
+    <section ref={section} className={`lp-story${STILL ? ' is-still' : ''}`}>
+      <div className="lp-story-stage">
+        {webglOk ? (
+          <Suspense fallback={null}><HeroBus3D progress={progress} /></Suspense>
+        ) : (
+          <img className="lp-story-photo" src={matatuPhoto} alt="A red and white Nairobi matatu parked at a stage" />
+        )}
+        <div className="lp-story-scrim" />
+        {!STILL && (
+          <ol className="lp-story-route" aria-hidden="true">
+            {CHAPTER_AT.map((_, i) => <li key={i} className={i <= chapter ? 'is-done' : ''} />)}
+          </ol>
+        )}
+
+      <div className="lp-chapters lp-wrap">
+        <div {...at(0)}>
+          <h1>Your matatu seat, booked before you reach the stage.</h1>
+          <p className="lp-lead">
+            Book a seat on a matatu, pay for it, and watch the bus come to you on a live map.
+            No pushing at the stage, no waiting blind.
+          </p>
+          <div className="lp-cta">
+            <Link to="/signup" className="btn btn-primary lp-btn-lg">Get started</Link>
+            <Link to="/login" className="lp-link">I have an account</Link>
+          </div>
+          <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
+          <InstallApp />
+          {!STILL && <p className="lp-scroll-cue" aria-hidden="true">Scroll to ride along</p>}
+        </div>
+
+        <div {...at(1)}>
+          <h2>Pick the exact seat.</h2>
+          <p className="lp-lead">See which seats are free on the next trips and tap the one you want. Window, aisle, front row. It is yours once it is paid.</p>
+          <SeatCard />
+        </div>
+
+        <div {...at(2)}>
+          <h2>Watch it come to you.</h2>
+          <p className="lp-lead">Your bus moves on a live map, stage by stage. Leave the house when it is close, not an hour early.</p>
+          <Ticket />
+        </div>
+
+        <div {...at(3)}>
+          <h2>Board with your PIN.</h2>
+          <p className="lp-lead">The driver checks your PIN, you take your seat. Your receipt names the bus, the driver and the fare.</p>
+          <Ticket arrived />
+          <div className="lp-cta">
+            <Link to="/signup" className="btn btn-primary lp-btn-lg">Book your first seat</Link>
+          </div>
+        </div>
+      </div>
+      </div>
+    </section>
+  );
+}
 
 const PROBLEMS = [
   {
@@ -43,7 +175,7 @@ const FEATURES = [
 ];
 
 // The real 14-seater HiAce: 2 beside the driver (front right), then rows of 3.
-// Seat 7 matches the hero ticket.
+// Seat 6 matches the ticket in the story.
 const SEATS = [
   'taken', 'free', 'driver',
   'free', 'taken', 'free',
@@ -68,53 +200,17 @@ export default function Landing() {
 
   return (
     <div className="lp">
-      <header className="lp-nav lp-wrap">
+      <header className="lp-nav">
+        <div className="lp-nav-in lp-wrap">
         <Link to="/" className="lp-logo"><span className="brand-mark">C</span>CONNECT</Link>
         <nav className="lp-nav-actions">
-          <Link to="/login" className="btn btn-primary">Get started</Link>
+          <Link to="/login" className="lp-link">Log in</Link>
+          <Link to="/signup" className="btn btn-primary">Get started</Link>
         </nav>
+        </div>
       </header>
 
-      <section className="lp-hero lp-wrap">
-        <div className="lp-hero-copy">
-          <h1>Your matatu seat, booked before you reach the stage.</h1>
-          <p className="lp-lead">
-            CONNECT lets you book a seat on a matatu, pay for it, and watch the bus come to you on a live map.
-            No pushing at the stage, no waiting blind.
-          </p>
-          <div className="lp-cta">
-            <Link to="/login" className="btn btn-primary lp-btn-lg">Get started</Link>
-            <Link to="/signup" className="lp-link">New here? Create an account</Link>
-          </div>
-          <p className="lp-fact">Free to join. Pay with M-Pesa or card.</p>
-          <InstallApp />
-        </div>
-
-        <div className="lp-hero-visual">
-          {webglOk ? (
-            <div className="lp-stage">
-              <Suspense fallback={null}><HeroBus3D /></Suspense>
-              <p className="lp-stage-caption">The bus you book, on its way to your stage.</p>
-            </div>
-          ) : (
-            <img src={matatuPhoto} alt="A red and white Nairobi matatu parked at a stage" width="736" height="1308" />
-          )}
-          <div className="lp-ticket" aria-hidden="true">
-            <div className="lp-ticket-row">
-              <span>CBD → Rongai</span>
-              <span className="lp-live"><i />Live</span>
-            </div>
-            <div className="lp-ticket-route"><b /><span /><b /></div>
-            <dl>
-              <div><dt>Seat</dt><dd>7</dd></div>
-              <div><dt>Leaves</dt><dd>17:40</dd></div>
-              <div><dt>Fare</dt><dd>KES 150</dd></div>
-              <div><dt>PIN</dt><dd>4 8 2 1</dd></div>
-            </dl>
-            <p>Bus is 2 stages away, about 6 min</p>
-          </div>
-        </div>
-      </section>
+      <Story />
 
       <section className="lp-section lp-wrap">
         <h2>What it fixes</h2>
@@ -131,13 +227,6 @@ export default function Landing() {
       <section className="lp-section lp-wrap lp-split">
         <div className="lp-seat-photo">
           <img src={seatPhoto} alt="Reclining bus seats with seat belts" width="736" height="981" loading="lazy" />
-          <div className="lp-seatmap" aria-hidden="true">
-            <p>Pick a seat</p>
-            <div className="lp-seats">
-              {SEATS.map((state, i) => <span key={i} className={`lp-seat is-${state}`}>{SEAT_LABELS[i]}</span>)}
-            </div>
-            <div className="lp-legend"><span className="is-free">Free</span><span className="is-taken">Taken</span><span className="is-mine">Yours</span></div>
-          </div>
         </div>
         <div>
           <h2>Everything for the trip, in one app</h2>
