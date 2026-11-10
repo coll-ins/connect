@@ -35,8 +35,8 @@ test.describe('android', () => {
       page.waitForEvent('download'),
       page.getByRole('link', { name: 'Install the app' }).click(),
     ]);
-    expect(file.suggestedFilename()).toBe('CONNECT.apk');
-    await expect(page.getByText('Tap CONNECT.apk when it finishes, then Install.')).toBeVisible();
+    expect(file.suggestedFilename()).toBe('connect.apk');
+    await expect(page.getByText('Tap connect.apk when it finishes, then Install.')).toBeVisible();
   });
 });
 
