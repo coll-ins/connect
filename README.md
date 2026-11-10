@@ -133,6 +133,11 @@ to the server.
 - After deployment, run the smoke test and periodically test database restores;
   automation cannot replace monitoring payment settlement, SMS delivery, and
   passenger/driver support.
+- Routes, their road lines and stages ship in
+  `backend/companies/data/route_network.json` and are installed by a migration.
+  Every route has a way back, and the last stage is drop-off only. To change the
+  network, edit the route list in `tools/build_route_network.py`, run it (it
+  reads OpenStreetMap roads and stops), then add a migration that loads the file.
 
 ---
 

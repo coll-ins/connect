@@ -165,6 +165,10 @@ class BoardingStageBookingTests(Base):
         )
 
     def test_scheduled_trip_still_accepts_any_stage(self):
+        # The last stage is where the trip ends, so give stage2 one after it.
+        PickupStage.objects.create(
+            route=self.route, name='End', latitude=-1.26, longitude=36.79, order=2,
+        )
         self.assertEqual(self._book(self.stage2).status_code, 201)
 
     def test_departed_trip_rejected(self):

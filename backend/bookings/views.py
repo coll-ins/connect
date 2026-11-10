@@ -1682,6 +1682,25 @@ def create_booking(request):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
+                # The last stage is where the trip ends: riders get off
+                # there, so it cannot be where one gets on.
+                _stage_ids = list(
+                    PickupStage.objects
+                    .filter(route_id=trip.route_id, is_active=True)
+                    .order_by('order', 'id')
+                    .values_list('id', flat=True)
+                )
+                if len(_stage_ids) > 1 and pickup_stage.id == _stage_ids[-1]:
+                    return Response(
+                        {
+                            'error': (
+                                f'{pickup_stage.name} is where this trip '
+                                'ends. Choose the stage you will board at.'
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
                 pickup_location = pickup_stage.name
             else:
                 pickup_location = legacy_pickup_location

@@ -42,3 +42,4 @@ smoke.sqlite3
 
 # Nexus / editor tooling (installed per machine, never committed)
 .claude/
+.route_cache/

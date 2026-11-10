@@ -11,18 +11,22 @@ test('passenger books, pays later from My bookings, then cancels', async ({ page
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/passenger/);
 
-  // Find the seeded route that has the demo stage.
+  // Find the route the seeded trips run on, and the stage they leave from.
   const companies = await (await page.request.get('/api/companies/')).json();
   let target = null;
   for (const c of companies) {
+    const seeded = await (await page.request.get(`/api/companies/${c.id}/trips/`)).json();
+    const trip = seeded.find((t) => t.status === 'scheduled');
+    if (!trip) continue;
     const routes = await (await page.request.get(`/api/companies/${c.id}/routes/`)).json();
-    const r = routes.find((x) => (x.pickup_stages || []).some((s) => s.name === 'Kencom House'));
-    if (r) { target = { company: c.id, route: r.id }; break; }
+    const r = routes.find((x) => x.id === trip.route);
+    target = { company: c.id, route: r.id, stage: r.pickup_stages[0].name };
+    break;
   }
   expect(target).not.toBeNull();
 
   await page.goto(`/passenger?step=stages&mode=seat&company=${target.company}&route=${target.route}`);
-  await page.getByText('Kencom House').first().click();
+  await page.getByText(target.stage).first().click();
 
   // The seeded scheduled trip leaves 3 hours after seeding, which is
   // tomorrow in Nairobi when the suite runs late in the day: show its date.
