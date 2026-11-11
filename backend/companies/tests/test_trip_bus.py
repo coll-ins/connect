@@ -162,6 +162,13 @@ class TripVehicleTypeTests(APITestCase):
         self.assertIn('has trips', r.json()['error'])
         self.assertEqual(Bus.objects.get(pk=self.bus51.pk).capacity, 51)
 
+    def test_plate_typed_with_a_dash_is_read_as_the_plate(self):
+        drv = Driver.objects.create(name='kimani kamande', phone_number='+254700000806',
+                                    bus_number='KBE-465S', company=self.co)
+        r = self._make(drv, 'minibus_33')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.json()['capacity'], r.json()['bus_plate']), (33, 'KBE 465S'))
+
     def test_bad_type_and_other_companys_plate_are_refused(self):
         self.assertEqual(self._make(self.drv, 'jumbo').status_code, 400)
         self._bus('bus_51', 'KDD 777D', '9', company=self.other)

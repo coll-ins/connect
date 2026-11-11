@@ -47,7 +47,7 @@ def driver_bus(driver, vehicle_type):
     if not isinstance(vehicle_type, str) or vehicle_type not in VEHICLES:
         return None, 'Pick a vehicle type.'
     number = (driver.bus_number or '').strip()
-    compact = ''.join(number.upper().split())
+    compact = ''.join(ch for ch in number.upper() if ch.isalnum())  # 'KBE-465S' is a plate
     plate = (f'{compact[:3]} {compact[3:]}'
              if re.fullmatch(r'(K[A-Z]{2}|EV[A-Z])\d{3}[A-Z]', compact) else None)
     match = Q(bus_number__iexact=number) if number else Q(pk__in=[])
