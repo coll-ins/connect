@@ -15,6 +15,7 @@ from drivers.models import Driver
 from users.permissions import can_access_company
 from users.route_scope import operator_route_ids
 
+from .fleet import driver_bus
 from .models import Company, Route, Trip, TripSchedule, WeeklyOperationsReport
 from .trip_generation import regenerate_for_schedule
 from .views import can_manage_company
@@ -35,7 +36,7 @@ def _bad(msg, code=status.HTTP_400_BAD_REQUEST):
 def _int(v):
     try:
         return int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -91,6 +92,13 @@ def _clean(d, company, partial):
         if not driver:
             return None, 'driver not found for this company.'
         f['driver'] = driver
+    if d.get('vehicle_type') and not d.get('bus_id'):
+        if 'driver' not in f:
+            return None, 'driver_id is required with vehicle_type.'
+        bus, problem = driver_bus(f['driver'], d.get('vehicle_type'))
+        if problem:
+            return None, problem
+        d = {**d, 'bus_id': bus.id}
     if not partial or 'bus_id' in d:
         # Seats come from the bus; a 'capacity' in the request is ignored.
         raw = d.get('bus_id')
@@ -292,13 +300,13 @@ def create_schedule(request):
     company = get_object_or_404(Company, id=_int(request.data.get('company_id')))
     if not can_manage_company(request.user, company):
         return _bad('You are not authorized to create schedules for this company.', 403)
-    f, err = _clean(request.data, company, partial=False)
-    if err:
-        return _bad(err, 404 if 'not found' in err else 400)
-    candidate = TripSchedule(**f)
-    err = _validate_template(candidate, f)
-    if err:
-        return _bad(err)
+    with transaction.atomic():  # driver_bus may retype a bus: undo it on a refusal
+        f, err = _clean(request.data, company, partial=False)
+        if not err:
+            err = _validate_template(TripSchedule(**f), f)
+        if err:
+            transaction.set_rollback(True)
+            return _bad(err, 404 if 'not found' in err else 400)
     try:
         with transaction.atomic():
             Company.objects.select_for_update().get(pk=company.pk)
@@ -348,11 +356,11 @@ def manage_schedule(request, schedule_id):
     with transaction.atomic():
         s = TripSchedule.objects.select_for_update().select_related('route', 'driver').get(pk=schedule_id)
         f, err = _clean(request.data, company, partial=True)
+        if not err:
+            err = _validate_template(s, f)
         if err:
+            transaction.set_rollback(True)  # undo a retype by driver_bus
             return _bad(err, 404 if 'not found' in err else 400)
-        err = _validate_template(s, f)
-        if err:
-            return _bad(err)
         old_fields = {key: getattr(s, key) for key in GENERATION_FIELDS}
         old_bus_id = s.bus_id
         old_start, old_end, old_active = s.start_date, s.end_date, s.is_active

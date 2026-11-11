@@ -18,7 +18,7 @@ from users.permissions import (
     can_access_company,
 )
 from wallets.models import Wallet
-from .fleet import lock_bus
+from .fleet import driver_bus, lock_bus
 from .models import Company, Route, Trip, PickupStage
 from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
 from users.identity import is_driver_account_for
@@ -256,7 +256,7 @@ def create_route(request):
     """
     company_id = request.data.get('company_id')
 
-    if not company_id:
+    if isinstance(company_id, bool) or not str(company_id or '').strip().isdigit():
         return Response(
             {'error': 'company_id is required.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -264,7 +264,7 @@ def create_route(request):
 
     company = get_object_or_404(
         Company,
-        id=company_id
+        id=int(str(company_id).strip())
     )
 
     if not can_manage_company(request.user, company):
@@ -408,7 +408,7 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
         'driver',
         'bus',
         'route__company',
-    ).annotate(
+    ).prefetch_related('route__pickup_stages').annotate(
         booked_annot=_Coalesce(
             _Sum('bookings__seats', filter=~_Q(bookings__status='cancelled')),
             0,
@@ -828,13 +828,14 @@ def create_trip(request):
     driver_id = request.data.get('driver_id')
     departure_at = request.data.get('departure_at')
     bus_id = request.data.get('bus_id')
+    vehicle_type = request.data.get('vehicle_type')
 
-    if not all([company_id, route_id, driver_id, departure_at, bus_id]):
+    if not all([company_id, route_id, driver_id, departure_at]) or not (bus_id or vehicle_type):
         return Response(
             {
                 'error': (
-                    'company_id, route_id, driver_id, '
-                    'departure_at and bus_id are required.'
+                    'company_id, route_id, driver_id, departure_at '
+                    'and a vehicle type are required.'
                 )
             },
             status=status.HTTP_400_BAD_REQUEST
@@ -923,8 +924,14 @@ def create_trip(request):
         # Seats come from the bus, never from the request: a trip cannot
         # sell more seats than the vehicle has. More demand = another trip
         # with another bus.
+        if not bus_id:
+            bus, problem = driver_bus(driver, vehicle_type)
+            if problem:
+                return Response({'error': problem}, status=status.HTTP_400_BAD_REQUEST)
+            bus_id = bus.id
         bus, problem = lock_bus(bus_id, company, departure)
         if problem:
+            transaction.set_rollback(True)  # undo a retype by driver_bus
             return Response({'error': problem}, status=status.HTTP_409_CONFLICT)
 
         trip = Trip.objects.create(

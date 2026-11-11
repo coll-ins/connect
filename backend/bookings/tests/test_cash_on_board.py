@@ -85,3 +85,22 @@ class OpenIssueFixTests(CashOnBoardTests):
         call_command('process_noshows', stdout=StringIO(), stderr=StringIO())
         self.assertEqual(Booking.objects.get(pk=later.pk).status, 'confirmed')
         self.assertEqual(Booking.objects.get(pk=first.pk).status, 'no_show')
+
+
+class SeatBookedAlertTests(Base):
+    def setUp(self):
+        super().setUp()
+        self.booking = self._booking(1, status='pending')
+        Payment.objects.create(booking=self.booking, amount=self.booking.total_amount,
+                               method='cash', status='pending')
+
+    def test_paid_seat_sends_a_phone_alert_after_commit(self):
+        from unittest import mock
+        self.client.force_authenticate(user=self.manager)
+        with mock.patch('bookings.views.push.notify_users') as notify, \
+                self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(f'/api/bookings/payments/{self.booking.id}/cash/confirm/')
+        self.assertEqual(res.status_code, 200, res.content)
+        notify.assert_called_once()
+        users, title = notify.call_args.args[:2]
+        self.assertEqual((users, title), ([self.booking.user_id], 'Seat booked'))

@@ -36,7 +36,7 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
   await page.getByRole('button', { name: 'Add Driver' }).first().click();
   await modal.getByLabel('Driver name').fill(`Wanjiru ${word}`);
   await modal.getByLabel('Phone number').fill(`+2547330${tag}`);
-  await modal.getByLabel('Bus number').fill(`KDT ${tag}`);
+  await modal.getByLabel('Bus number').fill(plate);
   const pw = modal.getByLabel('Login password');
   if (await pw.count()) await pw.fill('Matatu-Route-58');
   await modal.getByRole('button', { name: 'Add Driver' }).click();
@@ -52,12 +52,13 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
   await page.goto('/company-manager/trips');
   await page.getByRole('button', { name: 'Create Trip' }).first().click();
   await modal.getByLabel('Route').selectOption({ label: `Test ${tag} - Rongai` });
-  await modal.getByLabel('Driver').selectOption({ label: `Wanjiru ${word} · KDT ${tag}` });
+  await modal.getByLabel('Driver').selectOption({ label: `Wanjiru ${word} · ${plate}` });
   const tomorrow = new Date(Date.now() + 86400000);
   const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000)
     .toISOString().slice(0, 16);
   await modal.getByLabel('Departure').fill(local);
-  await modal.getByLabel(/^Bus/).selectOption({ label: `F${tag} · ${plate} · 14 seats` });
+  // The driver's registered bus picks its own type; otherwise 33 seats.
+  await expect(modal.getByLabel(/^Vehicle/)).toHaveValue('matatu_14');
   await modal.getByRole('button', { name: 'Create Trip' }).click();
   await expect(modal).toHaveCount(0);
   await expect(page.getByText(`Test ${tag} - Rongai`).first()).toBeVisible();

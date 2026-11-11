@@ -114,3 +114,65 @@ class TripBusTests(APITestCase):
         counts = regenerate_for_schedule(sch2, days=2)
         self.assertEqual(counts['created'], 0)
         self.assertEqual(counts['bus_conflict'], trips.count())
+
+
+class TripVehicleTypeTests(APITestCase):
+    """A company with no buses on file still creates trips: pick the type."""
+    setUp = TripBusTests.setUp
+    _bus = TripBusTests._bus
+
+    def _make(self, driver, vehicle_type):
+        return self.client.post('/api/companies/trips/create/', {
+            'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': driver.id,
+            'departure_at': self.when.isoformat(), 'vehicle_type': vehicle_type,
+        }, format='json')
+
+    def test_type_makes_the_drivers_bus_from_its_plate(self):
+        drv = Driver.objects.create(name='Ann K', phone_number='+254700000805',
+                                    bus_number='kdc 123a', company=self.co)
+        r = self._make(drv, 'minibus_33')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.json()['capacity'], r.json()['bus_plate']), (33, 'KDC 123A'))
+        # A second trip reuses the same bus.
+        later = self.client.post('/api/companies/trips/create/', {
+            'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': drv.id,
+            'departure_at': (self.when + timedelta(hours=2)).isoformat(), 'vehicle_type': 'minibus_33',
+        }, format='json')
+        self.assertEqual(later.status_code, 201, later.content)
+        self.assertEqual(Bus.objects.filter(registration_number='KDC 123A').count(), 1)
+
+    def test_type_reuses_bus_by_fleet_number_and_refuses_retype_with_trips_ahead(self):
+        self.drv.bus_number = '51'
+        self.drv.save()
+        r = self._make(self.drv, 'bus_51')
+        self.assertEqual((r.status_code, r.json().get('bus_plate')), (201, 'KDA 551A'))
+        r = self._make(self.drv2, 'bus_67')  # drv2's 'OLD2' has no plate
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('number plate', r.json()['error'])
+        self.drv2.bus_number = '51'
+        self.drv2.save()
+        r = self._make(self.drv2, 'matatu_14')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('has trips', r.json()['error'])
+        self.assertEqual(Bus.objects.get(pk=self.bus51.pk).capacity, 51)
+
+    def test_bad_type_and_other_companys_plate_are_refused(self):
+        self.assertEqual(self._make(self.drv, 'jumbo').status_code, 400)
+        self._bus('bus_51', 'KDD 777D', '9', company=self.other)
+        self.drv.bus_number = 'KDD777D'
+        self.drv.save()
+        r = self._make(self.drv, 'bus_51')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Trip.objects.count(), 0)
+
+    def test_schedule_takes_a_type(self):
+        self.drv.bus_number = 'KDE 101E'
+        self.drv.save()
+        r = self.client.post('/api/companies/schedules/create/', {
+            'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': self.drv.id,
+            'vehicle_type': 'bus_67', 'days_of_week': [0, 1, 2, 3, 4, 5, 6],
+            'departure_time': '06:00', 'start_date': timezone.localdate().isoformat(),
+            'end_date': (timezone.localdate() + timedelta(days=2)).isoformat(),
+        }, format='json')
+        self.assertIn(r.status_code, (200, 201), r.content)
+        self.assertEqual(TripSchedule.objects.get().capacity, 67)

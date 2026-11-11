@@ -32,6 +32,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from companies.models import Trip, PickupStage
 from .models import Incident, IncidentResolution
 from users.permissions import can_manage_company, can_access_company
+from notifications import push
 from notifications.sms import send_admin_alert_sms
 from drivers.models import Driver
 from wallets.models import Wallet, WalletTransaction
@@ -665,6 +666,21 @@ def _currency_ok(currency):
     return currency is None or str(currency).strip().upper() == 'KES'
 
 
+def _push_booked(booking):
+    """Phone alert once the seat is paid. After commit, so a rollback sends nothing.
+    Never lets an alert problem fail the payment."""
+    try:
+        trip = booking.trip
+        if trip is None:
+            return
+        when = timezone.localtime(trip.departure_at).strftime('%a %d %b, %H:%M')
+        title, body = 'Seat booked', f'{trip.route.name}, {when}. We will alert you when the bus is boarding.'
+        transaction.on_commit(lambda: push.notify_users(
+            [booking.user_id], title, body, url='/passenger', tag=f'booking-{booking.id}-booked'))
+    except Exception:
+        logging.getLogger(__name__).exception('booking %s: seat-booked alert not queued', booking.id)
+
+
 def _mark_payment_confirmed(payment, paystack_amount, currency):
     """
     Confirm a Paystack payment and create the internal financial hold.
@@ -727,6 +743,7 @@ def _mark_payment_confirmed(payment, paystack_amount, currency):
     booking.status = 'confirmed'
     booking.save(update_fields=['status'])
     create_booking_hold(booking)
+    _push_booked(booking)
 
     return True
 
@@ -1072,6 +1089,7 @@ def paystack_webhook(request):
                 booking.status = 'confirmed'
                 booking.save(update_fields=['status'])
                 create_booking_hold(booking)
+                _push_booked(booking)
 
     except Payment.DoesNotExist:
         # Unknown references must not cause endless Paystack retries, but a
@@ -1579,6 +1597,7 @@ def confirm_cash_payment(request, booking_id):
 
             booking.status = 'confirmed'
             booking.save(update_fields=['status'])
+            _push_booked(booking)
 
             return Response(
                 {
@@ -4249,7 +4268,7 @@ def report_incident(request):
     """
     trip_id = request.data.get('trip_id')
 
-    if not trip_id:
+    if isinstance(trip_id, bool) or not str(trip_id or '').strip().isdigit():
         return Response(
             {'error': 'trip_id is required.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -4260,7 +4279,7 @@ def report_incident(request):
             'route',
             'route__company',
             'driver',
-        ).get(id=trip_id)
+        ).get(id=int(str(trip_id).strip()))
     except Trip.DoesNotExist:
         return Response(
             {'error': 'Trip not found.'},

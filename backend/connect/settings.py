@@ -298,6 +298,11 @@ else:
 
 # --- round-2 hardening ---
 # Sessions + CSRF are the only auth in use (rest_framework.authtoken is not installed).
+REST_FRAMEWORK['DEFAULT_PARSER_CLASSES'] = [
+    'connect.parsers.ObjectJSONParser',
+    'rest_framework.parsers.FormParser',
+    'rest_framework.parsers.MultiPartParser',
+]
 REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] = [
     'rest_framework.authentication.SessionAuthentication',
 ]
