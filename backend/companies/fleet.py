@@ -10,6 +10,10 @@ from buses.models import Bus
 ACTIVE_TRIP = ('scheduled', 'boarding', 'departed')
 
 
+def _name(bus):
+    return f'{bus.bus_number} ({bus.registration_number})' if bus.registration_number else bus.bus_number
+
+
 def lock_bus(bus_id, company, departure_at=None, exclude_trip_id=None):
     """Lock and return (bus, None), or (None, error). Call inside atomic().
     The row lock stops two trips claiming the same bus at the same moment."""
@@ -21,14 +25,14 @@ def lock_bus(bus_id, company, departure_at=None, exclude_trip_id=None):
     except Bus.DoesNotExist:
         return None, 'Pick one of your company\'s buses.'
     if not bus.is_active or bus.maintenance_status != 'operational':
-        return None, f'Bus {bus.bus_number} ({bus.registration_number}) is not in service.'
+        return None, f'Bus {_name(bus)} is not in service.'
     if departure_at is not None:
         clash = bus.trips.filter(departure_at=departure_at, status__in=ACTIVE_TRIP)
         if exclude_trip_id:
             clash = clash.exclude(id=exclude_trip_id)
         if clash.exists():
             return None, (
-                f'Bus {bus.bus_number} ({bus.registration_number}) already runs a trip '
+                f'Bus {_name(bus)} already runs a trip '
                 'at that time. Pick another bus.'
             )
     return bus, None
@@ -37,8 +41,9 @@ def lock_bus(bus_id, company, departure_at=None, exclude_trip_id=None):
 def driver_bus(driver, vehicle_type):
     """Return (bus, None) or (None, error): the driver's own bus as the
     chosen vehicle type. Found by the driver's fleet number or plate, made
-    on first use. Call inside atomic() with the driver row locked, and roll
-    back if the request fails afterwards (a retype is saved here)."""
+    on first use (with no plate when the driver only has a fleet number).
+    Call inside atomic() with the driver row locked, and roll back if the
+    request fails afterwards (a retype is saved here)."""
     if not isinstance(vehicle_type, str) or vehicle_type not in VEHICLES:
         return None, 'Pick a vehicle type.'
     number = (driver.bus_number or '').strip()
@@ -49,7 +54,6 @@ def driver_bus(driver, vehicle_type):
     if plate:
         match |= Q(registration_number=plate)
     bus = Bus.objects.select_for_update().filter(match, company=driver.company_id).first()
-    label = VEHICLES[vehicle_type]['label']
     if bus:
         if bus.vehicle_type != vehicle_type:
             if (bus.trips.filter(status__in=ACTIVE_TRIP).exists()
@@ -61,21 +65,18 @@ def driver_bus(driver, vehicle_type):
             bus.vehicle_type = vehicle_type
             bus.save()
         return bus, None
-    if not plate:
-        return None, (
-            f'{driver.name}\'s bus "{number or "none"}" has no number plate on file. '
-            'Add it once under Buses & seats, then create the trip.'
-        )
+    if not number:
+        return None, f'{driver.name} has no bus number. Add it on the driver, then create the trip.'
     try:
         with transaction.atomic():
             bus = Bus.objects.create(
-                company_id=driver.company_id, registration_number=plate,
+                company_id=driver.company_id, registration_number=plate,  # None: fleet number only
                 bus_number=number, vehicle_type=vehicle_type,
                 capacity=VEHICLES[vehicle_type]['seats'],
             )
     except IntegrityError:
         return None, (
-            f'Plate {plate} or fleet number {number} is already registered to another bus. '
+            f'{plate or number} is already registered to another bus. '
             'Check the driver\'s bus under Buses & seats.'
         )
     return bus, None

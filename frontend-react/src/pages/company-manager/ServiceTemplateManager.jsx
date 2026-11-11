@@ -344,7 +344,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
                     {template.is_active ? 'Active' : 'Paused'}
                   </span>
                 </div>
-                <p>{template.driver_name} · {template.bus_plate ? `Bus ${template.bus_number} · ${template.bus_plate}` : 'No bus assigned: edit to pick one'} · {template.capacity} seats</p>
+                <p>{template.driver_name} · {template.bus_id ? `Bus ${template.bus_number}${template.bus_plate ? ` · ${template.bus_plate}` : ''}` : 'No bus assigned: edit to pick one'} · {template.capacity} seats</p>
                 <p>
                   {template.departure_time}–{template.service_end_time || template.departure_time}
                   {' · '}{template.normal_interval_minutes || 60} min normal

@@ -1012,8 +1012,8 @@ export default function CompanyManagerSection({ section }) {
                           #{trip.id} · {tripStateLabel(trip)}
                         </span>
                         <span className="company-record-sub">
-                          {trip.bus_plate
-                            ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate}`
+                          {trip.bus
+                            ? `Bus ${trip.driver_bus_number}${trip.bus_plate ? ` · ${trip.bus_plate}` : ''}`
                             : 'No bus assigned'}
                         </span>
                       </div>
@@ -1242,8 +1242,8 @@ export default function CompanyManagerSection({ section }) {
 
                         <span>{Math.round(percentage)}% occupied</span>
                         <span className="company-record-sub">
-                          {trip.bus_plate
-                            ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate}`
+                          {trip.bus
+                            ? `Bus ${trip.driver_bus_number}${trip.bus_plate ? ` · ${trip.bus_plate}` : ''}`
                             : 'No bus assigned'}
                         </span>
                         <TripBusPicker trip={trip} buses={buses} onSaved={load} />

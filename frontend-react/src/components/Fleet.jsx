@@ -35,7 +35,7 @@ export function driverVehicle(buses, driver) {
 }
 
 export const busLabel = (bus) =>
-  `${bus.bus_number} · ${bus.registration_number} · ${bus.capacity} seats`;
+  `${bus.bus_number} · ${bus.registration_number || 'no plate yet'} · ${bus.capacity} seats`;
 
 export const inService = (bus) => bus.is_active && bus.maintenance_status === 'operational';
 
@@ -172,7 +172,7 @@ export function FleetManager({ companyId, canEdit }) {
           <li key={b.id} className="fleet-row">
             <BusIcon size={18} aria-hidden="true" />
             <div className="fleet-row-main">
-              <strong>{b.bus_number} · {b.registration_number}</strong>
+              <strong>{b.bus_number} · {b.registration_number || 'no plate yet'}</strong>
               <span>{b.vehicle_label}{b.vehicle_type === 'other' ? `, ${b.capacity} seats` : ''}</span>
               {!b.plan_verified && (
                 <small>
