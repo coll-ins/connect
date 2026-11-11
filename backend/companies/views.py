@@ -256,7 +256,7 @@ def create_route(request):
     """
     company_id = request.data.get('company_id')
 
-    if not company_id:
+    if isinstance(company_id, bool) or not str(company_id or '').strip().isdigit():
         return Response(
             {'error': 'company_id is required.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -264,7 +264,7 @@ def create_route(request):
 
     company = get_object_or_404(
         Company,
-        id=company_id
+        id=int(str(company_id).strip())
     )
 
     if not can_manage_company(request.user, company):
@@ -408,7 +408,7 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
         'driver',
         'bus',
         'route__company',
-    ).annotate(
+    ).prefetch_related('route__pickup_stages').annotate(
         booked_annot=_Coalesce(
             _Sum('bookings__seats', filter=~_Q(bookings__status='cancelled')),
             0,

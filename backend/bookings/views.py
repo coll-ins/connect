@@ -4268,7 +4268,7 @@ def report_incident(request):
     """
     trip_id = request.data.get('trip_id')
 
-    if not trip_id:
+    if isinstance(trip_id, bool) or not str(trip_id or '').strip().isdigit():
         return Response(
             {'error': 'trip_id is required.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -4279,7 +4279,7 @@ def report_incident(request):
             'route',
             'route__company',
             'driver',
-        ).get(id=trip_id)
+        ).get(id=int(str(trip_id).strip()))
     except Trip.DoesNotExist:
         return Response(
             {'error': 'Trip not found.'},

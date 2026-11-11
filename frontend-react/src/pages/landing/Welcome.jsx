@@ -40,7 +40,10 @@ export default function Welcome() {
   const navigate = useNavigate();
   const step = Math.min(SERVICES.length, Math.max(0, Number.parseInt(params.get('step') || '0', 10) || 0));
   const goTo = (n) => setParams(n > 0 ? { step: String(n) } : {});
-  const back = () => navigate(-1);
+  // Opened straight on a slide (deep link, app relaunch): step back a slide, don't leave the app.
+  const back = () => (window.history.state?.idx > 0
+    ? navigate(-1)
+    : setParams(step > 1 ? { step: String(step - 1) } : {}, { replace: true }));
   const progress = useRef(0);
   const bars = useRef(null);
   const [scene, setScene] = useState(0);
