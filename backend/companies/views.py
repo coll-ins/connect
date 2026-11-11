@@ -18,7 +18,7 @@ from users.permissions import (
     can_access_company,
 )
 from wallets.models import Wallet
-from .fleet import lock_bus
+from .fleet import driver_bus, lock_bus
 from .models import Company, Route, Trip, PickupStage
 from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
 from users.identity import is_driver_account_for
@@ -828,13 +828,14 @@ def create_trip(request):
     driver_id = request.data.get('driver_id')
     departure_at = request.data.get('departure_at')
     bus_id = request.data.get('bus_id')
+    vehicle_type = request.data.get('vehicle_type')
 
-    if not all([company_id, route_id, driver_id, departure_at, bus_id]):
+    if not all([company_id, route_id, driver_id, departure_at]) or not (bus_id or vehicle_type):
         return Response(
             {
                 'error': (
-                    'company_id, route_id, driver_id, '
-                    'departure_at and bus_id are required.'
+                    'company_id, route_id, driver_id, departure_at '
+                    'and a vehicle type are required.'
                 )
             },
             status=status.HTTP_400_BAD_REQUEST
@@ -923,8 +924,14 @@ def create_trip(request):
         # Seats come from the bus, never from the request: a trip cannot
         # sell more seats than the vehicle has. More demand = another trip
         # with another bus.
+        if not bus_id:
+            bus, problem = driver_bus(driver, vehicle_type)
+            if problem:
+                return Response({'error': problem}, status=status.HTTP_400_BAD_REQUEST)
+            bus_id = bus.id
         bus, problem = lock_bus(bus_id, company, departure)
         if problem:
+            transaction.set_rollback(True)  # undo a retype by driver_bus
             return Response({'error': problem}, status=status.HTTP_409_CONFLICT)
 
         trip = Trip.objects.create(

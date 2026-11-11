@@ -17,6 +17,23 @@ export const VEHICLE_TYPES = [
   { key: 'other', label: 'Other (enter the seat count)', seats: null },
 ];
 
+// Trip forms: most common first (33-seater default), matatus last.
+const TRIP_ORDER = ['minibus_33', 'bus_51', 'bus_67', 'minibus_27', 'matatu_14'];
+export const TRIP_VEHICLES = TRIP_ORDER.map((k) => VEHICLE_TYPES.find((v) => v.key === k));
+export const DEFAULT_VEHICLE = TRIP_ORDER[0];
+
+export function VehicleOptions() {
+  return TRIP_VEHICLES.map((v) => <option key={v.key} value={v.key}>{v.label}</option>);
+}
+
+/* The vehicle type of the bus this driver already has on file, if any. */
+export function driverVehicle(buses, driver) {
+  const n = String(driver?.bus_number || '').toUpperCase().replace(/\s+/g, '');
+  const bus = n && buses.find((b) =>
+    [b.bus_number, b.registration_number].some((x) => String(x || '').toUpperCase().replace(/\s+/g, '') === n));
+  return bus && TRIP_ORDER.includes(bus.vehicle_type) ? bus.vehicle_type : null;
+}
+
 export const busLabel = (bus) =>
   `${bus.bus_number} · ${bus.registration_number} · ${bus.capacity} seats`;
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { apiRequest } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import { BusOptions, useCompanyBuses } from '../../components/Fleet';
+import { DEFAULT_VEHICLE, VehicleOptions, driverVehicle, useCompanyBuses } from '../../components/Fleet';
 import '../shared/Services.css';
 import './ServiceTemplateManager.css';
 
@@ -20,7 +20,7 @@ const blankTemplate = () => {
   return {
     route_id: '',
     driver_id: '',
-    bus_id: '',
+    vehicle_type: DEFAULT_VEHICLE,
     days_of_week: [0, 1, 2, 3, 4],
     departure_time: '06:00',
     service_end_time: '18:00',
@@ -92,7 +92,8 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
     setForm({
       route_id: String(template.route_id),
       driver_id: String(template.driver_id),
-      bus_id: template.bus_id ? String(template.bus_id) : '',
+      bus_id: template.bus_id || '',
+      vehicle_type: buses.find((b) => b.id === template.bus_id)?.vehicle_type || DEFAULT_VEHICLE,
       days_of_week: template.days_of_week,
       departure_time: template.departure_time,
       service_end_time: template.service_end_time || '',
@@ -115,7 +116,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
       company_id: Number(companyId),
       route_id: Number(form.route_id),
       driver_id: Number(form.driver_id),
-      bus_id: Number(form.bus_id),
+      ...(form.bus_id ? { bus_id: form.bus_id } : { vehicle_type: form.vehicle_type }),
       days_of_week: form.days_of_week,
       departure_time: form.departure_time,
       service_end_time: form.service_end_time || null,
@@ -234,15 +235,20 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
           </label>
           <label className="svc-field">
             Driver
-            <select className="input" required value={form.driver_id} onChange={(event) => update('driver_id', event.target.value)}>
+            <select className="input" required value={form.driver_id} onChange={(event) => setForm((f) => ({
+              ...f,
+              driver_id: event.target.value,
+              bus_id: '',
+              vehicle_type: driverVehicle(buses, drivers.find((d) => String(d.id) === event.target.value)) || f.vehicle_type,
+            }))}>
               <option value="">Choose a driver</option>
               {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name || driver.username} · {driver.bus_number || 'No bus number'}</option>)}
             </select>
           </label>
           <label className="svc-field">
-            Bus (its seats are each trip's seats)
-            <select className="input" required value={form.bus_id} onChange={(event) => update('bus_id', event.target.value)}>
-              <BusOptions buses={buses} />
+            Vehicle (its seats are each trip's seats)
+            <select className="input" required value={form.vehicle_type} onChange={(event) => setForm((f) => ({ ...f, bus_id: '', vehicle_type: event.target.value }))}>
+              <VehicleOptions />
             </select>
           </label>
           <fieldset className="service-template-days">

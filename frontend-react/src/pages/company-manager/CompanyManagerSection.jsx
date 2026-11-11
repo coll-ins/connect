@@ -20,7 +20,7 @@ import FieldNote from '../../components/FieldNote';
 import { checkName, checkPhone, checkPlace, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
-import { BusOptions, FleetManager, TripBusPicker, useCompanyBuses } from '../../components/Fleet';
+import { DEFAULT_VEHICLE, FleetManager, TripBusPicker, VehicleOptions, driverVehicle, useCompanyBuses } from '../../components/Fleet';
 
 const EMPTY_COPY = {
   routes: ['No routes yet', 'Create a route to start selling seats on it.'],
@@ -311,7 +311,7 @@ export default function CompanyManagerSection({ section }) {
     route_id: '',
     driver_id: '',
     departure_at: '',
-    bus_id: '',
+    vehicle_type: DEFAULT_VEHICLE,
   });
   const { buses, reload: reloadBuses } = useCompanyBuses(
     ['trips', 'capacity'].includes(section) ? companyId : null
@@ -531,7 +531,7 @@ export default function CompanyManagerSection({ section }) {
           departure_at: new Date(
             tripForm.departure_at
           ).toISOString(),
-          bus_id: Number(tripForm.bus_id),
+          vehicle_type: tripForm.vehicle_type,
         },
       });
 
@@ -756,7 +756,7 @@ export default function CompanyManagerSection({ section }) {
                 route_id: '',
                 driver_id: '',
                 departure_at: '',
-                bus_id: '',
+                vehicle_type: DEFAULT_VEHICLE,
               });
               reloadBuses();
               setModal('trip');
@@ -1036,7 +1036,7 @@ export default function CompanyManagerSection({ section }) {
                                 route_id: String(trip.route),
                                 driver_id: '',
                                 departure_at: local,
-                                bus_id: '',
+                                vehicle_type: DEFAULT_VEHICLE,
                               });
                               reloadBuses();
                               setModal('trip');
@@ -1412,6 +1412,9 @@ export default function CompanyManagerSection({ section }) {
                 setTripForm({
                   ...tripForm,
                   driver_id: e.target.value,
+                  vehicle_type:
+                    driverVehicle(buses, drivers.find((d) => String(d.id) === e.target.value))
+                    || tripForm.vehicle_type,
                 })
               }
               required
@@ -1438,17 +1441,17 @@ export default function CompanyManagerSection({ section }) {
             />
 
             <Select
-              label="Bus (its seats are the trip's seats)"
-              value={tripForm.bus_id}
+              label="Vehicle (its seats are the trip's seats)"
+              value={tripForm.vehicle_type}
               onChange={(e) =>
                 setTripForm({
                   ...tripForm,
-                  bus_id: e.target.value,
+                  vehicle_type: e.target.value,
                 })
               }
               required
             >
-              <BusOptions buses={buses} />
+              <VehicleOptions />
             </Select>
 
             <button className="company-primary-button" type="submit">

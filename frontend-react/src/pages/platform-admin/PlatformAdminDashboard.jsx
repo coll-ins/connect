@@ -35,7 +35,7 @@ import ValidatedInput from '../../components/ValidatedInput';
 import { checkName, checkPhone, checkPlace, checkText, NAME_HINT, PHONE_HINT } from '../../utils/inputRules';
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
-import { BusOptions, useCompanyBuses } from '../../components/Fleet';
+import { DEFAULT_VEHICLE, VehicleOptions, driverVehicle, useCompanyBuses } from '../../components/Fleet';
 
 const money = (value) =>
   `KES ${Number(value || 0).toLocaleString('en-KE', {
@@ -83,7 +83,7 @@ const emptyTrip = {
   route_id: '',
   driver_id: '',
   departure_at: '',
-  bus_id: '',
+  vehicle_type: DEFAULT_VEHICLE,
   company_id: '',
 };
 
@@ -2125,7 +2125,7 @@ export default function PlatformAdminDashboard() {
         driver_id: tripForm.driver_id,
         driver: tripForm.driver_id,
         departure_at: tripForm.departure_at,
-        bus_id: Number(tripForm.bus_id),
+        vehicle_type: tripForm.vehicle_type,
         company_id: tripForm.company_id,
       };
 
@@ -4824,7 +4824,6 @@ export default function PlatformAdminDashboard() {
                           event.target.value,
                         route_id: '',
                         driver_id: '',
-                        bus_id: '',
                       })
                     }
                     required
@@ -4904,6 +4903,9 @@ export default function PlatformAdminDashboard() {
                         ...tripForm,
                         driver_id:
                           event.target.value,
+                        vehicle_type:
+                          driverVehicle(tripBuses, drivers.find((d) => String(d.id) === event.target.value))
+                          || tripForm.vehicle_type,
                       })
                     }
                     required
@@ -4959,22 +4961,21 @@ export default function PlatformAdminDashboard() {
 
                 <div className="pa-field">
                   <label htmlFor="pa-trip-bus">
-                    Bus (its seats are the trip's seats)
+                    Vehicle (its seats are the trip's seats)
                   </label>
 
                   <select
                     id="pa-trip-bus"
-                    value={tripForm.bus_id}
-                    disabled={!tripForm.company_id}
+                    value={tripForm.vehicle_type}
                     onChange={(event) =>
                       setTripForm({
                         ...tripForm,
-                        bus_id: event.target.value,
+                        vehicle_type: event.target.value,
                       })
                     }
                     required
                   >
-                    <BusOptions buses={tripBuses} />
+                    <VehicleOptions />
                   </select>
                 </div>
               </div>
