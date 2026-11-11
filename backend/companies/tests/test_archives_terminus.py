@@ -34,6 +34,14 @@ class ArchivesTerminusTests(TestCase):
         self.assertEqual(out.count('Archives'), 1)
         self.assertEqual(self.names(Route.objects.get(company=self.co, name='Kamangu to CBD'))[-2:], ['Kencom', 'Archives'])
 
+    def test_road_line_starts_and_ends_at_archives(self):
+        line = importlib.import_module('companies.migrations.0023_city_shuttle_archives_line')
+        line.extend(apps, None)  # again: no second point
+        out = self.out.geometry['coordinates']
+        back = Route.objects.get(company=self.co, name='Kamangu to CBD').geometry['coordinates']
+        self.assertEqual((out[0], back[-1]), (line.POINT, line.POINT))
+        self.assertEqual((out.count(line.POINT), back.count(line.POINT)), (1, 1))
+
     def test_board_at_archives_leave_and_rider_at_prestige_is_told(self):
         driver = Driver.objects.create(company=self.co, name='George', phone_number='+254712300099',
                                        bus_number='KBE 465S')
