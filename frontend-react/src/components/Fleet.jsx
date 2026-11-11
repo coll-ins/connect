@@ -28,14 +28,14 @@ export function VehicleOptions() {
 
 /* The vehicle type of the bus this driver already has on file, if any. */
 export function driverVehicle(buses, driver) {
-  const n = String(driver?.bus_number || '').toUpperCase().replace(/\s+/g, '');
+  const n = String(driver?.bus_number || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const bus = n && buses.find((b) =>
-    [b.bus_number, b.registration_number].some((x) => String(x || '').toUpperCase().replace(/\s+/g, '') === n));
+    [b.bus_number, b.registration_number].some((x) => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === n));
   return bus && TRIP_ORDER.includes(bus.vehicle_type) ? bus.vehicle_type : null;
 }
 
 export const busLabel = (bus) =>
-  `${bus.bus_number} · ${bus.registration_number} · ${bus.capacity} seats`;
+  `${bus.bus_number} · ${bus.registration_number || 'no plate yet'} · ${bus.capacity} seats`;
 
 export const inService = (bus) => bus.is_active && bus.maintenance_status === 'operational';
 
@@ -172,7 +172,7 @@ export function FleetManager({ companyId, canEdit }) {
           <li key={b.id} className="fleet-row">
             <BusIcon size={18} aria-hidden="true" />
             <div className="fleet-row-main">
-              <strong>{b.bus_number} · {b.registration_number}</strong>
+              <strong>{b.bus_number} · {b.registration_number || 'no plate yet'}</strong>
               <span>{b.vehicle_label}{b.vehicle_type === 'other' ? `, ${b.capacity} seats` : ''}</span>
               {!b.plan_verified && (
                 <small>

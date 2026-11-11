@@ -1599,8 +1599,8 @@ export default function CompanyOperatorDashboard() {
                 </div>
 
                 <span className="operator-capacity-bus">
-                  {trip.bus_plate
-                    ? `Bus ${trip.driver_bus_number} · ${trip.bus_plate} · ${trip.vehicle_label}`
+                  {trip.bus
+                    ? `Bus ${trip.driver_bus_number}${trip.bus_plate ? ` · ${trip.bus_plate}` : ''} · ${trip.vehicle_label}`
                     : 'No bus assigned'}
                 </span>
                 <TripBusPicker

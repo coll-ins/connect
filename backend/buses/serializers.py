@@ -56,6 +56,8 @@ class BusSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+        # Staff adding a bus always give the real plate.
+        extra_kwargs = {'registration_number': {'required': True, 'allow_null': False}}
 
     def validate_capacity(self, value):
         if value < 1:

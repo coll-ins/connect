@@ -121,10 +121,10 @@ class TripVehicleTypeTests(APITestCase):
     setUp = TripBusTests.setUp
     _bus = TripBusTests._bus
 
-    def _make(self, driver, vehicle_type):
+    def _make(self, driver, vehicle_type, when=None):
         return self.client.post('/api/companies/trips/create/', {
             'company_id': self.co.id, 'route_id': self.route.id, 'driver_id': driver.id,
-            'departure_at': self.when.isoformat(), 'vehicle_type': vehicle_type,
+            'departure_at': (when or self.when).isoformat(), 'vehicle_type': vehicle_type,
         }, format='json')
 
     def test_type_makes_the_drivers_bus_from_its_plate(self):
@@ -146,15 +146,28 @@ class TripVehicleTypeTests(APITestCase):
         self.drv.save()
         r = self._make(self.drv, 'bus_51')
         self.assertEqual((r.status_code, r.json().get('bus_plate')), (201, 'KDA 551A'))
-        r = self._make(self.drv2, 'bus_67')  # drv2's 'OLD2' has no plate
+        # Fleet number only: the bus is made with no plate, never a guessed one.
+        r = self._make(self.drv2, 'bus_67')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.json()['capacity'], r.json()['bus_plate']), (67, None))
+        self.assertEqual(Bus.objects.get(bus_number='OLD2', company=self.co).registration_number, None)
+        # Staff adding a bus by hand must still give a real plate.
+        r = self.client.post('/api/buses/', {'bus_number': 'X9', 'vehicle_type': 'bus_51'}, format='json')
         self.assertEqual(r.status_code, 400)
-        self.assertIn('number plate', r.json()['error'])
+        self.assertIn('registration_number', r.json())
         self.drv2.bus_number = '51'
         self.drv2.save()
-        r = self._make(self.drv2, 'matatu_14')
+        r = self._make(self.drv2, 'matatu_14', self.when + timedelta(hours=3))
         self.assertEqual(r.status_code, 400)
         self.assertIn('has trips', r.json()['error'])
         self.assertEqual(Bus.objects.get(pk=self.bus51.pk).capacity, 51)
+
+    def test_plate_typed_with_a_dash_is_read_as_the_plate(self):
+        drv = Driver.objects.create(name='kimani kamande', phone_number='+254700000806',
+                                    bus_number='KBE-465S', company=self.co)
+        r = self._make(drv, 'minibus_33')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual((r.json()['capacity'], r.json()['bus_plate']), (33, 'KBE 465S'))
 
     def test_bad_type_and_other_companys_plate_are_refused(self):
         self.assertEqual(self._make(self.drv, 'jumbo').status_code, 400)

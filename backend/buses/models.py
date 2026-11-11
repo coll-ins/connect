@@ -17,9 +17,12 @@ class Bus(models.Model):
         on_delete=models.CASCADE,
         related_name='buses',
     )
+    # Null only for a bus made from a driver's fleet number (companies/fleet.py):
+    # a plate is never guessed. Added later under Buses & seats.
     registration_number = models.CharField(
         max_length=20,
         unique=True,
+        null=True,
     )
     bus_number = models.CharField(
         max_length=20,
@@ -55,4 +58,4 @@ class Bus(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.company.name} - {self.bus_number} ({self.registration_number})"
+        return f"{self.company.name} - {self.bus_number} ({self.registration_number or 'no plate'})"
