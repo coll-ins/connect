@@ -13,6 +13,7 @@ import { MapZoomButtons, NextStageBanner } from './MapNavOverlays';
 import RouteProgress from './RouteProgress';
 import useRouteMatch from './useRouteMatch';
 import { useRoadDriverPosition } from './useRoadDriverPosition';
+import useTravelHeading from './useTravelHeading';
 import useBusReroute from './useBusReroute';
 import { lineAheadOfBus } from '../../pages/passenger/liveMapUtils';
 import { nextStageAhead, stagesAlongRoute } from './wazeNav';
@@ -321,15 +322,13 @@ export default function ConnectMap({
     : onNewRoad
       ? newRoadGlide.position ?? newRoadMatch.position
       : routeMatch?.position ?? driverPosition;
-  const gpsHeading = Number(driver?.heading);
+  const travelHeading = useTravelHeading(driverGpsPosition, Number(driver?.heading));
   const matchedHeading =
     routeMatch?.onRoute
       ? rawDriverHeading
       : onNewRoad
         ? newRoadGlide.heading
-        : Number.isFinite(gpsHeading)
-          ? gpsHeading
-          : rawDriverHeading;
+        : travelHeading ?? rawDriverHeading;
   const rerouteLine = useMemo(
     () => (reroute ? lineAheadOfBus(matchedPosition, reroute.line) : null),
     [reroute, matchedPosition],

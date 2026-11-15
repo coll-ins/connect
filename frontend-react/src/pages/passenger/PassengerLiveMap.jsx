@@ -18,6 +18,7 @@ import {
   NextStageBanner,
 } from '../../components/maps/MapNavOverlays';
 import RouteProgress from '../../components/maps/RouteProgress';
+import useTravelHeading from '../../components/maps/useTravelHeading';
 import useBusReroute from '../../components/maps/useBusReroute';
 import useRouteMatch from '../../components/maps/useRouteMatch';
 import { useRoadDriverPosition } from '../../components/maps/useRoadDriverPosition';
@@ -802,13 +803,11 @@ export default function PassengerLiveMap({
   const matchedDriverPosition = routeMatch?.onRoute
     ? driverPosition
     : routeMatch?.position ?? driverPosition;
-  const gpsHeading = Number(live?.driver?.heading);
+  const travelHeading = useTravelHeading(driverTarget, Number(live?.driver?.heading));
   const matchedDriverHeading =
     routeMatch?.onRoute
       ? driverHeading
-      : Number.isFinite(gpsHeading)
-        ? gpsHeading
-        : driverHeading;
+      : travelHeading ?? driverHeading;
 
 
 
@@ -1227,6 +1226,29 @@ export default function PassengerLiveMap({
 
     return (remainingDistanceKm / driverSpeedKmh) * 60;
   }, [remainingDistanceKm, driverSpeedKmh]);
+
+  // Time to the passenger's destination. It keeps working after a diversion:
+  // the new road's length replaces the planned route's.
+  const destinationEtaMinutes = useMemo(() => {
+    if (!tripLifecycleLive || busStale) return null;
+    let km = null;
+    if (rerouteLine) {
+      km = lineLengthKm(rerouteLine);
+      if (reroute.goal === 'pickup' && pickupRouteIndex >= 0 && destinationRouteIndex > pickupRouteIndex) {
+        km += routeDistanceKm(geometry, pickupRouteIndex, destinationRouteIndex);
+      }
+    } else if (!busUnreliable && driverRouteIndex >= 0 && destinationRouteIndex >= 0) {
+      km = driverRouteIndex >= destinationRouteIndex
+        ? 0
+        : routeDistanceKm(geometry, driverRouteIndex, destinationRouteIndex);
+    }
+    if (km == null || !Number.isFinite(km)) return null;
+    const jam = trafficAtBus === 'heavy' ? 8 : trafficAtBus === 'slow' ? 15 : 25;
+    return (km / (driverSpeedKmh ?? jam)) * 60;
+  }, [
+    tripLifecycleLive, busStale, rerouteLine, reroute, geometry, busUnreliable,
+    driverRouteIndex, pickupRouteIndex, destinationRouteIndex, driverSpeedKmh, trafficAtBus,
+  ]);
 
   const totalRouteKm = useMemo(
     () =>
@@ -1733,6 +1755,13 @@ export default function PassengerLiveMap({
           </div>
         </div>
 
+        {destinationEtaMinutes != null && (
+          <p className="passenger-live-map__arrival">
+            Arrive at {destinationName} in about <strong>{formatEta(destinationEtaMinutes)}</strong>
+            {trafficAtBus ? ' (traffic ahead)' : ''}
+          </p>
+        )}
+
         {!sheetOpen && (
           <p
             onClick={() => setSheetOpen(true)}
@@ -1740,6 +1769,7 @@ export default function PassengerLiveMap({
           >
             {busStatus}
             {etaMinutes != null ? ` · ${formatEta(etaMinutes)} to pickup` : ''}
+            {destinationEtaMinutes != null ? ` · arrive in ~${formatEta(destinationEtaMinutes)}` : ''}
             {trafficAtBus === 'heavy'
               ? ' · bus stuck in heavy traffic'
               : trafficAtBus === 'slow'
