@@ -1,3 +1,7 @@
+/* Pages never pinch- or double-tap-zoom. Only the map zooms, and it handles its own gestures. */
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+.leaflet-container { touch-action: none; }
+
 /* Phones and tablets: every control gets a 44px hit area (WCAG 2.5.5),
    and form text stays at 16px so iOS Safari does not zoom on focus. */
 @media (pointer: coarse) {

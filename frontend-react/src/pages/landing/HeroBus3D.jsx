@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CanvasTexture, Color, Object3D, RepeatWrapping, SRGBColorSpace, Vector3 } from 'three';
 import { StudioEnvironment, VehicleModel } from '../../components/maps/Vehicle3D';
 import matatuPhoto from '../../assets/journeys/bookabus.jpeg';
@@ -359,11 +359,30 @@ function Ride({ progress }) {
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
+// A phone GPU that cannot run the scene must never leave a black hole: any
+// render error drops to the photo.
+class SceneGuard extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { this.props.onFail(); }
+  render() { return this.state.failed ? null : this.props.children; }
+}
+
+function FirstFrame({ onShown }) {
+  const frames = useRef(0);
+  useFrame(() => {
+    frames.current += 1;
+    if (frames.current === 3) onShown();
+  });
+  return null;
+}
+
 export default function HeroBus3D({ progress, frame, paused = false }) {
   const wrap = useRef(null);
   const fallback = useRef(0);
   const [visible, setVisible] = useState(true);
   const [lost, setLost] = useState(false);
+  const [shown, setShown] = useState(false);
 
   useEffect(() => {
     const el = wrap.current;
@@ -373,30 +392,37 @@ export default function HeroBus3D({ progress, frame, paused = false }) {
     return () => io.disconnect();
   }, []);
 
+  // The photo sits under the scene until it has drawn, so the first screen is never empty.
+  const photo = <img className="lp-story-photo" src={matatuPhoto} alt="" aria-hidden="true" />;
   // The GPU dropped the scene (low memory, driver reset): show the photo instead.
-  if (lost) return <img className="lp-story-photo" src={matatuPhoto} alt="" aria-hidden="true" />;
+  if (lost) return photo;
 
   return (
     <div ref={wrap} className="lp-3d" aria-hidden="true">
-      <Canvas
-        frameloop={visible && !paused ? 'always' : 'never'}
-        dpr={[1, COARSE ? 1.25 : 1.75]}
-        onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', (e) => {
-          e.preventDefault();
-          setLost(true);
-        })}
-        camera={{ position: [6, 8, 2.6], up: [0, 0, 1], fov: 34, near: 0.1, far: 140 }}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
-      >
-        <color attach="background" args={[BG]} />
-        <fog attach="fog" args={[BG, 30, 85]} />
-        <StudioEnvironment />
-        <hemisphereLight args={['#b9c9d6', '#151b20', 0.55]} />
-        <directionalLight position={[-8, 6, 14]} intensity={1.6} color="#ffe6c4" />
-        <directionalLight position={[10, -12, 6]} intensity={0.5} color="#9bb7ff" />
-        <Framing frame={frame} />
-        <Ride progress={progress || fallback} />
-      </Canvas>
+      {!shown && photo}
+      <SceneGuard onFail={() => setLost(true)}>
+        <Canvas
+          style={{ opacity: shown ? 1 : 0, transition: 'opacity 400ms' }}
+          frameloop={visible && !paused ? 'always' : 'never'}
+          dpr={[1, COARSE ? 1.25 : 1.75]}
+          onCreated={({ gl }) => gl.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            setLost(true);
+          })}
+          camera={{ position: [6, 8, 2.6], up: [0, 0, 1], fov: 34, near: 0.1, far: 140 }}
+          gl={{ antialias: !COARSE }}
+        >
+          <color attach="background" args={[BG]} />
+          <fog attach="fog" args={[BG, 30, 85]} />
+          <StudioEnvironment />
+          <hemisphereLight args={['#b9c9d6', '#151b20', 0.55]} />
+          <directionalLight position={[-8, 6, 14]} intensity={1.6} color="#ffe6c4" />
+          <directionalLight position={[10, -12, 6]} intensity={0.5} color="#9bb7ff" />
+          <Framing frame={frame} />
+          <Ride progress={progress || fallback} />
+          <FirstFrame onShown={() => setShown(true)} />
+        </Canvas>
+      </SceneGuard>
     </div>
   );
 }

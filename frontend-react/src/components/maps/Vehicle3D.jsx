@@ -343,13 +343,18 @@ export function VehicleModel({ heading, latitude, longitude, stale, onReady }) {
               <boxGeometry args={[0.13, 0.03, 0.08]} />
               <meshStandardMaterial name={`blink-${sideName(side)}`} color="#ffb347" emissive="#ff9a1f" emissiveIntensity={0.35} />
             </mesh>
-            <mesh position={[side * (W / 2 + 0.09), FRONT - 0.05, 1.56]}>
-              <boxGeometry args={[0.18, 0.03, 0.03]} />
-              <meshStandardMaterial color="#14181d" />
+            {/* Mirror: arm, body and a flat glass face looking back along the bus */}
+            <mesh position={[side * (W / 2 + 0.07), FRONT - 0.04, 1.5]}>
+              <boxGeometry args={[0.14, 0.05, 0.05]} />
+              <meshStandardMaterial color="#14181d" roughness={0.5} />
             </mesh>
-            <mesh position={[side * (W / 2 + 0.18), FRONT - 0.02, 1.42]}>
-              <boxGeometry args={[0.05, 0.09, 0.28]} />
-              <meshStandardMaterial color="#14181d" roughness={0.4} />
+            <mesh position={[side * (W / 2 + 0.17), FRONT - 0.06, 1.42]} castShadow>
+              <roundedBoxGeometry args={[0.1, 0.07, 0.3, 3, 0.03]} />
+              <meshStandardMaterial color="#14181d" roughness={0.45} />
+            </mesh>
+            <mesh position={[side * (W / 2 + 0.17), FRONT - 0.1, 1.42]}>
+              <boxGeometry args={[0.07, 0.006, 0.24]} />
+              <meshStandardMaterial color="#aab6c2" roughness={0.12} metalness={0.7} />
             </mesh>
             {/* Tail and brake light */}
             <mesh position={[side * 0.68, -FRONT - 0.012, 0.74]}>
@@ -389,14 +394,14 @@ export function VehicleModel({ heading, latitude, longitude, stale, onReady }) {
   );
 }
 
-function VehicleScene({ heading, latitude, longitude, stale, onReady }) {
+function VehicleScene({ heading, latitude, longitude, stale, onReady, size = 1 }) {
   return (
     <>
       <AimVehicleCamera />
       <StudioEnvironment />
       <hemisphereLight args={['#ffffff', '#5b6470', 0.7]} />
       <directionalLight position={[-35, -50, 90]} intensity={1.9} />
-      <group position={[0, 0, 0]} scale={10}>
+      <group position={[0, 0, 0]} scale={10 * size}>
         <VehicleModel
           heading={heading}
           latitude={latitude}
@@ -420,6 +425,17 @@ export default function Vehicle3D({
   onReady,
 }) {
   const [position, setPosition] = useState(null);
+  // Like Uber and Bolt, the bus is the size of the road under it: it shrinks as
+  // the map zooms out instead of staying huge on a street-sized map.
+  const [mapZoom, setMapZoom] = useState(() => map?.getZoom?.() ?? 17);
+  const size = Math.min(1.3, Math.max(0.25, 2 ** (mapZoom - 17)));
+  useEffect(() => {
+    if (!map) return undefined;
+    const sync = () => setMapZoom(map.getZoom());
+    sync();
+    map.on('zoom zoomend', sync);
+    return () => map.off('zoom zoomend', sync);
+  }, [map]);
   const anchorRef = useRef(null);
   const lat = Number(latitude);
   const lng = Number(longitude);
@@ -526,6 +542,7 @@ export default function Vehicle3D({
                 longitude={snappedPosition?.[1] ?? lng}
                 stale={stale}
                 onReady={onReady}
+                size={size}
               />
             </Canvas>
           </Boundary>,
