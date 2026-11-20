@@ -226,10 +226,13 @@ export default function DriverLiveLocation() {
     });
 
     if (!driverId || !navigator.geolocation) {
-      console.warn('[DRIVER LIVE] GPS watcher NOT started:', {
-        driverId,
-        hasGeolocation: !!navigator.geolocation,
-      });
+      // A null driverId is the normal state while the profile loads: only warn when the cause is real.
+      if (driverId) {
+        console.warn('[DRIVER LIVE] GPS watcher NOT started:', {
+          driverId,
+          hasGeolocation: !!navigator.geolocation,
+        });
+      }
       return undefined;
     }
 
@@ -720,7 +723,7 @@ export default function DriverLiveLocation() {
               <button
                 type="button"
                 onClick={() => { setReportDone(''); setReportOpen(true); }}
-                style={{ width: '100%', margin: '12px 0', padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(217, 119, 6, 0.9)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+                style={{ width: '100%', margin: '12px 0', padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.25)', background: 'var(--warn)', color: 'var(--primary-ink)', fontWeight: 600, cursor: 'pointer' }}
               >
                 Report a problem
               </button>

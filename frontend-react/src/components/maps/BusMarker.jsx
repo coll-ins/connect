@@ -26,7 +26,7 @@ export default function BusMarker({ route, lat, lng }) {
       html: `<div class="bus-rot">${BUS_SVG}</div>`,
       iconSize: [44, 44], iconAnchor: [22, 22],
     });
-    st.marker = L.marker([0, 0], { icon, zIndexOffset: 1000, opacity: 0 }).addTo(map);
+    st.marker = L.marker([0, 0], { icon, zIndexOffset: 1000, opacity: 0, title: 'Bus' }).addTo(map);
 
     const frame = (now) => {
       if (st.route && st.route.pts.length > 1 && st.s != null) {

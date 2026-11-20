@@ -87,7 +87,7 @@ a.svc-item:hover { transform: translateY(-2px); border-color: var(--border-input
 .rp-side { display: grid; gap: 18px; }
 .rp-stage { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-card); border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); }
 .rp-stage.off { opacity: .5; }
-.rp-warn { padding: 10px 12px; border-radius: var(--radius-card); color: var(--warn); background: rgb(var(--warn-rgb) / 0.28); border: 1px solid rgb(var(--warn-rgb) / 0.35); font-size: 13px; }
+.rp-warn { padding: 10px 12px; border-radius: var(--radius-card); color: var(--warn); background: rgb(var(--warn-rgb) / 0.2); border: 1px solid rgb(var(--warn-rgb) / 0.35); font-size: 13px; }
 .rp-stats { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text); font-weight: 700; font-size: 13px; }
 @media (max-width: 900px) { .rp-grid { grid-template-columns: 1fr; } .rp-map { height: 380px; } }
 

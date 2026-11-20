@@ -1,5 +1,5 @@
 .rp-map { position: relative; }
-.rp2-pin { background: none; border: 0; }
+.rp2-pin { background: none; border: 0; display: grid; place-items: center; }
 .rp2-dot {
   display: block;
   width: 22px;

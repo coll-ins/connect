@@ -1,5 +1,5 @@
 .cutoff-card { display: grid; gap: 10px; margin-top: 18px; padding: 16px 20px; border: 1px solid rgba(255, 255, 255, 0.075); border-radius: var(--radius-card); background: rgba(255, 255, 255, 0.035); }
-.cutoff-card h3 { margin: 0; font-size: 15px; }
+.cutoff-card h2 { margin: 0; font-size: 15px; }
 .cutoff-card form { display: grid; gap: 10px; justify-items: start; }
 .cutoff-field { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text); max-width: 100%; }
 .cutoff-field input { width: 120px; max-width: 100%; }

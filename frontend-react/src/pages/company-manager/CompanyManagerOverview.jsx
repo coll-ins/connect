@@ -203,7 +203,7 @@ export default function CompanyManagerOverview() {
                       <span className="company-panel-kicker">
                         Upcoming
                       </span>
-                      <h3>Departures</h3>
+                      <h2>Departures</h2>
                     </div>
 
                     <NavLink to="/company-manager/trips">
@@ -250,7 +250,7 @@ export default function CompanyManagerOverview() {
                       <span className="company-panel-kicker">
                         Capacity
                       </span>
-                      <h3>Network capacity</h3>
+                      <h2>Network capacity</h2>
                     </div>
 
                     <NavLink to="/company-manager/capacity">
@@ -296,7 +296,7 @@ export default function CompanyManagerOverview() {
                     <span className="company-panel-kicker">
                       Recent activity
                     </span>
-                    <h3>Bookings</h3>
+                    <h2>Bookings</h2>
                   </div>
 
                   <NavLink to="/company-manager/bookings">

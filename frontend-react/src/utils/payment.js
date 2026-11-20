@@ -26,3 +26,12 @@ export function bookingClosedMessage(err, locale = 'en-KE', timeZone) {
   }
   return 'Online booking for this trip has closed. Choose another departure.';
 }
+
+// The server caps one booking at 6 seats; the stepper stops there so the code
+// is only seen when the cap changes or a request is replayed.
+export const MAX_SEATS_PER_BOOKING = 6;
+
+export function seatLimitMessage(err) {
+  if (err?.data?.code !== 'seat_limit') return null;
+  return `You can book up to ${MAX_SEATS_PER_BOOKING} seats at a time. Lower the number of seats and try again.`;
+}

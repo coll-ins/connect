@@ -1354,6 +1354,7 @@ export default function PassengerLiveMap({
                 key={stage.id ?? stage.name}
                 position={position}
                 icon={stopIcon(Number(stage.order) || 1, Number(stage.order) === 1 ? 'first' : 'default')}
+                title={`Stop ${Number(stage.order) || 1}: ${stage.name}`}
               >
                 <Popup>
                   <strong>
@@ -1368,6 +1369,7 @@ export default function PassengerLiveMap({
             <Marker
               position={pickupPosition}
               icon={pickupIcon}
+              title="Your pickup stage"
               zIndexOffset={900}
             >
               <Popup>
@@ -1386,6 +1388,7 @@ export default function PassengerLiveMap({
             <Marker
               position={parkedBus.position}
               icon={parkedIcon}
+              title="Bus waiting at the stage"
               zIndexOffset={1000}
             >
               <Popup>
@@ -1403,6 +1406,7 @@ export default function PassengerLiveMap({
               ref={vehicleMarkerRef}
               position={matchedDriverPosition}
               icon={vehicleIcon}
+              title="Bus"
             >
               <Popup>
                 <strong>{busNumber}</strong>
@@ -1416,6 +1420,7 @@ export default function PassengerLiveMap({
             <Marker
               position={passengerPosition}
               icon={passengerIcon}
+              title="Your location"
             >
               <Popup>
                 <strong>You</strong>

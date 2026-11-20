@@ -55,7 +55,18 @@ export default function Modal({ labelledBy, ariaLabel, onClose, className = '', 
 
     return function returnFocus() {
       document.removeEventListener('keydown', onKeyDown, true);
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      // <body> means nothing was focused, not an opener: focusing it does nothing.
+      if (opener instanceof HTMLElement && opener !== document.body && opener.isConnected) {
+        opener.focus();
+        return;
+      }
+      // The opener was replaced while the dialog was open (a pay dialog's
+      // Confirm button): focus would drop to <body>, so land on the page region.
+      const region = document.querySelector('[data-focus-fallback], main');
+      if (region instanceof HTMLElement) {
+        if (!region.hasAttribute('tabindex')) region.setAttribute('tabindex', '-1');
+        region.focus();
+      }
     };
   }, []);
 

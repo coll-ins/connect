@@ -598,8 +598,8 @@ export default function DriverPortal() {
                 <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,.1)",margin:"12px 0 4px"}}>
                   <div style={{height:6,borderRadius:3,width:`${pct}%`,background:"var(--success)",transition:"width .4s"}} />
                 </div>
-                {!bookingsLoaded && !error && <p role="status" style={{opacity:.7,margin:"12px 0 0"}}>Loading passengers…</p>}
-                {bookingsLoaded && rows.length === 0 && <p style={{opacity:.7,margin:"12px 0 0"}}>No passengers assigned yet.</p>}
+                {!bookingsLoaded && !error && <p role="status" style={{color:"var(--text-2)",margin:"12px 0 0"}}>Loading passengers…</p>}
+                {bookingsLoaded && rows.length === 0 && <p style={{color:"var(--text-2)",margin:"12px 0 0"}}>No passengers assigned yet.</p>}
                 {rows.map((b) => {
                   const boardedRow = st(b) === "completed";
                   const cashDue = canConfirmCash(b);
@@ -609,7 +609,7 @@ export default function DriverPortal() {
                     <div key={b.booking_id} style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderTop:"1px solid rgba(255,255,255,.08)"}}>
                       <div style={{minWidth:0}}>
                         <strong>{pinName(b)}</strong>
-                        <div style={{fontSize:13,opacity:.75}}>
+                        <div style={{fontSize:13,color:"var(--text-2)"}}>
                           {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seats || 1} seat(s)
                         </div>
                       </div>

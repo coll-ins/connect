@@ -1,6 +1,25 @@
 // Measures WCAG contrast from computed styles. Backgrounds with alpha are composited over
 // their ancestors, so tinted chips and alerts are measured as the user sees them.
 export async function measure(page, selector, { part = 'text', nth = 0 } = {}) {
+  // A colour read mid-transition is a blend, not the resting colour: let finite animations end first.
+  // The element may mount after the page loads and fade in on mount: wait for it first.
+  await page.locator(selector).nth(nth).waitFor();
+  // A page fade can start a frame after navigation, so also require two quiet checks in a row.
+  await page.evaluate(async () => {
+    const running = () => document.getAnimations()
+      .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity && a.playState !== 'finished');
+    let quiet = 0;
+    for (let i = 0; i < 60 && quiet < 2; i += 1) {
+      const live = running();
+      if (live.length) {
+        quiet = 0;
+        await Promise.all(live.map((a) => a.finished.catch(() => {})));
+      } else {
+        quiet += 1;
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+    }
+  });
   return page.locator(selector).nth(nth).evaluate((el, which) => {
     const parse = (value) => {
       const m = value.match(/rgba?\(([^)]+)\)/);
@@ -32,7 +51,13 @@ export async function measure(page, selector, { part = 'text', nth = 0 } = {}) {
     const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
     const style = getComputedStyle(el);
     const own = backdrop(el);
-    if (which === 'text') return { ratio: ratio(over(parse(style.color), own), own), fg: style.color };
+    if (which === 'text') {
+      // opacity on the element or any ancestor fades the glyphs too
+      let fade = 1;
+      for (let n = el; n; n = n.parentElement) fade *= Number(getComputedStyle(n).opacity);
+      const colour = parse(style.color);
+      return { ratio: ratio(over({ ...colour, a: colour.a * fade }, own), own), fg: style.color };
+    }
     if (which === 'border') {
       const under = backdrop(el.parentElement);
       return { ratio: ratio(over(parse(style.borderTopColor), under), under), fg: style.borderTopColor };

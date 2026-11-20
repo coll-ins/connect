@@ -124,6 +124,8 @@ export default function WithdrawPanel({ balance, onChanged }) {
   const rows = [...firstRows, ...more.rows.filter((r) => !seen.has(r.payout_id))];
   const next = more.next === undefined ? (first.data?.next ?? null) : more.next;
   const disabled = off || first.data?.disabled === true;
+  // Until the first answer is in, the form would flash and vanish if payouts are off.
+  const checking = first.status === 'loading' && !first.data && !off;
   const noBalance = toCents(balance) === 0;
   const destination = result?.destination_masked || firstRows[0]?.destination_masked;
 
@@ -214,7 +216,9 @@ export default function WithdrawPanel({ balance, onChanged }) {
     <section className="wallet-section" aria-labelledby="withdraw-title">
       <h2 id="withdraw-title">Withdraw to M-PESA</h2>
 
-      {disabled ? (
+      {checking ? (
+        <p className="wallet-note" role="status">Checking withdrawals…</p>
+      ) : disabled ? (
         <p className="wallet-note" role="status">Withdrawals are not available yet.</p>
       ) : (
         <>

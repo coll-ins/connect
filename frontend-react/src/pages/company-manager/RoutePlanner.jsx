@@ -68,8 +68,8 @@ function nearestOnLine(line, lat, lng) {
 const mkIcon = (cls) => L.divIcon({
   className: 'rp2-pin',
   html: `<span class="rp2-dot ${cls}"></span>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
+  iconSize: [44, 44],
+  iconAnchor: [22, 22],
 });
 const ICONS = { on: mkIcon(''), off: mkIcon('inactive'), moved: mkIcon('moved') };
 
@@ -94,7 +94,8 @@ function StagePin({ stage, position, moved, onLive, onDrop }) {
   }), [stage.id, stage.name, onLive, onDrop]);
   return (
     <Marker position={position} draggable icon={moved ? ICONS.moved : stage.is_active ? ICONS.on : ICONS.off}
-      eventHandlers={handlers} zIndexOffset={500}>
+      eventHandlers={handlers} zIndexOffset={500}
+      title={`${stage.order}. ${stage.name}`}>
       <Tooltip>{stage.order}. {stage.name}{stage.is_active ? '' : ' (off)'}</Tooltip>
     </Marker>
   );

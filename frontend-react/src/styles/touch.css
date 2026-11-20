@@ -1,6 +1,17 @@
+/* Text links and buttons are never under 24px high at any width (WCAG 2.5.8). */
+.driver-timetable-link,
+.company-panel-header a,
+.operator-text-button,
+.company-section-head a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
 /* Phones and tablets: every control gets a 44px hit area (WCAG 2.5.5),
-   and form text stays at 16px so iOS Safari does not zoom on focus. */
-@media (pointer: coarse) {
+   and form text stays at 16px so iOS Safari does not zoom on focus.
+   Phone width counts too: a narrow desktop window or an emulated phone reports a fine pointer. */
+@media (pointer: coarse), (max-width: 760px) {
   button:not(.leaflet-container *, .maplibregl-map *),
   [role='button']:not(.leaflet-container *, .maplibregl-map *),
   select,
@@ -50,11 +61,24 @@
 
   .driver-timetable-link,
   .company-panel-header a,
+  .operator-text-button,
   .company-section-head a {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
     min-width: 44px;
+  }
+
+  .service-template-days label {
+    min-height: 44px !important;
+    min-width: 44px;
+  }
+
+  /* Leaflet's own +/- buttons are 30px (26px without touch support). */
+  .leaflet-container .leaflet-bar a {
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 44px !important;
   }
 }
 
@@ -67,4 +91,76 @@
 
 small {
   font-size: max(11px, 0.8em);
+}
+
+/* Closed mobile drawers sit off-screen with translateX only, so their links
+   stayed in the Tab order. visibility flips after the slide-out finishes and
+   before the slide-in starts, and hidden content is not focusable. */
+@media (max-width: 900px) {
+  .operator-sidebar:not(.operator-sidebar-open) {
+    visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
+  }
+  .operator-sidebar.operator-sidebar-open {
+    visibility: visible;
+    transition: transform .22s ease, visibility 0s;
+  }
+}
+
+@media (max-width: 850px) {
+  .company-sidebar:not(.open) {
+    visibility: hidden;
+    transition: left .25s ease, visibility 0s linear .25s;
+  }
+  .company-sidebar.open {
+    visibility: visible;
+    transition: left .25s ease, visibility 0s;
+  }
+}
+
+@media (max-width: 820px) {
+  .driver-sidebar:not(.driver-sidebar-open) {
+    visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
+  }
+  .driver-sidebar.driver-sidebar-open {
+    visibility: visible;
+    transition: transform .22s ease, visibility 0s;
+  }
+}
+
+@media (max-width: 760px) {
+  .audit-sidebar:not(.audit-sidebar-open) {
+    visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
+  }
+  .audit-sidebar.audit-sidebar-open {
+    visibility: visible;
+    transition: transform .22s ease, visibility 0s;
+  }
+  .connect-sidebar:not(.mobile-open) {
+    visibility: hidden;
+    transition: transform 220ms ease, box-shadow 220ms ease, visibility 0s linear 220ms !important;
+  }
+  .connect-sidebar.mobile-open {
+    visibility: visible;
+    transition: transform 220ms ease, box-shadow 220ms ease, visibility 0s !important;
+  }
+}
+
+@media (max-width: 800px) {
+  .pa-sidebar:not(.pa-sidebar-open) {
+    visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
+  }
+  .pa-sidebar.pa-sidebar-open {
+    visibility: visible;
+    transition: transform .22s ease, visibility 0s;
+  }
+}
+
+/* Programmatic focus target after a dialog closes: not a control, so no ring. */
+main[tabindex='-1']:focus-visible,
+[data-focus-fallback][tabindex='-1']:focus-visible {
+  outline: none;
 }

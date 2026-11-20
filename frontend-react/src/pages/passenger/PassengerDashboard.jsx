@@ -10,7 +10,7 @@ import useAsyncData from '../../hooks/useAsyncData';
 import { formatMoney as money } from '../../utils/money';
 import { deriveStatus } from '../../utils/loadStatus';
 import { createIntentKeys, withIdempotencyKey } from '../../utils/idempotency';
-import { bookingClosedMessage, shouldCheckPaymentStatus } from '../../utils/payment';
+import { MAX_SEATS_PER_BOOKING, bookingClosedMessage, seatLimitMessage, shouldCheckPaymentStatus } from '../../utils/payment';
 import { canOpenTripMap, isActiveBooking } from './liveMapUtils';
 import WalletPayOption from './WalletPayOption';
 import { walletPayErrorMessage } from '../../utils/wallet';
@@ -98,6 +98,7 @@ function PaymentModal({
       });
     } catch (e) {
       setError(e.message);
+      if (e?.status === 409) onPaid();
     } finally {
       setBusy(false);
     }
@@ -117,7 +118,10 @@ function PaymentModal({
         // The prompt may still have been sent: check before starting another.
         setMessage('We could not confirm that the payment request went through. Check the payment status before you try again.');
         setStep('check-status');
-      } else setError(e.message);
+      } else {
+        setError(e.message);
+        if (e?.status === 409) onPaid();
+      }
     } finally{setBusy(false)}
   };
 
@@ -132,7 +136,10 @@ function PaymentModal({
       if (shouldCheckPaymentStatus(e)) {
         setMessage('We could not confirm that the card checkout started. Check the payment status before you try again.');
         setStep('check-status');
-      } else setError(e.message);
+      } else {
+        setError(e.message);
+        if (e?.status === 409) onPaid();
+      }
       setBusy(false);
     }
   };
@@ -179,7 +186,7 @@ function PaymentModal({
   return <Modal labelledBy="pay-modal-title" onClose={onClose}>
     <p className="eyebrow">Booking {booking.booking_number}</p>
     <h2 id="pay-modal-title">{money(booking.total_amount)}</h2>
-    <PayCountdown payBefore={booking.pay_before} />
+    {step !== 'stale' && <PayCountdown payBefore={booking.pay_before} />}
     {step!=='mpesa-number' && <p className="muted">Choose how you want to complete this trip.</p>}
     {error && (
       <NoticeStack>
@@ -320,6 +327,20 @@ const dayLabel = (key) =>
     day: 'numeric',
     month: 'short',
   });
+
+const isToday = (key) => {
+  const now = new Date();
+  return key === new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+
+// Minutes before departure at which booking closes, read from the server's own
+// per-trip closing time; '' when the list has nothing to read it from.
+const cutoffMinutes = (trips) => {
+  const t = trips.find((x) => x.booking_closes_at && x.departure_at);
+  if (!t) return null;
+  const m = Math.round((new Date(t.departure_at) - new Date(t.booking_closes_at)) / 60000);
+  return Number.isFinite(m) && m >= 0 ? m : null;
+};
 
 export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const navigate = useNavigate();
@@ -489,6 +510,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       const b = await apiRequest('/bookings/create/', {
         method: 'POST',
         body: withIdempotencyKey(body, intentKeys.current.keyFor(intent)),
+        silent: true,
       });
       intentKeys.current.clear();
 
@@ -504,7 +526,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         total_amount: b.total_amount
       });
     } catch(e) {
-      setError(bookingClosedMessage(e) || e.message);
+      setError(bookingClosedMessage(e) || seatLimitMessage(e) || e.message);
     } finally {
       setLoading(false);
     }
@@ -1121,7 +1143,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
           <button
             type="button"
-            className="primary-button"
+            className="btn btn-primary"
             disabled={!otherPickup.trim()}
             onClick={() => setJourneyStep('trips')}
           >
@@ -1196,6 +1218,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             ) : !trips.length ? (
               <div className="glass-empty">
                 <strong>No departures on {dayLabel(selectedDate)}</strong>
+                {isToday(selectedDate) && (
+                  <span>Booking for a trip closes shortly before it leaves, so a bus about to depart is not listed.</span>
+                )}
                 {nextTripDate ? (
                   <>
                     <span>The next departure on this route is on {dayLabel(nextTripDate)}.</span>
@@ -1213,7 +1238,15 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 )}
               </div>
             ) : (
-              trips.map((t) => (
+              <>
+              {isToday(selectedDate) && (
+                <p className="muted">
+                  {cutoffMinutes(trips) != null
+                    ? `Booking closes ${cutoffMinutes(trips)} minutes before departure, so a bus about to leave is not listed.`
+                    : 'Booking closes shortly before departure, so a bus about to leave is not listed.'}
+                </p>
+              )}
+              {trips.map((t) => (
                 <article className="modern-trip-card" key={t.id}>
 
                   <div className="trip-time-block">
@@ -1272,7 +1305,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                   </div>
 
                 </article>
-              ))
+              ))}
+              </>
             )}
           </div>
         </section>
@@ -1340,14 +1374,17 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                     type="button"
                     aria-label="Add a seat"
                     onClick={() =>
-                      setSeats(Math.min(20, seatsLeft(bookingTrip), Number(seats) + 1))
+                      setSeats(Math.min(MAX_SEATS_PER_BOOKING, seatsLeft(bookingTrip), Number(seats) + 1))
                     }
-                    disabled={Number(seats) >= Math.min(20, seatsLeft(bookingTrip))}
+                    disabled={Number(seats) >= Math.min(MAX_SEATS_PER_BOOKING, seatsLeft(bookingTrip))}
                   >
                     +
                   </button>
                 </div>
               </div>
+              {Number(seats) >= MAX_SEATS_PER_BOOKING && (
+                <p className="muted">You can book up to {MAX_SEATS_PER_BOOKING} seats at a time.</p>
+              )}
 
               <div className="booking-total-glass">
                 <span>Total journey cost</span>
@@ -1379,7 +1416,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
       {paymentBooking && (
         <PaymentModal
-          booking={paymentBooking}
+          booking={bookings.find((b) => b.booking_id === paymentBooking.booking_id) || paymentBooking}
           onClose={() => {
             setPaymentBooking(null);
             refresh();

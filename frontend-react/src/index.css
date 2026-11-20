@@ -1646,17 +1646,41 @@
   align-items: center;
   justify-content: center;
 
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border-input);
   border-radius: var(--radius-card);
 
-  background: #f8fafc;
+  background: var(--surface-2);
   color: var(--primary-text);
 
   cursor: pointer;
 }
 
 .driver-live-locate:hover {
-  background: #eff6ff;
+  background: var(--surface-3);
+}
+
+/* The map is light, so the amber ring reads 1.4:1 there: a dark ring with a
+   white halo is at least 3:1 on both light tiles and the dark sheet. */
+.driver-live-back:focus-visible,
+.driver-live-map .leaflet-container a:focus-visible,
+.driver-live-map .leaflet-container button:focus-visible {
+  outline: 3px solid #111827;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* Same ring for every map's markers and controls: amber is 1.4:1 on the light tiles. */
+.leaflet-container:focus-visible,
+.leaflet-container .leaflet-marker-icon:focus-visible,
+.leaflet-container .leaflet-bar a:focus-visible {
+  outline: 3px solid #111827;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* Leaflet's default attribution link blue is 3.2:1 on its pale bar. */
+.leaflet-container .leaflet-control-attribution a {
+  color: #005073;
 }
 
 /* Route information */

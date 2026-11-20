@@ -15,6 +15,7 @@ import WithdrawPanel from './WithdrawPanel';
 import { cancelWarning } from '../../utils/wallet';
 import { statusGroup } from '../../utils/statusChip';
 import StatusIcon from '../../components/ui/StatusIcon';
+import { humanLabel } from '../../utils/labels';
 import {
   Armchair,
   CreditCard,
@@ -456,7 +457,7 @@ function BookingsBody({ activeOnly = false }) {
 
                 <span className="passenger-status" data-status={statusGroup(booking.status)}>
                   <StatusIcon group={statusGroup(booking.status)} />
-                  {booking.status}
+                  {humanLabel(booking.status)}
                 </span>
               </div>
 

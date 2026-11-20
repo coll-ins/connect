@@ -119,11 +119,13 @@ test.describe('return from Paystack', () => {
     await page.clock.install();
     let polls = 0;
     let credited = false;
+    let allowCredit = false;
     const calls = await open(page, '/passenger/wallet?reference=TOPUP-1&trxref=TOPUP-1', (path) => {
       if (path === `${TOPUP}TOPUP-1/`) {
         polls += 1;
-        // The first mount runs its effect twice (StrictMode), so count 3 is the first scheduled poll.
-        if (polls < 3) return row('pending');
+        // Pending until the test lets the credit through, so the count of first-mount polls
+        // (two under StrictMode in dev, one in a production build) does not matter.
+        if (!allowCredit) return row('pending');
         credited = true;
         return row('credited', { amount_paid: '500.00', available_balance: '500.00' });
       }
@@ -131,7 +133,8 @@ test.describe('return from Paystack', () => {
       return undefined;
     });
     await expect(page.getByRole('heading', { name: 'Checking your top-up' })).toBeVisible();
-    await expect.poll(() => polls).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => polls).toBeGreaterThanOrEqual(1);
+    allowCredit = true;
     await page.clock.fastForward(5000);
     await expect(page.getByRole('heading', { name: 'Top-up received' })).toBeVisible();
     await expect(page.getByText('KES 500.00 was added to your wallet.')).toBeVisible();

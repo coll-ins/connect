@@ -47,7 +47,7 @@ export default function StopMarker({ lat, lng, name, index, total }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const variant = index === 0 ? 'first' : total && index === total - 1 ? 'last' : 'default';
   return (
-    <Marker position={[lat, lng]} icon={stopIcon(index + 1, variant)}>
+    <Marker position={[lat, lng]} icon={stopIcon(index + 1, variant)} title={name ? `Stop ${index + 1}: ${name}` : `Stop ${index + 1}`}>
       {name && <Tooltip direction="top" offset={[0, -34]}>{name}</Tooltip>}
     </Marker>
   );

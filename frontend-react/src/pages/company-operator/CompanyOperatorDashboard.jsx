@@ -27,6 +27,7 @@ import { deriveStatus } from '../../utils/loadStatus';
 import { confirmTripCancel } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import { bookedSeatsOf } from '../company-manager/companyData';
+import { MAX_SEATS_PER_BOOKING } from '../../utils/payment';
 import './CompanyOperatorDashboard.css';
 
 const sectionByPath = {
@@ -658,7 +659,7 @@ function WalkInForm({ trip, onDone, onSettled, blockedReason = '' }) {
           <input
             type="number"
             min="1"
-            max="20"
+            max={MAX_SEATS_PER_BOOKING}
             value={seats}
             onChange={(e) => setSeats(e.target.value)}
           />

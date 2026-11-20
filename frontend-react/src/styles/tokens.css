@@ -48,8 +48,9 @@
   --accent-ink: var(--primary-ink);
   --accent-deep: var(--primary-deep);
 
-  --warn: #efb041;
-  --warn-rgb: 239 176 65;
+  /* Same orange as --st-pending: 9.3:1 on --bg, 5.0:1 on its 20% tint (.rp-warn). */
+  --warn: #ff9f5a;
+  --warn-rgb: 255 159 90;
   --danger: #e5484d;
   --danger-rgb: 229 72 77;
   --danger-text: #ff8a8e;

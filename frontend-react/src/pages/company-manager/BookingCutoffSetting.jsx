@@ -46,7 +46,7 @@ export default function BookingCutoffSetting() {
 
   return (
     <section className="cutoff-card" aria-labelledby={`${inputId}-h`}>
-      <h3 id={`${inputId}-h`}>Booking cut-off</h3>
+      <h2 id={`${inputId}-h`}>Booking cut-off</h2>
       <AsyncPanel status={query.status} onRetry={query.reload} title="the booking cut-off">
         <form onSubmit={submit} noValidate>
           <label className="cutoff-field" htmlFor={inputId}>

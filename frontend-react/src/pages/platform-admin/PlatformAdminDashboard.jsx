@@ -36,6 +36,7 @@ import Modal from '../../components/ui/Modal';
 import AsyncPanel from '../../components/ui/AsyncPanel';
 import { deriveStatus } from '../../utils/loadStatus';
 import { formatMoney } from '../../utils/money';
+import { humanLabel } from '../../utils/labels';
 
 const money = formatMoney;
 
@@ -2353,13 +2354,13 @@ export default function PlatformAdminDashboard() {
                       System health
                     </span>
 
-                    <h3>
+                    <h2>
                       {systemStatus === 'healthy'
                         ? 'System healthy'
                         : systemStatus === 'critical'
                           ? 'Critical attention required'
                           : 'Attention required'}
-                    </h3>
+                    </h2>
                   </div>
 
                   <div
@@ -2412,9 +2413,9 @@ export default function PlatformAdminDashboard() {
                       Diagnostics
                     </span>
 
-                    <h3>
+                    <h2>
                       Platform system tests
-                    </h3>
+                    </h2>
                   </div>
 
                   <div className="pa-command-icon">
@@ -2512,7 +2513,7 @@ export default function PlatformAdminDashboard() {
               <div className="pa-panel">
                 <div className="pa-panel-header">
                   <div>
-                    <h3>Companies</h3>
+                    <h2>Companies</h2>
                     <p>
                       Global company directory.
                     </p>
@@ -2579,7 +2580,7 @@ export default function PlatformAdminDashboard() {
               <div className="pa-panel">
                 <div className="pa-panel-header">
                   <div>
-                    <h3>Latest trips</h3>
+                    <h2>Latest trips</h2>
                     <p>
                       Most recent operational trips.
                     </p>
@@ -2653,9 +2654,9 @@ export default function PlatformAdminDashboard() {
               <div className="pa-panel">
                 <div className="pa-panel-header">
                   <div>
-                    <h3>
+                    <h2>
                       Operational attention
-                    </h3>
+                    </h2>
 
                     <p>
                       Issues detected from current
@@ -2730,9 +2731,9 @@ export default function PlatformAdminDashboard() {
                   Global directory
                 </span>
 
-                <h3>
+                <h2>
                   Transport companies
-                </h3>
+                </h2>
 
                 <p>
                   Create and manage companies
@@ -2863,7 +2864,7 @@ export default function PlatformAdminDashboard() {
                   Network
                 </span>
 
-                <h3>Routes</h3>
+                <h2>Routes</h2>
 
                 <p>
                   Global route configuration.
@@ -2982,7 +2983,7 @@ export default function PlatformAdminDashboard() {
                   Fleet
                 </span>
 
-                <h3>Drivers</h3>
+                <h2>Drivers</h2>
 
                 <p>
                   Global driver directory.
@@ -3098,7 +3099,7 @@ export default function PlatformAdminDashboard() {
                   Operations
                 </span>
 
-                <h3>Trips</h3>
+                <h2>Trips</h2>
 
                 <p>
                   Global trip schedule and
@@ -3297,7 +3298,7 @@ export default function PlatformAdminDashboard() {
                   Company access
                 </span>
 
-                <h3>Operators</h3>
+                <h2>Operators</h2>
 
                 <p>
                   Manage company managers,
@@ -3340,7 +3341,7 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <span className="pa-badge">
-                              {operator.role}
+                              {humanLabel(operator.role)}
                             </span>
                           </td>
 
@@ -3389,7 +3390,7 @@ export default function PlatformAdminDashboard() {
                   Bookings
                 </span>
 
-                <h3>Global bookings</h3>
+                <h2>Global bookings</h2>
 
                 <p>
                   Platform-wide booking activity.
@@ -3452,9 +3453,9 @@ export default function PlatformAdminDashboard() {
                   <tbody>
                     {bookings.map(
                       (booking) => (
-                        <tr key={booking.id}>
+                        <tr key={booking.id ?? booking.booking_id ?? booking.booking_number}>
                           <td>
-                            #{booking.id}
+                            #{booking.id ?? booking.booking_id}
                           </td>
 
                           <td>
@@ -3486,8 +3487,8 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <span className="pa-badge">
-                              {booking.status ||
-                                'unknown'}
+                              {humanLabel(booking.status) ||
+                                'Unknown'}
                             </span>
                           </td>
                         </tr>
@@ -3518,7 +3519,7 @@ export default function PlatformAdminDashboard() {
                   Platform directory
                 </span>
 
-                <h3>Users</h3>
+                <h2>Users</h2>
 
                 <p>
                   Global user population across
@@ -3615,7 +3616,7 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <span className="pa-badge">
-                              {item.role}
+                              {humanLabel(item.role)}
                             </span>
                           </td>
 
@@ -3674,9 +3675,9 @@ export default function PlatformAdminDashboard() {
                   Platform insights
                 </span>
 
-                <h3>
+                <h2>
                   Operational reports
-                </h3>
+                </h2>
 
                 <p>
                   Current platform-wide operational
@@ -3718,9 +3719,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     Company activity
-                  </h3>
+                  </h2>
 
                   <p>
                     Route and trip distribution
@@ -3812,7 +3813,7 @@ export default function PlatformAdminDashboard() {
                   Financial overview
                 </span>
 
-                <h3>Revenue</h3>
+                <h2>Revenue</h2>
 
                 <p>
                   Platform-wide booking value.
@@ -3862,9 +3863,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     Booking value by company
-                  </h3>
+                  </h2>
 
                   <p>
                     Calculated from booking amounts
@@ -3936,9 +3937,9 @@ export default function PlatformAdminDashboard() {
                   Operations
                 </span>
 
-                <h3>
+                <h2>
                   Issue workspace
-                </h3>
+                </h2>
 
                 <p>
                   Live operational exceptions
@@ -4016,9 +4017,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     Active issues
-                  </h3>
+                  </h2>
 
                   <p>
                     Click an issue to open its
@@ -4103,9 +4104,9 @@ export default function PlatformAdminDashboard() {
                   System
                 </span>
 
-                <h3>
+                <h2>
                   Platform system tests
-                </h3>
+                </h2>
 
                 <p>
                   Verify the health and integrity
@@ -4202,9 +4203,9 @@ export default function PlatformAdminDashboard() {
                 <div className="pa-panel">
                   <div className="pa-panel-header">
                     <div>
-                      <h3>
+                      <h2>
                         Diagnostic results
-                      </h3>
+                      </h2>
 
                       <p>
                         Results returned directly
@@ -4264,9 +4265,9 @@ export default function PlatformAdminDashboard() {
                   System configuration
                 </span>
 
-                <h3>
+                <h2>
                   Platform settings
-                </h3>
+                </h2>
 
                 <p>
                   Platform-level configuration and
@@ -4278,9 +4279,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     System information
-                  </h3>
+                  </h2>
 
                   <p>
                     Current CONNECT platform

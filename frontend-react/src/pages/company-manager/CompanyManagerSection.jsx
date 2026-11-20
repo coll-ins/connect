@@ -24,6 +24,7 @@ import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import BookingCutoffSetting from './BookingCutoffSetting';
 import { asList, findCompany, normalizeOperatorRoutes, staffOfCompany } from './companyData';
+import { humanLabel } from '../../utils/labels';
 
 const EMPTY_COPY = {
   routes: ['No routes yet', 'Create a route to start selling seats on it.'],
@@ -1094,7 +1095,7 @@ export default function CompanyManagerSection({ section }) {
                       </div>
 
                       <span className="company-status available">
-                        {operator.role}
+                        {humanLabel(operator.role)}
                       </span>
 
                       <div className="company-card-actions">

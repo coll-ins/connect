@@ -188,7 +188,7 @@ test.describe('withdraw: safety', () => {
     let posts = 0;
     page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith('/wallet/withdraw/')) posts += 1; });
     const button = page.getByRole('dialog').getByRole('button', { name: 'Confirm withdrawal' });
-    await button.dblclick();
+    await button.evaluate((b) => { b.click(); b.click(); });
     await expect(page.getByRole('status').filter({ hasText: 'In progress' })).toBeVisible();
     expect(posts).toBe(1);
     expect(count(calls, 'POST /api/wallet/withdraw/')).toBe(0);
@@ -259,13 +259,16 @@ test.describe('withdrawals history', () => {
   });
 
   test('a failed load shows Retry, and Retry loads', async ({ page }) => {
-    let n = 0;
+    // Fails until the test clicks Retry, so it does not depend on how many times the
+    // first mount loads (twice under StrictMode in dev, once in a production build).
+    let failing = true;
     await open(page, (path, request, url) => {
-      if (path === LIST) { n += 1; return n <= 2 ? { status: 500, body: {} } : { body: { results: rows(9, 1), next_cursor: null } }; }
+      if (path === LIST) return failing ? { status: 500, body: {} } : { body: { results: rows(9, 1), next_cursor: null } };
       return mock()(path, request, url);
     });
     const alert = page.getByRole('alert').filter({ hasText: 'Could not load your withdrawals' });
     await expect(alert).toBeVisible();
+    failing = false;
     await alert.getByRole('button', { name: 'Retry' }).click();
     await expect(page.getByRole('list', { name: 'Withdrawals' }).getByRole('listitem')).toHaveCount(1);
   });
