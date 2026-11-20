@@ -9,7 +9,10 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import { gpsPayload, wasIgnored } from './gpsPayload';
 import ConnectMap from '../../components/maps/ConnectMap';
+import StatusIcon from '../../components/ui/StatusIcon';
+import { statusGroup } from '../../utils/statusChip';
 import './DriverLiveLocation.css';
 
 const formatDate = (value) =>
@@ -82,7 +85,7 @@ export default function DriverLiveLocation() {
     try {
       setError('');
 
-      const profile = await apiRequest('/drivers/me/');
+      const profile = await apiRequest('/drivers/me/', { silent: true });
       // Keep the live GPS position; the profile can hold a stale one.
       setDriver((current) => ({
         ...profile,
@@ -90,7 +93,7 @@ export default function DriverLiveLocation() {
         longitude: current?.longitude ?? profile.longitude,
       }));
 
-      const data = await apiRequest(`/bookings/driver/${profile.id}/`);
+      const data = await apiRequest(`/bookings/driver/${profile.id}/`, { silent: true });
 
 
 
@@ -172,12 +175,16 @@ export default function DriverLiveLocation() {
         `/drivers/${driverId}/location/`,
         {
           method: 'POST',
-          body: {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          },
+          body: gpsPayload(position),
+          silent: true,
         },
       );
+
+      // A fix the server refused (stale or inaccurate) is not a fresh position.
+      if (wasIgnored(updated)) {
+        setLocation(null);
+        return;
+      }
 
       console.info(
         '[DRIVER LIVE] GPS sent successfully:',
@@ -196,6 +203,7 @@ export default function DriverLiveLocation() {
 
       // Do not turn a temporary throttle into a permanent page error.
       if (!String(err.message || '').includes('throttled')) {
+        setLocation(null);
         setError(err.message || 'Unable to update GPS location.');
       }
     } finally {
@@ -482,7 +490,7 @@ export default function DriverLiveLocation() {
   };
 
   return (
-    <div className="driver-live-page">
+    <main className="driver-live-page">
       <div className="driver-live-map">
         <ConnectMap
           driver={mapDriver}
@@ -523,14 +531,13 @@ export default function DriverLiveLocation() {
 
         <div
           className="driver-live-status"
-          style={{
-            background:
-              gpsStatus === 'LIVE'
-                ? undefined
-                : gpsStatus === 'DELAYED'
-                  ? 'rgba(200,140,0,0.92)'
-                  : 'rgba(180,40,40,0.92)',
-          }}
+          style={
+            gpsStatus === 'LIVE'
+              ? undefined
+              : gpsStatus === 'DELAYED'
+                ? { background: 'var(--primary)', color: 'var(--primary-ink)' }
+                : { background: 'var(--danger-fill)', color: '#fff' }
+          }
         >
           <span
             style={
@@ -661,7 +668,7 @@ export default function DriverLiveLocation() {
             </button>
 
             {reportDone && (
-              <p style={{ margin: '8px 0', fontSize: 13, color: '#9be3a8' }}>
+              <p style={{ margin: '8px 0', fontSize: 13, color: 'var(--success-text)' }}>
                 {reportDone}
               </p>
             )}
@@ -669,6 +676,7 @@ export default function DriverLiveLocation() {
             {reportOpen ? (
               <div style={{ margin: '12px 0' }}>
                 <select
+                  aria-label="Problem type"
                   value={reportType}
                   className="connect-dark-select"
                   onChange={(e) => setReportType(e.target.value)}
@@ -682,6 +690,7 @@ export default function DriverLiveLocation() {
                 </select>
 
                 <textarea
+                  aria-label="What happened?"
                   value={reportText}
                   onChange={(e) => setReportText(e.target.value)}
                   placeholder="What happened?"
@@ -694,7 +703,7 @@ export default function DriverLiveLocation() {
                     type="button"
                     onClick={submitIncident}
                     disabled={reportSending || !reportText.trim()}
-                    style={{ flex: 1, padding: '10px 12px', borderRadius: 12, border: 'none', background: '#d97706', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 12, border: 'none', background: 'var(--primary)', color: 'var(--primary-ink)', fontWeight: 600, cursor: 'pointer' }}
                   >
                     {reportSending ? 'Sending...' : 'Send report'}
                   </button>
@@ -768,7 +777,8 @@ export default function DriverLiveLocation() {
                         </span>
                       </div>
 
-                      <span className="driver-live-passenger-status">
+                      <span className="driver-live-passenger-status" data-status={statusGroup(booking.status || 'pending')}>
+                        <StatusIcon group={statusGroup(booking.status || 'pending')} />
                         {booking.status || 'pending'}
                       </span>
                     </div>
@@ -867,7 +877,7 @@ export default function DriverLiveLocation() {
         )}
 
         {error && (
-          <div className="driver-live-error">
+          <div className="driver-live-error" role="alert">
             {error}
           </div>
         )}
@@ -883,6 +893,6 @@ export default function DriverLiveLocation() {
           </>
         )}
       </section>
-    </div>
+    </main>
   );
 }

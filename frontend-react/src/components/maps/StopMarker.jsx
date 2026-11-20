@@ -4,7 +4,7 @@ import './StopMarker.css';
 
 const COLORS = {
   default: ['#ff6b4a', '#c62d14'],
-  first: ['#34d399', '#047857'],
+  first: ['#3ddc97', '#047857'],
   last: ['#60a5fa', '#1d4ed8'],
 };
 const PATH = 'M14 1C7 1 2 6.3 2 13c0 9 12 24 12 24s12-15 12-24C26 6.3 21 1 14 1z';

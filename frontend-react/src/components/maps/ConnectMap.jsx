@@ -222,7 +222,7 @@ function PassengerPopup({ passenger, stage }) {
           <div
             style={{
               marginTop: '4px',
-              fontSize: '11px',
+              fontSize: 'var(--text-xs)',
               color: '#777',
             }}
           >
@@ -618,7 +618,7 @@ export default function ConnectMap({
                             <div
                               style={{
                                 marginTop: '3px',
-                                fontSize: '11px',
+                                fontSize: 'var(--text-xs)',
                                 color: '#777',
                               }}
                             >

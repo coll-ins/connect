@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardPath } from '../../utils/roleRoutes';
 import PasswordInput from '../../components/PasswordInput';
+import '../../styles/forms.css';
 
 export default function Login() {
   const { login } = useAuth();
@@ -13,6 +14,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [slowConnection, setSlowConnection] = useState(false);
+  const phoneRef = useRef(null);
+
+  useEffect(() => { document.title = 'Sign in | CONNECT'; }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -37,13 +41,14 @@ export default function Login() {
       navigate(dashboardPath(user), { replace: true });
     } catch (err) {
       setError(err.message);
+      phoneRef.current?.focus();
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-page">
+    <main className="auth-page">
       <div className="auth-card">
         <div className="brand-mark">C</div>
 
@@ -55,14 +60,17 @@ export default function Login() {
           Sign in to manage trips, bookings and payments.
         </p>
 
-        {error && <div className="error">{error}</div>}
+        {error && <div id="login-error" className="error" role="alert">{error}</div>}
 
         <form onSubmit={submit} className="form-stack">
           <label>
             Phone number
             <input
+              ref={phoneRef}
               type="tel"
               className="input"
+              aria-invalid={error ? 'true' : undefined}
+              aria-describedby={error ? 'login-error' : undefined}
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="07XX XXX XXX or +2547XX XXX XXX"
@@ -71,15 +79,18 @@ export default function Login() {
             />
           </label>
 
-          <label>
-            Password
+          <div className="form-field">
+            <label htmlFor="login-password">Password</label>
             <PasswordInput
+              id="login-password"
               className="input"
+              aria-invalid={error ? 'true' : undefined}
+              aria-describedby={error ? 'login-error' : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-          </label>
+          </div>
 
           <button
             className="btn btn-primary btn-full"
@@ -98,6 +109,6 @@ export default function Login() {
           New to CONNECT? <Link to="/signup">Create an account</Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

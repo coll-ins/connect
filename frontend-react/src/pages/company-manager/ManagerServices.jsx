@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import useAsyncData from '../../hooks/useAsyncData';
 import { useAuth } from '../../context/AuthContext';
 import { label, money, when } from '../shared/serviceUtils';
+import { asList } from './companyData';
 import '../shared/Services.css';
 
 const Badge = ({ status }) => (
@@ -13,24 +16,19 @@ const SIZES = ['small', 'medium', 'large'];
 const toValue = (v) => (v === '' || v == null ? null : String(v).trim());
 
 export function ManagerParcels() {
-  const [rates, setRates] = useState(null);
   const [edits, setEdits] = useState({});
-  const [parcels, setParcels] = useState(null);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
 
-  const loadRates = useCallback(() => {
-    apiRequest('/deliveries/rates/').then(setRates).catch((e) => setError(e.message));
-  }, []);
-  const loadParcels = useCallback(() => {
-    apiRequest(`/deliveries/company/${filter ? `?status=${filter}` : ''}`)
-      .then((d) => setParcels(Array.isArray(d) ? d : []))
-      .catch((e) => { setError(e.message); setParcels([]); });
-  }, [filter]);
-
-  useEffect(() => { loadRates(); }, [loadRates]);
-  useEffect(() => { loadParcels(); }, [loadParcels]);
+  // A failed load shows Retry in its own card, not "no routes" or "no parcels".
+  const ratesQuery = useAsyncData(() => apiRequest('/deliveries/rates/', { silent: true }), []);
+  const parcelsQuery = useAsyncData(
+    () => apiRequest(`/deliveries/company/${filter ? `?status=${filter}` : ''}`, { silent: true }),
+    [filter],
+  );
+  const rates = asList(ratesQuery.data);
+  const parcels = asList(parcelsQuery.data);
 
   const edit = (routeId, size, value) =>
     setEdits((prev) => ({ ...prev, [routeId]: { ...(prev[routeId] || {}), [size]: value } }));
@@ -43,7 +41,7 @@ export function ManagerParcels() {
       await apiRequest(`/deliveries/rates/${route.id}/`, { method: 'PATCH', body });
       setEdits((prev) => ({ ...prev, [route.id]: undefined }));
       setNote(`Saved rates for ${route.name}.`);
-      loadRates();
+      ratesQuery.reload();
     } catch (e) { setError(e.message); }
   };
 
@@ -57,12 +55,13 @@ export function ManagerParcels() {
         </div>
       </div>
 
-      {error && <div className="svc-error">{error}</div>}
-      {note && <div className="svc-note">{note}</div>}
+      {error && <div className="svc-error" role="alert">{error}</div>}
+      {note && <div className="svc-note" role="status">{note}</div>}
 
       <div className="svc-card">
         <h3>Parcel rates (KES)</h3>
-        {rates === null ? 'Loading…' : !rates.length ? 'You have no routes yet.' : (
+        <AsyncPanel status={ratesQuery.status} onRetry={ratesQuery.reload} title="parcel rates">
+        {!rates.length ? 'You have no routes yet.' : (
           <div className="svc-table-wrap">
             <table className="svc-table">
               <thead><tr><th>Route</th><th>Small</th><th>Medium</th><th>Large</th><th /></tr></thead>
@@ -85,6 +84,7 @@ export function ManagerParcels() {
             </table>
           </div>
         )}
+        </AsyncPanel>
       </div>
 
       <div className="svc-card">
@@ -97,7 +97,8 @@ export function ManagerParcels() {
             ))}
           </select>
         </div>
-        {parcels === null ? 'Loading…' : !parcels.length ? 'No parcels.' : (
+        <AsyncPanel status={parcelsQuery.status} onRetry={parcelsQuery.reload} title="parcels">
+        {!parcels.length ? 'No parcels.' : (
           <div className="svc-table-wrap">
             <table className="svc-table">
               <thead><tr><th>Code</th><th>Status</th><th>Trip</th><th>Sender</th><th>Receiver</th><th>Price</th></tr></thead>
@@ -116,6 +117,7 @@ export function ManagerParcels() {
             </table>
           </div>
         )}
+        </AsyncPanel>
       </div>
     </div>
   );
@@ -138,10 +140,10 @@ function QuoteForm({ charter, drivers, onDone }) {
 
   return (
     <div style={{ marginTop: 14 }}>
-      {error && <div className="svc-error" style={{ marginBottom: 10 }}>{error}</div>}
+      {error && <div className="svc-error" role="alert" style={{ marginBottom: 10 }}>{error}</div>}
       <div className="svc-actions" style={{ marginTop: 0, marginBottom: 12 }}>
-        <button className={`btn ${mode === 'quote' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setMode('quote')}>Send a quote</button>
-        <button className={`btn ${mode === 'decline' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setMode('decline')}>Decline</button>
+        <button className={`btn ${mode === 'quote' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={mode === 'quote'} onClick={() => setMode('quote')}>Send a quote</button>
+        <button className={`btn ${mode === 'decline' ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={mode === 'decline'} onClick={() => setMode('decline')}>Decline</button>
       </div>
 
       {mode === 'quote' ? (
@@ -184,21 +186,19 @@ function QuoteForm({ charter, drivers, onDone }) {
 export function ManagerCharters() {
   const { user } = useAuth();
   const [accepts, setAccepts] = useState(null);
-  const [rows, setRows] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
 
-  const loadRows = useCallback(() => {
-    apiRequest(`/charters/company/${filter ? `?status=${filter}` : ''}`)
-      .then((d) => setRows(Array.isArray(d) ? d : []))
-      .catch((e) => { setError(e.message); setRows([]); });
-  }, [filter]);
+  const rowsQuery = useAsyncData(
+    () => apiRequest(`/charters/company/${filter ? `?status=${filter}` : ''}`, { silent: true }),
+    [filter],
+  );
+  const rows = asList(rowsQuery.data);
 
   useEffect(() => {
     apiRequest('/charters/settings/').then((d) => setAccepts(Boolean(d.accepts_charters))).catch((e) => setError(e.message));
   }, []);
-  useEffect(() => { loadRows(); }, [loadRows]);
   useEffect(() => {
     if (!user?.company_id) return;
     apiRequest(`/drivers/?company_id=${user.company_id}`)
@@ -224,7 +224,7 @@ export function ManagerCharters() {
         </div>
       </div>
 
-      {error && <div className="svc-error">{error}</div>}
+      {error && <div className="svc-error" role="alert">{error}</div>}
 
       <div className="svc-card">
         <h3>Accepting bus hire requests</h3>
@@ -247,7 +247,8 @@ export function ManagerCharters() {
         </select>
       </div>
 
-      {rows === null ? <div className="glass-empty">Loading…</div> : !rows.length ? (
+      <AsyncPanel status={rowsQuery.status} onRetry={rowsQuery.reload} title="bus hire requests">
+      {!rows.length ? (
         <div className="glass-empty">No requests.</div>
       ) : (
         <div className="svc-list">
@@ -270,12 +271,13 @@ export function ManagerCharters() {
                 {c.notes && <div><span>Notes</span><strong>{c.notes}</strong></div>}
               </dl>
               {['requested', 'quoted'].includes(c.status) && (
-                <QuoteForm charter={c} drivers={drivers} onDone={loadRows} />
+                <QuoteForm charter={c} drivers={drivers} onDone={rowsQuery.reload} />
               )}
             </div>
           ))}
         </div>
       )}
+      </AsyncPanel>
     </div>
   );
 }

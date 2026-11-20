@@ -36,12 +36,25 @@
     min-height: 44px;
   }
 
+  .btn,
+  a.btn {
+    min-height: 44px;
+  }
+
+  .auth-footer a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   .driver-timetable-link,
   .company-panel-header a,
   .company-section-head a {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
+    min-width: 44px;
   }
 }
 

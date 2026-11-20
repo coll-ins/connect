@@ -1596,7 +1596,7 @@ export default function PassengerLiveMap({
                       padding: '10px 12px',
                       borderRadius: 12,
                       border: 'none',
-                      background: '#b42828',
+                      background: 'var(--danger-fill)',
                       color: '#fff',
                       fontWeight: 600,
                       cursor: 'pointer',

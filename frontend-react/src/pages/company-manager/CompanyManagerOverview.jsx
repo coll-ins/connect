@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -11,13 +10,13 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import useAsyncData from '../../hooks/useAsyncData';
+import { formatMoney } from '../../utils/money';
 import { useAuth } from '../../context/AuthContext';
+import { asList, findCompany } from './companyData';
 
-const money = (value) =>
-  `KES ${Number(value || 0).toLocaleString('en-KE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const money = formatMoney;
 
 const formatDate = (value) =>
   value
@@ -49,56 +48,33 @@ export default function CompanyManagerOverview() {
 
   const companyId = user?.company_id;
 
-  const [company, setCompany] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
-  const [routes, setRoutes] = useState([]);
-  const [trips, setTrips] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    if (!companyId) {
-      setError('Your account is not linked to a company.');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const [companies, analyticsData, routesData, tripsData, driversData, bookingsData] =
-        await Promise.all([
-          apiRequest('/companies/'),
-          apiRequest(`/companies/${companyId}/analytics/`),
-          apiRequest(`/companies/${companyId}/routes/`),
-          apiRequest(`/companies/${companyId}/trips/`),
-          apiRequest(`/drivers/?company_id=${companyId}`),
-          apiRequest(`/bookings/all/?company_id=${companyId}`),
-        ]);
-
-      const ownCompany = (companies || []).find(
-        (item) => Number(item.id) === Number(companyId)
-      );
-
-      setCompany(ownCompany || null);
-      setAnalytics(analyticsData || null);
-      setRoutes(routesData || []);
-      setTrips(tripsData || []);
-      setDrivers(driversData || []);
-      setBookings(bookingsData || []);
-    } catch (err) {
-      setError(err.message || 'Unable to load company manager data.');
-    } finally {
-      setLoading(false);
-    }
+  // Six independent requests start together; any failure shows Retry rather
+  // than a page of zeros.
+  const { status, data, reload } = useAsyncData(async () => {
+    if (!companyId) return null;
+    const get = (path) => apiRequest(path, { silent: true });
+    const [companies, analyticsData, routesData, tripsData, driversData, bookingsData] =
+      await Promise.all([
+        get('/companies/'),
+        get(`/companies/${companyId}/analytics/`),
+        get(`/companies/${companyId}/routes/`),
+        get(`/companies/${companyId}/trips/`),
+        get(`/drivers/?company_id=${companyId}`),
+        get(`/bookings/all/?company_id=${companyId}`),
+      ]);
+    return {
+      company: findCompany(companies, companyId),
+      analytics: analyticsData || null,
+      routes: asList(routesData),
+      trips: asList(tripsData),
+      drivers: asList(driversData),
+      bookings: asList(bookingsData),
+    };
   }, [companyId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { company, analytics, routes, trips, drivers, bookings } = data || {
+    company: null, analytics: null, routes: [], trips: [], drivers: [], bookings: [],
+  };
 
   const activeTrips = trips.filter(
     (trip) => !['completed', 'cancelled'].includes(trip.status)
@@ -117,18 +93,22 @@ export default function CompanyManagerOverview() {
     <div className="company-inner-page">
 
       <section className="company-content">
-          {error && <div className="company-error">{error}</div>}
-
-          {loading ? (
-            <div className="company-loading">
-              Loading your company workspace...
+          {!companyId ? (
+            <div className="company-error" role="alert">
+              Your account is not linked to a company.
             </div>
           ) : (
+            <AsyncPanel
+              status={status}
+              onRetry={reload}
+              title="your company workspace"
+              loadingText="Loading your company workspace…"
+            >
             <>
               <section className="company-welcome">
                 <div>
                   <p className="company-eyebrow">Company overview</p>
-                  <h2>{company?.name || user?.company_name || 'Your company'}</h2>
+                  <h1>{company?.name || user?.company_name || 'Your company'}</h1>
                   <p>
                     Manage your company's routes, departures, drivers,
                     operators, bookings and revenue from one workspace.
@@ -346,8 +326,8 @@ export default function CompanyManagerOverview() {
                         <div>
                           <strong>
                             {money(
-                              booking.total_amount ||
-                                booking.amount ||
+                              booking.total_amount ??
+                                booking.amount ??
                                 booking.fare
                             )}
                           </strong>
@@ -363,6 +343,7 @@ export default function CompanyManagerOverview() {
                 </div>
               </section>
             </>
+            </AsyncPanel>
           )}
         </section>
     </div>

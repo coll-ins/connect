@@ -2,9 +2,19 @@ import AppShell from '../../components/layout/AppShell';
 import './PassengerRecords.css';
 import { useAuth } from '../../context/AuthContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import PayCountdown from '../../components/ui/PayCountdown';
+import useAsyncData from '../../hooks/useAsyncData';
+import { formatMoney as money } from '../../utils/money';
+import { deriveStatus } from '../../utils/loadStatus';
 import { canOpenTripMap } from './liveMapUtils';
+import { TopUpForm, TopUpReturn, WalletHistory } from './WalletPanels';
+import WithdrawPanel from './WithdrawPanel';
+import { cancelWarning } from '../../utils/wallet';
+import { statusGroup } from '../../utils/statusChip';
+import StatusIcon from '../../components/ui/StatusIcon';
 import {
   Armchair,
   CreditCard,
@@ -21,12 +31,6 @@ import {
   Clock3,
   XCircle,
 } from 'lucide-react';
-
-const money = (v) =>
-  `KES ${Number(v || 0).toLocaleString('en-KE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 
 const date = (v) =>
   v
@@ -54,7 +58,7 @@ function PassengerPage({ eyebrow, title, description, children }) {
 
 
 export function PassengerRecords({ mode = 'receipts' }) {
-  const [records, setRecords] = useState([]);
+  const [records, setRecords] = useState(null);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -64,11 +68,12 @@ export function PassengerRecords({ mode = 'receipts' }) {
   const load = async (value = '') => {
     setLoading(true);
     setError('');
+    setRecords(null);
     try {
       const suffix = value
         ? `?search=${encodeURIComponent(value)}`
         : '';
-      const data = await apiRequest(`/bookings/records/${suffix}`);
+      const data = await apiRequest(`/bookings/records/${suffix}`, { silent: true });
       setRecords(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message);
@@ -82,9 +87,11 @@ export function PassengerRecords({ mode = 'receipts' }) {
   }, []);
 
   const visible = useMemo(() => {
+    if (!records) return [];
     if (mode === 'history') return records;
     return records.filter((r) => r.payment?.exists);
   }, [records, mode]);
+  const status = deriveStatus({ loading, error, hasData: records !== null });
 
   const statusIcon = (status) => {
     if (status === 'confirmed' || status === 'completed') {
@@ -147,15 +154,8 @@ export function PassengerRecords({ mode = 'receipts' }) {
         </div>
       )}
 
-      {error && (
-        <div className="connect-alert connect-alert-error">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="glass-empty">Loading your records…</div>
-      ) : !visible.length ? (
+      <AsyncPanel status={status} title="your records" loadingText="Loading your records…" onRetry={() => load(query)}>
+      {!visible.length ? (
         <div className="glass-empty">
           {mode === 'history' ? (
             <History size={30} />
@@ -319,6 +319,7 @@ export function PassengerRecords({ mode = 'receipts' }) {
           )}
         </div>
       )}
+      </AsyncPanel>
     </PassengerPage>
   );
 }
@@ -394,24 +395,17 @@ function bookingActions(b) {
 
 function BookingsBody({ activeOnly = false }) {
   const navigate = useNavigate();
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { status, data, reload: load } = useAsyncData(
+    () => apiRequest('/bookings/my/', { silent: true }).then((d) => (Array.isArray(d) ? d : [])),
+  );
+  const bookings = data || [];
+  // Cancel failures are action errors; they never replace the loaded list.
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState(null);
 
-  const load = useCallback(() => apiRequest('/bookings/my/')
-    .then((data) => setBookings(Array.isArray(data) ? data : []))
-    .catch((e) => setError(e.message))
-    .finally(() => setLoading(false)), []);
-
-  useEffect(() => { load(); }, [load]);
-
   const cancel = async (b) => {
-    const paid = lower(b.payment_status) === 'confirmed' && lower(b.payment_method) !== 'cash';
-    const warning = paid
-      ? 'Cancel this booking? You will be refunded 50% of the fare.'
-      : 'Cancel this booking? Nothing has been charged.';
+    const warning = cancelWarning(b);
     if (!window.confirm(warning)) return;
     setBusyId(b.booking_id);
     setError('');
@@ -440,12 +434,11 @@ function BookingsBody({ activeOnly = false }) {
 
   return (
     <>
-      {error && <div className="connect-alert connect-alert-error">{error}</div>}
+      {error && <div className="connect-alert connect-alert-error" role="alert">{error}</div>}
       {notice && <div className="connect-alert" role="status">{notice}</div>}
 
-      {loading ? (
-        <div className="glass-empty">Loading your bookings…</div>
-      ) : !visible.length ? (
+      <AsyncPanel status={status} title="your bookings" loadingText="Loading your bookings…" onRetry={load}>
+      {!visible.length ? (
         <div className="glass-empty">
           <strong>No bookings yet.</strong>
           <span>Trips you book show up here, with live tracking once the bus is on the road.</span>
@@ -461,7 +454,8 @@ function BookingsBody({ activeOnly = false }) {
                   <strong>{booking.booking_number}</strong>
                 </div>
 
-                <span className="passenger-status">
+                <span className="passenger-status" data-status={statusGroup(booking.status)}>
+                  <StatusIcon group={statusGroup(booking.status)} />
                   {booking.status}
                 </span>
               </div>
@@ -489,6 +483,8 @@ function BookingsBody({ activeOnly = false }) {
                 <strong>{money(booking.total_amount)}</strong>
                 <span>{booking.payment_method || 'Payment pending'}</span>
               </div>
+
+              {lower(booking.status) === 'pending' && <PayCountdown payBefore={booking.pay_before} />}
 
               {(() => {
                 const can = bookingActions(booking);
@@ -521,6 +517,7 @@ function BookingsBody({ activeOnly = false }) {
           ))}
         </div>
       )}
+      </AsyncPanel>
     </>
   );
 }
@@ -538,62 +535,60 @@ export function PassengerBookings() {
 }
 
 export function PassengerWallet() {
-  const [wallet, setWallet] = useState(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    apiRequest('/wallet/')
-      .then(setWallet)
-      .catch((e) => setError(e.message));
-  }, []);
+  const [params, setParams] = useSearchParams();
+  const reference = params.get('reference');
+  const { status, data: wallet, reload } = useAsyncData(
+    () => apiRequest('/wallet/', { silent: true }),
+  );
+  const history = useAsyncData(
+    () => apiRequest('/wallet/transactions/', { silent: true }).then((d) => (Array.isArray(d) ? d : [])),
+  );
+  // Until the wallet loaded no number is shown, never a made-up KES 0.00.
+  const ready = status === 'ready';
+  const reloadHistory = history.reload;
+  const onCredited = useCallback(() => { reload(); reloadHistory(); }, [reload, reloadHistory]);
 
   return (
     <PassengerPage
       eyebrow="Wallet"
       title="Your CONNECT wallet"
-      description="Manage the balance used for your protected journey payments."
+      description="Top up with M-PESA and pay for bookings from your balance."
     >
-      {error && <div className="connect-alert connect-alert-error">{error}</div>}
+      {reference && (
+        <TopUpReturn
+          reference={reference}
+          onCredited={onCredited}
+          onDone={() => setParams({}, { replace: true })}
+        />
+      )}
 
-      <div className="wallet-overview-grid">
+      {status === 'error' ? (
+        <AsyncPanel status="error" title="your wallet" onRetry={reload} />
+      ) : (
+      <div className="wallet-overview-grid" aria-busy={!ready}>
         <div className="wallet-glass-card wallet-main">
           <WalletCards size={26} />
           <span>Available balance</span>
-          <strong>{money(wallet?.available_balance)}</strong>
-          <p>Available for new bookings.</p>
-        </div>
-
-        <div className="wallet-glass-card">
-          <ShieldCheck size={24} />
-          <span>Held balance</span>
-          <strong>{money(wallet?.held_balance)}</strong>
-          <p>Protected while a booking is awaiting boarding.</p>
+          <strong>{money(ready ? wallet?.available_balance : undefined)}</strong>
+          <p>Use it to pay for a booking. Refunds for bookings paid from the wallet come back here.</p>
         </div>
       </div>
+      )}
 
-      <div className="passenger-info-panel">
-        <WalletCards size={21} />
-        <div>
-          <strong>Protected payments</strong>
-          <p>
-            CONNECT holds eligible booking payments until the journey's
-            boarding process confirms the trip.
-          </p>
-        </div>
-      </div>
+      <TopUpForm />
+
+      <WithdrawPanel balance={ready ? wallet?.available_balance : undefined} onChanged={onCredited} />
+
+      <WalletHistory status={history.status} rows={history.data} onRetry={history.reload} />
     </PassengerPage>
   );
 }
 
 export function PassengerPayments() {
-  const [bookings, setBookings] = useState([]);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    apiRequest('/bookings/my/')
-      .then((data) => setBookings(Array.isArray(data) ? data : []))
-      .catch((e) => setError(e.message));
-  }, []);
+  const { status, data, reload } = useAsyncData(
+    () => apiRequest('/bookings/my/', { silent: true }).then((d) => (Array.isArray(d) ? d : [])),
+  );
+  const bookings = data || [];
 
   const payments = bookings.filter(
     (booking) =>
@@ -608,8 +603,7 @@ export function PassengerPayments() {
       title="Payment history"
       description="Review the payment status attached to your CONNECT journeys."
     >
-      {error && <div className="connect-alert connect-alert-error">{error}</div>}
-
+      <AsyncPanel status={status} title="your payments" loadingText="Loading your payments…" onRetry={reload}>
       {!payments.length ? (
         <div className="glass-empty">
           <CreditCard size={28} />
@@ -645,6 +639,7 @@ export function PassengerPayments() {
           ))}
         </div>
       )}
+      </AsyncPanel>
     </PassengerPage>
   );
 }

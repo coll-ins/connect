@@ -4,6 +4,7 @@ import { Package, Plus } from 'lucide-react';
 
 import { apiRequest } from '../../api';
 import AppShell from '../../components/layout/AppShell';
+import AsyncPanel from '../../components/ui/AsyncPanel';
 import { label, money, when } from '../shared/serviceUtils';
 import '../shared/Services.css';
 
@@ -21,11 +22,14 @@ export function DeliveryList() {
   const [parcels, setParcels] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    apiRequest('/deliveries/')
+  const load = useCallback(() => {
+    setError('');
+    apiRequest('/deliveries/', { silent: true })
       .then((d) => setParcels(Array.isArray(d) ? d : []))
-      .catch((e) => { setError(e.message); setParcels([]); });
+      .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
     <AppShell>
@@ -39,10 +43,10 @@ export function DeliveryList() {
           <Link className="btn btn-primary" to="/passenger/delivery/new"><Plus size={16} /> Send a parcel</Link>
         </div>
 
-        {error && <div className="svc-error">{error}</div>}
-
-        {parcels === null ? (
-          <div className="glass-empty">Loading…</div>
+        {error ? (
+          <AsyncPanel status="error" title="your parcels" onRetry={load} />
+        ) : parcels === null ? (
+          <div className="glass-empty" role="status" aria-busy="true">Loading…</div>
         ) : !parcels.length ? (
           <div className="glass-empty"><Package size={28} /><strong>No parcels yet.</strong><span>Send a parcel on a scheduled trip. The receiver collects it with a PIN.</span></div>
         ) : (
@@ -225,7 +229,7 @@ export function DeliveryDetail() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    try { setP(await apiRequest(`/deliveries/${id}/`)); } catch (e) { setError(e.message); }
+    try { setP(await apiRequest(`/deliveries/${id}/`, { silent: true })); } catch (e) { setError(e.message); }
   }, [id]);
 
   const verify = useCallback(async () => {
@@ -270,9 +274,10 @@ export function DeliveryDetail() {
           {p && <Badge status={p.status} />}
         </div>
 
-        {error && <div className="svc-error">{error}</div>}
+        {error && p && <div className="svc-error" role="alert">{error}</div>}
         {note && <div className="svc-note">{note}</div>}
-        {!p && !error && <div className="glass-empty">Loading…</div>}
+        {!p && error && <AsyncPanel status="error" title="this parcel" onRetry={() => { setError(''); load(); }} />}
+        {!p && !error && <div className="glass-empty" role="status" aria-busy="true">Loading…</div>}
 
         {p && (
           <>

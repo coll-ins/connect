@@ -1,0 +1,22 @@
+.withdraw-history { display: grid; gap: 10px; margin-top: 6px; }
+.withdraw-history-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.withdraw-history-head h3 { margin: 0; font-size: 16px; }
+.withdraw-history-head .btn, .withdraw-more { min-height: 44px; }
+.withdraw-result {
+  display: grid;
+  gap: 4px;
+  max-width: 420px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+.withdraw-result p { margin: 0; color: var(--text-2); font-size: 14px; }
+.withdraw-result-warn { border-color: var(--warn); }
+.withdraw-result-ok { border-color: var(--success); }
+.withdraw-dest { color: var(--text-2); font-size: 14px; overflow-wrap: anywhere; }
+.withdraw-badge { font-size: 13px; font-weight: 700; }
+.withdraw-ok { color: var(--success-text); }
+.withdraw-warn { color: var(--warn); }
+.withdraw-info { color: var(--text-2); }
+.withdraw-confirm-amount { margin: 0 0 6px; font-size: 26px; font-weight: 700; }

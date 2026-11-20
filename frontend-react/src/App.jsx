@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import Notice, { NoticeStack } from './components/ui/Notice';
 import { clearRequestError, getLatestRequestError } from './api';
 
@@ -168,7 +169,9 @@ export default function App() {
         <div className="app-shell">
           <RequestErrorNotice />
           <Suspense fallback={<div role="status">Loading CONNECT...</div>}>
-            <AppRoutes />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
           </Suspense>
         </div>
       </BrowserRouter>

@@ -56,9 +56,9 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
     setError('');
     try {
       const [routeData, driverData, templateData] = await Promise.all([
-        apiRequest(`/companies/${companyId}/routes/`),
-        apiRequest(`/drivers/?company_id=${companyId}`),
-        apiRequest(`/companies/${companyId}/schedules/`),
+        apiRequest(`/companies/${companyId}/routes/`, { silent: true }),
+        apiRequest(`/drivers/?company_id=${companyId}`, { silent: true }),
+        apiRequest(`/companies/${companyId}/schedules/`, { silent: true }),
       ]);
       setRoutes(Array.isArray(routeData) ? routeData : routeData?.results || []);
       setDrivers(Array.isArray(driverData) ? driverData : driverData?.results || []);
@@ -212,7 +212,12 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
         </button>
       </section>
 
-      {error && <div className="svc-error" role="alert">{error}</div>}
+      {error && (
+        <div className="svc-error" role="alert">
+          {error}{' '}
+          <button type="button" className="btn btn-ghost" onClick={load}>Retry</button>
+        </div>
+      )}
       {notice && <div className="svc-note" role="status">{notice}</div>}
 
       <section className="svc-card">
@@ -321,7 +326,7 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
         <div className="service-template-heading">
           <div>
             <span className="glass-eyebrow">Manage services</span>
-            <h2>{templates.length} service templates</h2>
+            <h2>{loading || error ? 'Service templates' : `${templates.length} service templates`}</h2>
           </div>
         </div>
         <div className="service-template-list">
@@ -354,7 +359,8 @@ export default function ServiceTemplateManager({ companyId: companyIdProp }) {
               </div>
             </article>
           ))}
-          {!loading && templates.length === 0 && (
+          {loading && <div className="service-template-empty" role="status">Loading…</div>}
+          {!loading && !error && templates.length === 0 && (
             <div className="service-template-empty">
               No weekly service templates yet. Creating one leaves one-off trip creation unchanged.
             </div>

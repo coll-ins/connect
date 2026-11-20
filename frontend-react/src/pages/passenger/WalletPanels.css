@@ -1,0 +1,55 @@
+.wallet-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+}
+.wallet-section h2 { margin: 0; font-size: 19px; }
+.wallet-hint, .wallet-note { margin: 0; color: var(--text-2); font-size: 14px; }
+.wallet-topup-form { display: grid; gap: 8px; max-width: 420px; }
+.wallet-topup-form label { font-size: 14px; font-weight: 600; }
+.wallet-topup-form .input { min-height: 44px; font-size: 16px; }
+.wallet-topup-form .btn { min-height: 44px; }
+.wallet-field-error { margin: 0; color: var(--danger-text); font-size: 14px; }
+.wallet-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wallet-actions .btn { min-height: 44px; }
+.wallet-return p { margin: 0; color: var(--text-2); }
+.wallet-link { color: var(--primary-text); font-weight: 600; }
+
+.wallet-history { list-style: none; margin: 0; padding: 0; display: grid; }
+.wallet-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.wallet-history li:last-child { border-bottom: 0; }
+.wallet-tx-main, .wallet-tx-money { display: grid; gap: 2px; min-width: 0; }
+.wallet-tx-money { text-align: right; flex-shrink: 0; }
+.wallet-tx-main time, .wallet-tx-ref, .wallet-tx-money > span { color: var(--text-2); font-size: 13px; }
+.wallet-tx-ref { overflow-wrap: anywhere; }
+.wallet-tx-money strong { font-variant-numeric: tabular-nums; }
+.wallet-tx-money > span { font-variant-numeric: tabular-nums; }
+.wallet-credit { color: var(--success-text); }
+.wallet-debit { color: var(--text); }
+
+.wallet-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.wallet-pay-option { display: grid; gap: 6px; }
+.wallet-pay-reason { color: var(--text-2); font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.wallet-pay-reason:empty { display: none; }
+.wallet-pay-reason .btn { min-height: 44px; margin-left: 8px; }
+.wallet-pay-reason .wallet-link { display: inline-block; padding: 10px 4px; }

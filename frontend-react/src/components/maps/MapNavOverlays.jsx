@@ -115,7 +115,7 @@ export function NextStageBanner({ next, style }) {
     >
       <div
         style={{
-          fontSize: 11,
+          fontSize: 12,
           opacity: 0.7,
         }}
       >

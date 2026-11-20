@@ -18,6 +18,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import './CompanyManagerLayout.css';
 
 const nav = [
   { label: 'Overview', path: '/company-manager', icon: Gauge, end: true },
@@ -167,7 +168,7 @@ export default function CompanyManagerLayout() {
 
           <div>
             <p className="company-eyebrow">Company manager</p>
-            <h1>{user?.company_name || 'My Company'}</h1>
+            <p className="company-topbar-title">{user?.company_name || 'My Company'}</p>
           </div>
 
           <div className="company-top-actions">

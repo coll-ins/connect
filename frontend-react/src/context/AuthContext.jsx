@@ -110,8 +110,8 @@ export function AuthProvider({ children }) {
     return () => { active = false; };
   }, []);
 
-  const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials }));
-  const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials }));
+  const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials, silent: true }));
+  const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials, silent: true }));
 
   const logout = async () => {
     try { await apiRequest('/users/logout/', { method: 'POST' }); } finally {
