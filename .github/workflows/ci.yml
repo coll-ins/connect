@@ -57,11 +57,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyflakes
+          pip install -r requirements-dev.txt
       - name: Django system check
         run: python manage.py check
       - name: Deployment kit integrity check
@@ -70,6 +72,8 @@ jobs:
         run: bash ../deploy/prod_check.sh
       - name: Static analysis for auth
         run: pyflakes users/
+      - name: Static analysis (apps that are clean today, and the simulation)
+        run: find connect notifications charters deliveries bookings wallets companies drivers buses -name '*.py' -not -path '*/migrations/*' | xargs pyflakes
       - name: Backend test suite
         run: python manage.py test --verbosity 1
 
@@ -90,6 +94,8 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Unit tests
+        run: npm run test:unit
       - name: Production build
         run: npm run build
       - name: Install Chrome for Playwright
