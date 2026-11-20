@@ -11,7 +11,8 @@ def handle_event(event):
         return payouts.apply_transfer_event(event['event'], event.get('data'))
     if event.get('event') != 'charge.success':
         return False
-    data = event.get('data') or {}
+    data = event.get('data')
+    data = data if isinstance(data, dict) else {}
     reference = data.get('reference')
     if not isinstance(reference, str) or not reference.startswith(topup.TOPUP_PREFIX):
         return False

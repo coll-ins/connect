@@ -16,7 +16,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from bookings.models import Payment, UnappliedPayment
-from connect.paystack_extra import route_refund
+from connect.paystack_extra import refunds_of_transaction, route_refund
 from bookings.services import (
     RefundClaim,
     RefundRejected,
@@ -58,7 +58,7 @@ class Command(BaseCommand):
             return None
         if response.status_code != 200 or not body.get('status'):
             return None
-        return body.get('data') or []
+        return refunds_of_transaction(body.get('data') or [], reference)
 
     def _flag(self, payment, message, dry):
         self.flagged += 1

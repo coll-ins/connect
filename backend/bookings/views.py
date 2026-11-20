@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Q, Sum
 import hmac
 import hashlib
 import json
@@ -13,7 +13,7 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from rest_framework import status
@@ -48,6 +48,7 @@ from .services import (
     hold_expired_and_seat_gone,
     lock_trip_then_booking,
     record_unmatched_charge,
+    active_seat_q,
     reserve_seats,
     seats_taken,
 )
@@ -59,6 +60,7 @@ from .serializers import (
 )
 from users.identity import drivers_for_user, is_driver_account_for
 from users.route_scope import operator_route_ids
+from connect.ids import parse_id
 
 
 # ============================================================
@@ -319,6 +321,11 @@ def initialize_paystack_payment(request, booking_id):
         )
 
     if response.status_code != 200:
+        # A 4xx means Paystack refused: no checkout exists, so release the
+        # attempt. A 5xx stays in progress because it may have been created.
+        if response.status_code < 500:
+            Payment.objects.filter(pk=payment.pk, status='pending').update(
+                status='failed')
         return Response(
             {
                 'error': 'Failed to initialize payment gateway',
@@ -339,6 +346,8 @@ def initialize_paystack_payment(request, booking_id):
         )
 
     if not res_data.get('status'):
+        Payment.objects.filter(pk=payment.pk, status='pending').update(
+            status='failed')
         return Response(
             {
                 'error': res_data.get(
@@ -874,6 +883,15 @@ def _alert_payment_problem(reference, reason):
         log.exception('Admin alert failed for %s', reference)
 
 
+def _signed_event(body):
+    """The JSON object in a signed webhook body, or None when it is not one."""
+    try:
+        event = json.loads(body.decode('utf-8'))
+    except (ValueError, RecursionError):
+        return None
+    return event if isinstance(event, dict) else None
+
+
 @csrf_exempt
 @require_POST
 def paystack_webhook(request):
@@ -893,9 +911,8 @@ def paystack_webhook(request):
     if not hmac.compare_digest(signature.encode('utf-8'), computed_signature.encode('utf-8')):
         return HttpResponse(status=400)
 
-    try:
-        event = json.loads(body)
-    except json.JSONDecodeError:
+    event = _signed_event(body)
+    if event is None:
         return HttpResponse(status=400)
 
     # Wallet top-up charges carry a TOPUP- reference and must never reach the
@@ -917,10 +934,11 @@ def paystack_webhook(request):
     if event.get('event') != 'charge.success':
         return HttpResponse(status=200)
 
-    data = event.get('data', {})
+    data = event.get('data')
+    data = data if isinstance(data, dict) else {}
     reference = data.get('reference')
 
-    if not reference:
+    if not reference or not isinstance(reference, str):
         return HttpResponse(status=400)
 
     # Parcel and bus-hire payments carry their own references.
@@ -1004,7 +1022,7 @@ def _route_refund_event(transaction_reference, data, new_refund_status):
     ]
     try:
         event_amount = int(data['amount']) if data.get('amount') is not None else None
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         event_amount = None
 
     def fits(stored_id, stored_amount):
@@ -1098,9 +1116,8 @@ def paystack_refund_webhook(request):
     if not hmac.compare_digest(signature.encode('utf-8'), computed_signature.encode('utf-8')):
         return HttpResponse(status=400)
 
-    try:
-        event = json.loads(body)
-    except json.JSONDecodeError:
+    event = _signed_event(body)
+    if event is None:
         return HttpResponse(status=400)
 
     event_type = event.get('event')
@@ -1110,10 +1127,11 @@ def paystack_refund_webhook(request):
         # Not a refund event we care about.
         return HttpResponse(status=200)
 
-    data = event.get('data', {})
+    data = event.get('data')
+    data = data if isinstance(data, dict) else {}
     transaction_reference = data.get('transaction_reference')
 
-    if not transaction_reference:
+    if not transaction_reference or not isinstance(transaction_reference, str):
         return HttpResponse(status=400)
 
     if _route_refund_event(transaction_reference, data, new_refund_status):
@@ -1126,6 +1144,34 @@ def paystack_refund_webhook(request):
                 .select_for_update()
                 .get(provider_reference=transaction_reference)
             )
+
+            # An event about another refund (a redelivery for one that was
+            # superseded by a retry) must not touch this one.
+            event_ids = [
+                str(v) for v in (data.get('refund_reference'), data.get('id'))
+                if v not in (None, '')
+            ]
+            if event_ids and payment.refund_reference:
+                if payment.refund_reference not in event_ids:
+                    # Dropped silently, so tell an admin once a day per payment.
+                    if cache.add(f"refund-event-dropped:{payment.pk}", 1, 24 * 60 * 60):
+                        dropped_alert = (
+                            f"Refund event dropped for payment #{payment.pk}: "
+                            f"it does not match the stored refund "
+                            f"{payment.refund_reference}."
+                        )
+                        transaction.on_commit(
+                            lambda: send_admin_alert_sms(dropped_alert)
+                        )
+                    return HttpResponse(status=200)
+            elif (
+                event_ids and new_refund_status == 'failed'
+                and payment.refund_status == 'processing'
+            ):
+                # The retry has been claimed but Paystack's answer is not
+                # recorded yet, so this cannot be told from a stale event.
+                # reconcile_refunds flags a failed status for a human.
+                return HttpResponse(status=200)
 
             # A processed refund is final and must never be
             # downgraded by a later/duplicate webhook.
@@ -1645,6 +1691,13 @@ def confirm_cash_payment(request, booking_id):
 # CREATE BOOKING
 # ============================================================
 
+def _seat_limit(message):
+    return Response(
+        {'error': message, 'code': 'seat_limit'},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 def _booking_created_payload(booking):
     return {
         'message': (
@@ -1673,6 +1726,12 @@ def create_booking(request):
             status=status.HTTP_401_UNAUTHORIZED
         )
 
+    if not str(request.data.get('seats', '1')).isascii():
+        return Response(
+            {'seats': ['A valid integer is required.']},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     serializer = BookingCreateSerializer(data=request.data)
 
     if not serializer.is_valid():
@@ -1684,6 +1743,9 @@ def create_booking(request):
     validated_data = serializer.validated_data
     trip_id = validated_data['trip_id']
     seats = validated_data['seats']
+    if seats > settings.MAX_SEATS_PER_BOOKING:
+        return _seat_limit(
+            f'You can book at most {settings.MAX_SEATS_PER_BOOKING} seats at a time.')
     pickup_stage_id = validated_data.get('pickup_stage_id')
     legacy_pickup_location = validated_data.get(
         'pickup_location',
@@ -1823,6 +1885,15 @@ def create_booking(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            held_here = Booking.objects.filter(
+                user=request.user, trip=trip, status='pending',
+            ).filter(active_seat_q(now)).aggregate(n=Sum('seats'))['n'] or 0
+            if held_here + seats > settings.MAX_PENDING_SEATS_PER_TRIP:
+                return _seat_limit(
+                    'You already hold unpaid seats on this trip. Pay for them '
+                    'or let them lapse before booking more '
+                    f'(at most {settings.MAX_PENDING_SEATS_PER_TRIP} unpaid seats per trip).')
+
             try:
                 reserve_seats(trip, seats, now)
             except NotEnoughSeats as exc:
@@ -1839,6 +1910,11 @@ def create_booking(request):
             total_amount = (
                 trip.route.price * Decimal(str(seats))
             )
+            if total_amount >= Decimal('100000000'):
+                return Response(
+                    {'error': 'This fare is too large to book online.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             tampered = _tampered_amount(request, total_amount)
             if tampered is not None:
@@ -2423,9 +2499,8 @@ def move_booking_to_trip(request, booking_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
-    try:
-        target_id = int(request.data.get('trip_id'))
-    except (TypeError, ValueError):
+    target_id = parse_id(request.data.get('trip_id'))
+    if target_id is None:
         return Response(
             {'error': 'trip_id is required.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -2468,6 +2543,14 @@ def move_booking_to_trip(request, booking_id):
                 status=status.HTTP_409_CONFLICT
             )
 
+        # The unlocked read picked which trips to lock; if the booking moved
+        # meanwhile, the old trip held here is the wrong one.
+        if old_trip is None or booking.trip_id != old_trip.id:
+            return Response(
+                {'error': 'The booking changed trips. Please try again.'},
+                status=status.HTTP_409_CONFLICT
+            )
+
         if new_trip is None:
             return Response(
                 {'error': 'Target trip not found.'},
@@ -2487,7 +2570,7 @@ def move_booking_to_trip(request, booking_id):
             )
 
         now = timezone.now()
-        if new_trip.status not in ('scheduled', 'boarding'):
+        if new_trip.status not in ('scheduled', 'boarding') or trip_has_departed(new_trip):
             return Response(
                 {'error': 'The target trip is not open for passengers.'},
                 status=status.HTTP_409_CONFLICT
@@ -2779,6 +2862,10 @@ def cancel_booking(request, booking_id):
                         restored.save(update_fields=update_fields)
                     else:
                         seat_lost = True
+                        # The passenger is owed the refund: the
+                        # process_noshows sweep keeps retrying it.
+                        Payment.objects.filter(pk=refund_claim.payment_id).update(
+                            refund_reason=f'seat_lost_{fault_party}')
             if seat_lost:
                 _alert_payment_problem(
                     refund_claim.provider_reference,
@@ -2858,10 +2945,7 @@ def _resolve_incident_inner(request, booking_id, deferred):
                 .filter(pk=booking_id).values_list('trip_id', flat=True)
                 if tid is not None
             }
-            try:
-                requested_trip_id = int(request.data.get('replacement_trip_id'))
-            except (TypeError, ValueError):
-                requested_trip_id = None
+            requested_trip_id = parse_id(request.data.get('replacement_trip_id'))
             if resolution == 'reschedule' and requested_trip_id:
                 trip_ids.add(requested_trip_id)
             list(
@@ -3018,6 +3102,13 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            replacement_trip_id = parse_id(replacement_trip_id)
+            if replacement_trip_id is None:
+                return Response(
+                    {'error': 'replacement_trip_id must be a valid id.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             try:
                 # Already locked at the top of this transaction.
                 replacement_trip = (
@@ -3064,6 +3155,9 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     status=status.HTTP_409_CONFLICT
                 )
 
+            # Deliberately no booking cut-off check here: the passenger is
+            # being moved because of the incident, so only a trip that has
+            # already left is refused.
             if replacement_trip.departure_at <= timezone.now():
                 return Response(
                     {
@@ -4154,6 +4248,13 @@ def report_incident(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    trip_id = parse_id(trip_id)
+    if trip_id is None:
+        return Response(
+            {'error': 'trip_id must be a valid id.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         trip = Trip.objects.select_related(
             'route',
@@ -4184,7 +4285,7 @@ def report_incident(request):
         for choice in Incident.INCIDENT_TYPE_CHOICES
     }
 
-    if incident_type not in valid_types:
+    if not isinstance(incident_type, str) or incident_type not in valid_types:
         return Response(
             {
                 'error': 'Invalid incident_type.',
@@ -4438,6 +4539,13 @@ def get_driver_bookings(request, driver_id):
                 "bookings": [],
             },
             status=status.HTTP_200_OK,
+        )
+
+    # A route-restricted operator reads passengers only on routes they handle.
+    if not can_handle_route(user, trip.route_id):
+        return Response(
+            {"error": "Not authorized for this route."},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     route = trip.route
@@ -5405,6 +5513,32 @@ def booking_replacement_trips(request, booking_id):
 # WALK-IN BOOKING AT THE FIRST STAGE
 # ============================================================
 
+def _get_or_create_walk_in_user(User, phone):
+    """Find the account for a phone or create a password-less one.
+
+    Two trips can walk in the same new phone at once and each trip lock is
+    separate, so the loser of the insert race re-reads the winner's row
+    instead of failing the whole booking. The insert runs in a savepoint so
+    the caller's transaction (and its seat reservation) survives the clash.
+    """
+    for _ in range(5):
+        passenger = User.objects.filter(phone_number=phone).first()
+        if passenger is not None:
+            return passenger
+        base = f"walkin_{phone}".replace('+', '')
+        username, n = base, 1
+        while User.objects.filter(username=username).exists():
+            n += 1
+            username = f"{base}_{n}"
+        try:
+            with transaction.atomic():
+                return User.objects.create_user(
+                    username=username, phone_number=phone, password=None)
+        except IntegrityError:
+            continue
+    raise IntegrityError('Could not create or find the walk-in account.')
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def walk_in_booking(request, trip_id):
@@ -5417,22 +5551,32 @@ def walk_in_booking(request, trip_id):
     from django.contrib.auth import get_user_model
     from django.db.models import F as _F
     from notifications import sms as _sms
-    from users.phone import canonical_phone
+    from users.phone import KENYA_MOBILE, canonical_phone
 
     raw_seats = request.data.get('seats', 1)
     try:
         if isinstance(raw_seats, bool):
             raise ValueError
-        seats = int(str(raw_seats).strip())
+        text = str(raw_seats).strip()
+        if not text.isascii():
+            raise ValueError
+        seats = int(text)
     except (TypeError, ValueError):
         return Response({'error': 'seats must be a whole number.'},
                         status=status.HTTP_400_BAD_REQUEST)
-    if seats < 1 or seats > 20:
-        return Response({'error': 'seats must be between 1 and 20.'},
+    if seats < 1:
+        return Response({'error': 'seats must be at least 1.'},
                         status=status.HTTP_400_BAD_REQUEST)
+    if seats > settings.MAX_SEATS_PER_BOOKING:
+        return _seat_limit(
+            f'You can book at most {settings.MAX_SEATS_PER_BOOKING} seats at a time.')
 
-    phone = canonical_phone(str(request.data.get('phone_number', '')).strip())
-    if not phone:
+    raw_phone = request.data.get('phone_number')
+    phone = (
+        canonical_phone(raw_phone.strip())
+        if isinstance(raw_phone, str) and raw_phone.isascii() else ''
+    )
+    if not KENYA_MOBILE.match(phone):
         return Response({'error': 'A valid passenger phone_number is required.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
@@ -5491,16 +5635,8 @@ def walk_in_booking(request, trip_id):
                 {'error': f'Not enough seats available. Only {exc.available} remaining.'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        passenger = User.objects.filter(phone_number=phone).first()
-        if passenger is None:
-            base = f"walkin_{phone}".replace('+', '')
-            username, n = base, 1
-            while User.objects.filter(username=username).exists():
-                n += 1
-                username = f"{base}_{n}"
-            passenger = User.objects.create_user(
-                username=username, phone_number=phone, password=None)
-        elif passenger.role != 'passenger' or passenger.is_superuser:
+        passenger = _get_or_create_walk_in_user(User, phone)
+        if passenger.role != 'passenger' or passenger.is_superuser:
             return Response(
                 {'error': 'That phone number belongs to a staff account.'},
                 status=status.HTTP_400_BAD_REQUEST)

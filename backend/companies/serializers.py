@@ -1,5 +1,10 @@
 from rest_framework import serializers
+from users.phone import KENYA_MOBILE, canonical_phone
+
 from .models import Company, Route, Trip, PickupStage
+
+
+ROUTE_PRICE_MAX = 100000  # KES per seat; keeps price x seats inside the total_amount column
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -13,6 +18,15 @@ class CompanySerializer(serializers.ModelSerializer):
             'phone_number',
         ]
         read_only_fields = ['id']
+
+    def validate_phone_number(self, value):
+        value = (value or '').strip()
+        if not value:
+            return value
+        canonical = canonical_phone(value) if value.isascii() else value
+        if not KENYA_MOBILE.match(canonical):
+            raise serializers.ValidationError('Enter a Kenyan mobile number, e.g. 0712345678.')
+        return canonical
 
 
 class PickupStageSerializer(serializers.ModelSerializer):
@@ -30,6 +44,16 @@ class PickupStageSerializer(serializers.ModelSerializer):
             'source_ref',
         ]
         read_only_fields = ['id', 'route']
+
+    def validate_latitude(self, value):
+        if not -90 <= value <= 90:
+            raise serializers.ValidationError('Latitude must be between -90 and 90.')
+        return value
+
+    def validate_longitude(self, value):
+        if not -180 <= value <= 180:
+            raise serializers.ValidationError('Longitude must be between -180 and 180.')
+        return value
 
     def validate_name(self, value):
         name = ' '.join(str(value).strip().split())
@@ -94,6 +118,13 @@ class RouteSerializer(serializers.ModelSerializer):
             'company_name',
             'pickup_stages',
         ]
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Price must be greater than zero.')
+        if value > ROUTE_PRICE_MAX:
+            raise serializers.ValidationError(f'Price cannot be more than {ROUTE_PRICE_MAX}.')
+        return value
 
 
 class TripSerializer(serializers.ModelSerializer):

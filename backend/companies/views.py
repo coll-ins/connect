@@ -19,6 +19,7 @@ from wallets.models import Wallet
 from .models import Company, Route, Trip, PickupStage
 from .serializers import CompanySerializer, RouteSerializer, TripSerializer, PickupStageSerializer
 from users.identity import is_driver_account_for
+from connect.ids import parse_id
 
 
 TRIP_OPERATIONAL_HISTORY_DAYS = 30
@@ -250,6 +251,13 @@ def create_route(request):
     if not company_id:
         return Response(
             {'error': 'company_id is required.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company_id = parse_id(company_id)
+    if company_id is None:
+        return Response(
+            {'error': 'company_id must be a valid id.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -828,6 +836,14 @@ def create_trip(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    company_id, route_id, driver_id = (
+        parse_id(company_id), parse_id(route_id), parse_id(driver_id))
+    if None in (company_id, route_id, driver_id):
+        return Response(
+            {'error': 'company_id, route_id and driver_id must be valid ids.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     company = get_object_or_404(Company, id=company_id)
 
     # Enforce company-level authorization.
@@ -1065,7 +1081,16 @@ def manage_pickup_stage(request, stage_id):
         )
 
     if request.method == 'DELETE':
-        stage.delete()
+        from django.db.models import ProtectedError
+        try:
+            with transaction.atomic():
+                stage.delete()
+        except ProtectedError:
+            return Response(
+                {'error': 'This stage is used by parcels and cannot be deleted. '
+                          'Deactivate it instead.'},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         return Response(
             {'message': 'Pickup stage deleted successfully.'},
@@ -1310,6 +1335,7 @@ def _can_access_route_trip_map(user, route, trip):
         return (
             user.company_id is not None
             and user.company_id == route.company_id
+            and can_handle_route(user, route.id)
         )
 
     if getattr(user, 'role', None) == 'driver':
@@ -1333,7 +1359,11 @@ def _can_see_route_passengers(user, route, trip):
         return True
     role = getattr(user, 'role', None)
     if role in {'company_manager', 'company_auditor', 'company_operator'}:
-        return user.company_id is not None and user.company_id == route.company_id
+        return (
+            user.company_id is not None
+            and user.company_id == route.company_id
+            and can_handle_route(user, route.id)
+        )
     if role == 'driver':
         driver = trip.driver
         return driver is not None and is_driver_account_for(user, driver)
@@ -1768,7 +1798,7 @@ def set_operator_routes(request, user_id):
                             status=status.HTTP_400_BAD_REQUEST)
         try:
             wanted = {int(x) for x in raw if not isinstance(x, bool)}
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return Response({'error': 'route_ids must be whole numbers.'},
                             status=status.HTTP_400_BAD_REQUEST)
         valid = list(

@@ -250,15 +250,36 @@ def send_refund(row):
     return True
 
 
-def route_refund(refunds, own_id, expected, other_ids=(), other_amounts=()):
+def refunds_of_transaction(refunds, reference):
+    """Drop listed refunds that name a different transaction than `reference`.
+
+    An item with no transaction reference at all is kept: the listing was
+    already asked for this reference, so absence is not a mismatch.
+    """
+    kept = []
+    for item in refunds:
+        named = item.get('transaction_reference')
+        if not named and isinstance(item.get('transaction'), dict):
+            named = item['transaction'].get('reference')
+        if not named or str(named) == str(reference):
+            kept.append(item)
+    return kept
+
+
+def route_refund(refunds, own_id, expected, other_ids=(), other_amounts=(), reference=None):
     """
     Pick which of Paystack's refunds for ONE transaction belongs to one of our
     records. The stored refund id decides first; the amount (in subunits) only
     when the id is unknown. `other_ids` and `other_amounts` describe the
     sibling records on the same transaction, so their refunds are not taken.
 
+    When `reference` is given, a refund that names another transaction is
+    never ours (see refunds_of_transaction).
+
     Returns ('match', item), ('none', None) or ('ambiguous', items).
     """
+    if reference is not None:
+        refunds = refunds_of_transaction(refunds, reference)
     if own_id:
         for item in refunds:
             if str(item.get('id')) == str(own_id):
@@ -314,7 +335,7 @@ def reconcile_refund(row):
             other_amounts.append(int(sibling.refund_amount * 100))
     verdict, item = route_refund(
         refunds, row.refund_reference, int((row.amount or 0) * 100),
-        other_ids, other_amounts)
+        other_ids, other_amounts, reference=row.reference)
     if verdict == 'none':
         return 'none'
     if verdict == 'match' and item.get('status') in ('pending', 'processing', 'processed'):

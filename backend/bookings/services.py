@@ -306,9 +306,18 @@ def claim_booking_refund(booking, fault_party):
         payment.refund_amount = refund_amount
         payment.refund_status = 'processing'
         payment.refund_claimed_at = timezone.now()
-        payment.save(
-            update_fields=['refund_amount', 'refund_status', 'refund_claimed_at']
-        )
+        fields = ['refund_amount', 'refund_status', 'refund_claimed_at']
+        # The id of a failed earlier refund must not match a redelivered
+        # event for it once this retry is in flight.
+        if payment.refund_reference:
+            payment.refund_reference = None
+            fields.append('refund_reference')
+        # Remember who was at fault so a refund that later fails at the
+        # gateway can be retried with the same rule (see process_noshows).
+        if payment.refund_reason in ('', 'fault_passenger', 'fault_company'):
+            payment.refund_reason = f'fault_{fault_party}'
+            fields.append('refund_reason')
+        payment.save(update_fields=fields)
 
         return refund_amount, RefundClaim(
             payment.pk,
@@ -1141,6 +1150,10 @@ def pay_booking_from_wallet(booking_id, user, echoed_amounts=()):
                 f'Cannot pay for booking with status: {booking.status}', 400)
 
         total = booking.total_amount
+        # A zero-price booking (legacy row) has nothing to debit.
+        if total <= 0:
+            raise WalletPayRefused(
+                'amount_invalid', 'This booking has no payable amount.', 400)
         for sent in echoed_amounts:
             try:
                 same = Decimal(str(sent)) == total
@@ -1158,7 +1171,18 @@ def pay_booking_from_wallet(booking_id, user, echoed_amounts=()):
         # No capacity recheck: a live pending booking still holds its seat.
         # An unstamped hold (held_until NULL) is never late.
         now = timezone.now()
-        if booking.held_until is not None and now > booking.held_until:
+        # Same arrival tolerance as card and cash, and the same rule after it:
+        # a lapsed hold pays only while its seat is still free.
+        tolerance = timedelta(
+            seconds=getattr(settings, 'PAYMENT_ARRIVAL_TOLERANCE_SECONDS', 60))
+        if booking.held_until is not None and (
+            now > booking.held_until + tolerance
+            or (
+                now > booking.held_until
+                and seats_taken(trip, now, exclude_booking_id=booking.pk)
+                + booking.seats > trip.capacity
+            )
+        ):
             raise WalletPayRefused(
                 'hold_expired', 'The time to hold this booking has run out.', 409)
 

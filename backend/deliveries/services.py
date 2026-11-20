@@ -77,7 +77,10 @@ def mark_parcel_paid(*, parcel_id, amount, reference):
     """Called ONLY by the payment-confirmation path. Returns (parcel, changed)."""
     with transaction.atomic():
         parcel = Parcel.objects.select_for_update().get(id=parcel_id)
-        if parcel.status == 'paid' and parcel.provider_reference == reference:
+        # paid_at (not just the reference) proves this charge was applied: a
+        # checkout reference is also stored while the parcel is unpaid. A
+        # replay after the parcel moved on (picked up, delivered) is a no-op.
+        if parcel.paid_at is not None and parcel.provider_reference == reference:
             return parcel, False
         if parcel.status != 'pending_payment':
             raise ParcelError('Parcel is not awaiting payment.', 409)

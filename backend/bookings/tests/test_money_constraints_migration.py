@@ -51,6 +51,8 @@ class MoneyConstraintTests(TransactionTestCase):
         apps = self.migrate(BEFORE)
         self.make(apps)
         self.migrate(AFTER)
+        # The models below are the current ones, so bring the schema up to them.
+        self.tearDown()
         booking = Booking.objects.get()
         with self.assertRaises(IntegrityError), transaction.atomic():
             Payment.objects.create(

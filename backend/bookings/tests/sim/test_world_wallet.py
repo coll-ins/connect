@@ -122,7 +122,7 @@ class TopUpAndSpendTests(WalletCase):
         self.fund(user, 500)
         r = self.api(user).post(reverse('bookings:pay-from-wallet', args=[booking.pk]), {'amount': '1'}, format='json')
         self.assertEqual(r.status_code, 400)
-        self.expire_hold(booking)
+        self.expire_hold(booking, seconds_ago=120)
         r = self.api(user).post(reverse('bookings:pay-from-wallet', args=[booking.pk]), {}, format='json')
         self.assertEqual((r.status_code, r.json()['code']), (409, 'hold_expired'))
         self.assertEqual(self.balance(user), Decimal('500'))

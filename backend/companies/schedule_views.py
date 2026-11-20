@@ -34,7 +34,7 @@ def _bad(msg, code=status.HTTP_400_BAD_REQUEST):
 def _int(v):
     try:
         return int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 

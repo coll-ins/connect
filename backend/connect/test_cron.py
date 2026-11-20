@@ -1,7 +1,7 @@
 from unittest import mock
 
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 
 SECRET = 'test-secret-' + 'x' * 30
 URL = '/api/internal/cron/close-stale-trips/'
@@ -74,3 +74,52 @@ class CronJobRegistryTests(TestCase):
         text = workflow.read_text(encoding='utf-8')
         for job in JOBS:
             self.assertIn(job, text, f'{job} is never called by scheduled-jobs.yml')
+
+
+@override_settings(CRON_SECRET=SECRET)
+class CronLockOwnershipTests(TransactionTestCase):
+    # Threads need committed cache rows, so no wrapping transaction.
+    def setUp(self):
+        cache.clear()
+
+    def test_a_finished_run_does_not_delete_the_lock_of_a_newer_run(self):
+        import threading
+
+        gates = {'a': threading.Event(), 'b': threading.Event()}
+        started = {'a': threading.Event(), 'b': threading.Event()}
+        order, statuses, errors = [], {}, []
+
+        def slow(name, *args, **kwargs):
+            key = 'a' if not order else 'b'
+            order.append(key)
+            started[key].set()
+            if not gates[key].wait(10):
+                errors.append(f'run {key} was never released')
+
+        def post(label):
+            from django.db import connection
+            from django.test import Client
+            try:
+                r = Client().post(URL, HTTP_X_CRON_SECRET=SECRET)
+                statuses[label] = r.status_code
+            except Exception as exc:
+                errors.append(repr(exc))
+            finally:
+                connection.close()
+
+        with mock.patch('connect.cron.call_command', slow):
+            ta = threading.Thread(target=post, args=('a',))
+            ta.start()
+            self.assertTrue(started['a'].wait(10))
+            cache.delete(LOCK)                                  # the 600 s TTL ran out under run A
+            tb = threading.Thread(target=post, args=('b',))
+            tb.start()
+            self.assertTrue(started['b'].wait(10))
+            gates['a'].set()
+            ta.join(10)                                         # A ends and must not remove B's lock
+            post('c')                                           # C must see B still running
+            gates['b'].set()
+            tb.join(10)
+        self.assertEqual(errors, [])
+        self.assertEqual(statuses, {'a': 200, 'b': 200, 'c': 202})
+        self.assertIsNone(cache.get(LOCK))

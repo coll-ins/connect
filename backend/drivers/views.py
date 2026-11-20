@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from companies.models import Company, Trip, TripSimulation
+from connect.ids import parse_id
 from users.models import CustomUser
 from users.permissions import (
     can_manage_company,
@@ -123,6 +124,11 @@ def driver_list(request):
             )
 
         company_id = request.query_params.get('company_id')
+        if company_id and parse_id(company_id) is None:
+            return Response(
+                {'error': 'company_id must be a valid id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         queryset = Driver.objects.select_related(
             'company'
@@ -188,6 +194,13 @@ def driver_list(request):
         if not requested_company_id:
             return Response(
                 {'error': 'company is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        requested_company_id = parse_id(requested_company_id)
+        if requested_company_id is None:
+            return Response(
+                {'error': 'company must be a valid id.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

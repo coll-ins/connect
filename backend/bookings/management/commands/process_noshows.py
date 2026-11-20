@@ -20,6 +20,18 @@ from bookings.services import (
 # Passengers are only treated as no-shows this long after departure.
 GRACE_PERIOD = timedelta(minutes=15)
 
+# A refund Paystack keeps refusing is retried after 10 min, 30 min, 2 h, 6 h,
+# 24 h and then daily; after REFUND_RETRY_CAP tries a human takes over.
+REFUND_RETRY_DELAYS = (
+    timedelta(minutes=10), timedelta(minutes=30), timedelta(hours=2),
+    timedelta(hours=6), timedelta(hours=24),
+)
+REFUND_RETRY_CAP = 10
+
+
+def refund_retry_delay(attempts):
+    return REFUND_RETRY_DELAYS[min(attempts, len(REFUND_RETRY_DELAYS)) - 1]
+
 
 class Command(BaseCommand):
     help = (
@@ -193,6 +205,69 @@ class Command(BaseCommand):
                         f"Late payment for booking "
                         f"{payment.booking.booking_number} "
                         f"(KES {payment.amount}) could not be refunded: {e}"
+                    )
+
+        # A refund that failed at Paystack for a passenger cancel or a staff
+        # company-fault cancel, or one Paystack refused after the seat was
+        # resold. The fault party was stored when the refund was claimed.
+        fault_parties = {
+            "fault_passenger": "passenger",
+            "fault_company": "company",
+            "seat_lost_passenger": "passenger",
+            "seat_lost_company": "company",
+        }
+        released_before = now - timedelta(minutes=10)
+        stuck_fault_refunds = Payment.objects.filter(
+            method="digital",
+            status="confirmed",
+            booking__status__in=["cancelled", "no_show"],
+            refund_reason__in=list(fault_parties),
+            amount__gte=Decimal("10.00"),
+        ).filter(
+            Q(refund_next_try_at__isnull=True) | Q(refund_next_try_at__lte=now)
+        ).filter(
+            Q(refund_status="failed")
+            | Q(refund_status="not_requested",
+                refund_reason__startswith="seat_lost")
+            # A released claim: the cancel may still be restoring the booking.
+            | Q(refund_status="not_requested",
+                refund_claimed_at__lt=released_before)
+        ).select_related("booking")
+
+        for payment in stuck_fault_refunds:
+            try:
+                settle_booking_fault(
+                    payment.booking,
+                    fault_party=fault_parties[payment.refund_reason],
+                )
+                refunds_retried += 1
+                if payment.refund_attempts or payment.refund_next_try_at:
+                    Payment.objects.filter(pk=payment.pk).update(
+                        refund_attempts=0, refund_next_try_at=None)
+            except ValueError as e:
+                self.stderr.write(
+                    f"Refund retry failed for "
+                    f"{payment.booking.booking_number}: {e}"
+                )
+                attempts = payment.refund_attempts + 1
+                if attempts >= REFUND_RETRY_CAP:
+                    # Out of the sweep for good; one alert, from this transition.
+                    Payment.objects.filter(pk=payment.pk).update(
+                        refund_attempts=attempts, refund_next_try_at=None,
+                        refund_status="review")
+                    _alert_admin(
+                        f"Refund for booking {payment.booking.booking_number} "
+                        f"(KES {payment.amount}) failed {attempts} times and "
+                        f"needs review: {e}"
+                    )
+                    continue
+                Payment.objects.filter(pk=payment.pk).update(
+                    refund_attempts=attempts,
+                    refund_next_try_at=now + refund_retry_delay(attempts))
+                if cache.add(f"fault-refund-alert:{payment.pk}", 1, 24 * 60 * 60):
+                    _alert_admin(
+                        f"Refund for booking {payment.booking.booking_number} "
+                        f"(KES {payment.amount}) could not be retried: {e}"
                     )
 
         self.stdout.write(

@@ -205,9 +205,15 @@ class Payment(models.Model):
             ('processing', 'Processing'),
             ('processed', 'Processed'),
             ('failed', 'Failed'),
+            ('review', 'Needs review'),
         ],
         default='not_requested',
     )
+
+    # The process_noshows refund sweep: how many times it has tried and when it
+    # may try again. 'review' means it gave up and a human must decide.
+    refund_attempts = models.PositiveSmallIntegerField(default=0)
+    refund_next_try_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(
         auto_now_add=True

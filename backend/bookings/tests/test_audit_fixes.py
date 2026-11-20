@@ -61,7 +61,7 @@ class AuditFixTests(APITestCase):
                 status='confirmed', pickup_location='x')
             raise RefundRejected('Paystack refused the refund.')
 
-        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1')
+        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1', payment_id=None)
         self.client.force_authenticate(self.pax)
         with mock.patch('bookings.services.claim_booking_refund',
                         return_value=(Decimal('50'), claim)), \
@@ -79,7 +79,7 @@ class AuditFixTests(APITestCase):
         self.assertLessEqual(taken, self.trip.capacity)
 
     def test_rejected_refund_restores_booking_when_seat_still_free(self):
-        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1')
+        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1', payment_id=None)
         self.client.force_authenticate(self.pax)
         with mock.patch('bookings.services.claim_booking_refund',
                         return_value=(Decimal('50'), claim)), \

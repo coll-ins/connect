@@ -404,6 +404,20 @@ class TransferWebhookTests(PayoutBase, TestCase):
         self.assertEqual(balance(self.user), Decimal('900.00'))
         self.alert.assert_called()
 
+    def test_a_duplicate_failed_after_the_reversal_is_quiet_and_reverses_nothing_more(self):
+        webhook.handle_event(event('transfer.failed', self.p))
+        self.assertEqual(balance(self.user), Decimal('1000.00'))
+        self.alert.reset_mock()
+        self.assertTrue(webhook.handle_event(event('transfer.failed', self.p)))
+        self.assertEqual(balance(self.user), Decimal('1000.00'))
+        self.alert.assert_not_called()
+
+    def test_failed_after_paid_says_the_payout_is_already_paid(self):
+        webhook.handle_event(event('transfer.success', self.p))
+        self.alert.reset_mock()
+        webhook.handle_event(event('transfer.failed', self.p))
+        self.assertIn('already paid', self.alert.call_args.args[0])
+
     def test_success_after_failed_alerts_and_does_not_claw_back(self):
         webhook.handle_event(event('transfer.failed', self.p))
         self.alert.reset_mock()

@@ -139,7 +139,9 @@ def mark_charter_paid(*, charter_id, amount, reference):
     """Called ONLY by the payment-confirmation path. Returns (charter, changed)."""
     with transaction.atomic():
         charter = CharterRequest.objects.select_for_update().get(id=charter_id)
-        if charter.status == 'confirmed' and charter.provider_reference == reference:
+        # paid_at proves this charge was applied; a replay after the hire
+        # moved on (completed) is a no-op, not a conflict to refund.
+        if charter.paid_at is not None and charter.provider_reference == reference:
             return charter, False
         if charter.status != 'quoted':
             raise CharterError('This request is not awaiting payment.', 409)

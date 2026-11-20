@@ -35,7 +35,7 @@ def get_my_wallet(request):
     return Response(WalletSerializer(wallet).data)
 
 
-_AMOUNT = re.compile(r'^\d{1,7}(\.\d{1,2})?$')
+_AMOUNT = re.compile(r'^[0-9]{1,7}(\.[0-9]{1,2})?$')
 
 
 def _error(code, message, http_status, **extra):
@@ -219,6 +219,9 @@ def my_withdrawals(request):
     denied = _passenger_only(request.user)
     if denied:
         return denied
+    if not config.payouts_enabled():
+        return _error('feature_disabled', 'Withdrawals are not available yet.',
+                      status.HTTP_503_SERVICE_UNAVAILABLE)
     rows = WalletPayout.objects.filter(user=request.user).order_by('-id')
     cursor = request.query_params.get('cursor')
     if cursor not in (None, ''):

@@ -6,6 +6,8 @@ only "superuser ensured" so no credential reaches the logs.
 import os
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError, transaction
 
@@ -39,6 +41,14 @@ class Command(BaseCommand):
         user.is_superuser = user.is_staff = user.is_active = True
         if hasattr(user, 'role'):
             user.role = 'platform_admin'
+        try:
+            validate_password(password, user)
+        except ValidationError:
+            # Same rules as every other account; the reason is not printed
+            # because it could echo the password.
+            self.outcome = 'weak_password'
+            self.stderr.write('superuser not ensured: ADMIN_PASSWORD does not pass the password rules')
+            return
         user.set_password(password)
         try:
             with transaction.atomic():

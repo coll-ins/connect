@@ -29,13 +29,18 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         now = timezone.now()
         ttl = options['ttl_minutes']
+        # Seats free at held_until, but the booking is only cancelled once
+        # the arrival tolerance has passed, so a charge landing just after
+        # the hold still confirms if the seat is free.
+        tolerance = timedelta(
+            seconds=getattr(settings, 'PAYMENT_ARRIVAL_TOLERANCE_SECONDS', 60))
 
         if ttl:
             # Explicit override: judge by age, ignoring held_until.
             expired = Q(created_at__lt=now - timedelta(minutes=ttl))
         else:
             hold = getattr(settings, 'PAYMENT_HOLD_MINUTES', 10)
-            expired = Q(held_until__lte=now) | Q(
+            expired = Q(held_until__lte=now - tolerance) | Q(
                 # Row written without a hold (old code during a deploy).
                 held_until__isnull=True,
                 created_at__lt=now - timedelta(minutes=hold),
@@ -55,7 +60,7 @@ class Command(BaseCommand):
                     booking = Booking.objects.select_for_update().get(pk=pk)
                     if booking.status != 'pending':
                         continue
-                    if not ttl and booking.held_until is not None and booking.held_until > now:
+                    if not ttl and booking.held_until is not None and booking.held_until > now - tolerance:
                         continue
                     if Payment.objects.filter(booking=booking, status='confirmed').exists():
                         continue

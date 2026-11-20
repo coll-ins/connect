@@ -173,6 +173,10 @@ class HoldTests(SimCase):
         self.assertEqual(services.seats_taken(trip), 14)
         self.run_command('expire_pending_bookings')
         first.refresh_from_db()
+        self.assertEqual(first.status, 'pending', 'the sweep waits out the arrival tolerance')
+        self.expire_hold(first, seconds_ago=120)
+        self.run_command('expire_pending_bookings')
+        first.refresh_from_db()
         self.assertEqual(first.status, 'cancelled')
         self.assertEqual(second.status, 'pending')
 

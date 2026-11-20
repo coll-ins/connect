@@ -261,7 +261,7 @@ def _matches(payout, data):
         try:
             if int(amount) != int(payout.amount * 100):
                 return False
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return False
     return currency in (None, 'KES')
 

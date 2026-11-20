@@ -17,6 +17,7 @@ from django.conf import settings
 from connect import paystack_extra as paystack
 from .services import ParcelError, cancel_parcel, create_parcel, deliver, pick_up
 from users.identity import drivers_for_user
+from users.route_scope import can_handle_route, operator_route_ids
 
 
 class ParcelCreateSerializer(serializers.Serializer):
@@ -66,7 +67,8 @@ def _visible(user, parcel_id):
     driver = _driver_for(user)
     if driver and parcel.trip.driver_id == driver.id:
         return parcel
-    if _is_staff(user) and user.company_id == parcel.trip.route.company_id:
+    if (_is_staff(user) and user.company_id == parcel.trip.route.company_id
+            and can_handle_route(user, parcel.trip.route_id)):
         return parcel
     return None
 
@@ -217,6 +219,9 @@ def company_parcels(request):
     qs = _qs()
     if not user.is_superuser:
         qs = qs.filter(trip__route__company_id=user.company_id)
+        scope = operator_route_ids(user)
+        if scope is not None:
+            qs = qs.filter(trip__route_id__in=scope)
     wanted = request.query_params.get('status')
     if wanted in dict(Parcel.STATUS_CHOICES):
         qs = qs.filter(status=wanted)

@@ -267,6 +267,11 @@ if CROSS_SITE_COOKIE_AUTH:
 
 # Self-service platform-admin signup. On for local dev, off by default in
 # production: create the first admin with `manage.py createsuperuser`.
+# The Django admin is mounted only when asked for in production.
+ADMIN_SITE_ENABLED = os.getenv(
+    'ADMIN_SITE_ENABLED', 'True' if DEBUG else 'False'
+).lower() == 'true'
+
 ALLOW_ADMIN_SIGNUP = os.getenv(
     'ALLOW_ADMIN_SIGNUP', 'True' if DEBUG else 'False'
 ).lower() == 'true'
@@ -358,6 +363,8 @@ if 'test' in sys.argv:
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
+MAX_SEATS_PER_BOOKING = 6          # seats in one booking, on every path that creates one
+MAX_PENDING_SEATS_PER_TRIP = 6     # unpaid seats one user may hold on one trip
 PAYMENT_HOLD_MINUTES = 10          # a pending booking holds its seat this long (never extended)
 CASH_PENDING_TTL_MINUTES = 20       # pay-at-stage bookings get this long instead
 TRIP_AUTO_CLOSE_AFTER_HOURS = int(os.getenv('TRIP_AUTO_CLOSE_AFTER_HOURS', '12'))
@@ -450,9 +457,19 @@ if not DEBUG and SECURE_SSL_REDIRECT and not globals().get('SECURE_PROXY_SSL_HEA
     raise ValueError("CRITICAL: SECURE_SSL_REDIRECT is on but no TLS proxy header is trusted; set BEHIND_TLS_PROXY=True behind nginx (otherwise every request redirects in a loop).")
 
 CRON_SECRET = __import__('os').environ.get('CRON_SECRET', '')
-# Unset stays allowed (the cron endpoint then answers 404); a set-but-guessable value is not.
-if not DEBUG and CRON_SECRET and len(CRON_SECRET) < 32:
-    raise ValueError("CRITICAL: CRON_SECRET must be at least 32 characters in production (or unset to disable the cron endpoint).")
+# Unset stays allowed in development (the cron endpoint then answers 404); production needs a strong one.
+if not DEBUG and len(CRON_SECRET) < 32:
+    raise ValueError("CRITICAL: CRON_SECRET must be at least 32 characters in production and cannot be left unset (the scheduled jobs call the cron endpoint with it).")
+
+# A value copied from an example file would be known to everyone.
+if not DEBUG:
+    for _name, _value in (
+        ('SECRET_KEY', SECRET_KEY), ('PAYSTACK_SECRET_KEY', PAYSTACK_SECRET_KEY),
+        ('AT_API_KEY', AT_API_KEY), ('ADMIN_SIGNUP_CODE', ADMIN_SIGNUP_CODE),
+        ('CRON_SECRET', CRON_SECRET),
+    ):
+        if _value and ('replace' in _value.lower() or 'changeme' in _value.lower()):
+            raise ValueError(f'CRITICAL: {_name} still holds a placeholder value; set a real one.')
 
 # A '*' host would accept any Host header, and ws_origin.py also trusts ALLOWED_HOSTS as origins.
 if not DEBUG and '*' in ALLOWED_HOSTS:

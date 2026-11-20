@@ -51,6 +51,7 @@ jobs:
       REDIS_CACHE_URL: redis://127.0.0.1:6379/1
       AT_USERNAME: ci-test
       AT_API_KEY: ci-only-not-a-real-key
+      CRON_SECRET: ci-only-cron-secret-not-real-0123456789-abcdef
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
