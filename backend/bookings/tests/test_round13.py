@@ -120,11 +120,11 @@ class ExpirePendingBookingsTests(_Bookings, APITestCase):
         self.old.refresh_from_db()
         self.assertEqual(self.old.status, 'pending')
 
-    def test_trips_that_are_no_longer_scheduled_are_left_alone(self):
+    def test_boarding_trips_are_swept_too(self):
         Trip.objects.filter(pk=self.trip.pk).update(status='boarding')
         self._expire()
         self.old.refresh_from_db()
-        self.assertEqual(self.old.status, 'pending')
+        self.assertEqual(self.old.status, 'cancelled')
 
     def test_second_run_cancels_nothing(self):
         self._expire()

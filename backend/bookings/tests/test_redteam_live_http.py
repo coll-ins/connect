@@ -51,10 +51,12 @@ class RedTeamLiveHttpTests(APITestCase):
             reverse("bookings:booking-live-location", args=[self.booking.id]))
 
     def test_outsiders_refused(self):
-        for label, u in (("anonymous", None), ("stranger", self.stranger),
-                         ("other manager", self.mgr_b)):
+        with self.subTest(attacker="anonymous"):
+            self.assertIn(self._get(None).status_code, (401, 403))
+        # 404, the same answer as a missing id, so booking ids cannot be probed.
+        for label, u in (("stranger", self.stranger), ("other manager", self.mgr_b)):
             with self.subTest(attacker=label):
-                self.assertIn(self._get(u).status_code, (401, 403))
+                self.assertEqual(self._get(u).status_code, 404)
 
     def test_legitimate_viewers_allowed(self):
         for label, u in (("owner", self.owner), ("manager", self.mgr),

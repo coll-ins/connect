@@ -58,7 +58,9 @@ class RedTeamCashTests(APITestCase):
                          ("stranger", self.stranger), ("other manager", self.mgr_b),
                          ("auditor", self.aud)):
             with self.subTest(attacker=label):
-                self.assertIn(self._confirm(u).status_code, (401, 403))
+                # Outsiders get the 404 a missing id gets; the owner and own-company staff get 403.
+                expected = (404,) if label in ("stranger", "other manager") else (401, 403)
+                self.assertIn(self._confirm(u).status_code, expected)
         self.payment.refresh_from_db(); self.booking.refresh_from_db()
         self.assertEqual((self.payment.status, self.booking.status), ("pending", "pending"))
 

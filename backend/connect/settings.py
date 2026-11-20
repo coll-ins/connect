@@ -124,6 +124,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_PARSER_CLASSES': [
+        'connect.parsers.ObjectJSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
@@ -306,9 +311,20 @@ if not DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES = []
     # NUM_PROXIES must be explicit: left at 0 behind a proxy, every client
     # shares the proxy's IP and per-IP login/anon throttles stop working.
-    for _required in ('ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL', 'NUM_PROXIES'):
-        if not os.getenv(_required):
-            raise ValueError(f'CRITICAL: {_required} must be set in production.')
+    # One error naming every missing variable, so a first deploy is not a loop of
+    # fix-one-redeploy-find-the-next.
+    _missing = [
+        _required for _required in (
+            'ALLOWED_HOSTS', 'CORS_ALLOWED_ORIGINS', 'FRONTEND_URL', 'DATABASE_URL',
+            'NUM_PROXIES', 'REDIS_URL', 'AT_API_KEY', 'ADMIN_ALERT_PHONE_NUMBERS',
+        )
+        if not (os.getenv(_required) or '').strip()
+    ]
+    if _missing:
+        raise ValueError(
+            'CRITICAL: missing required environment variables in production: '
+            + ', '.join(_missing) + '. See backend/.env.example.'
+        )
     if REST_FRAMEWORK['NUM_PROXIES'] < 1:
         raise ValueError(
             'CRITICAL: NUM_PROXIES must be 1 or more in production '
@@ -342,8 +358,56 @@ if 'test' in sys.argv:
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 MAX_PENDING_BOOKINGS_PER_USER = 3   # unpaid bookings one user may hold at once
-PENDING_BOOKING_TTL_MINUTES = 20    # expire_pending_bookings cancels unpaid bookings older than this
+PAYMENT_HOLD_MINUTES = 10          # a pending booking holds its seat this long (never extended)
+CASH_PENDING_TTL_MINUTES = 20       # pay-at-stage bookings get this long instead
 TRIP_AUTO_CLOSE_AFTER_HOURS = int(os.getenv('TRIP_AUTO_CLOSE_AFTER_HOURS', '12'))
+
+
+# --- tunables read by other packages with getattr; every one is an env var so the
+# Render dashboard can change it without a deploy. Money flags default OFF. ---
+def _env_flag(name):
+    raw = os.getenv(name, 'False').strip().lower()
+    if raw not in ('true', 'false'):
+        # A typo like "yes" must not silently leave a money feature off (or on).
+        raise ValueError(f'CRITICAL: {name} must be true or false, got {raw!r}.')
+    return raw == 'true'
+
+
+def _env_number(name, default, cast=int):
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = cast(raw.strip())
+    except (ValueError, ArithmeticError):
+        raise ValueError(f'CRITICAL: {name} must be a number, got {raw!r}.') from None
+    if value <= 0:
+        raise ValueError(f'CRITICAL: {name} must be greater than 0, got {raw!r}.')
+    return value
+
+
+PAYMENT_ARRIVAL_TOLERANCE_SECONDS = _env_number('PAYMENT_ARRIVAL_TOLERANCE_SECONDS', 60)
+PAYMENT_STATUS_VERIFY_TIMEOUT_SECONDS = _env_number('PAYMENT_STATUS_VERIFY_TIMEOUT_SECONDS', 10)
+BOOKING_CUTOFF_MAX_MINUTES = _env_number('BOOKING_CUTOFF_MAX_MINUTES', 240)
+
+# Driver GPS: a fix older than this, or less accurate than this, is ignored.
+GPS_FIX_MAX_AGE_SECONDS = _env_number('GPS_FIX_MAX_AGE_SECONDS', 120)
+GPS_MAX_ACCURACY_M = _env_number('GPS_MAX_ACCURACY_M', 200)
+
+# Wallet. Limits are placeholders until Collins sets them (docs/plan.md V3, D11).
+WALLET_TOPUP_ENABLED = _env_flag('WALLET_TOPUP_ENABLED')
+WALLET_PAYOUTS_ENABLED = _env_flag('WALLET_PAYOUTS_ENABLED')
+WALLET_TOPUP_CHANNELS = [
+    channel.strip()
+    for channel in os.getenv('WALLET_TOPUP_CHANNELS', 'mobile_money').split(',')
+    if channel.strip()
+]
+WALLET_TOPUP_MIN_KES = _env_number('WALLET_TOPUP_MIN_KES', 50)
+WALLET_TOPUP_MAX_KES = _env_number('WALLET_TOPUP_MAX_KES', 20000)
+WALLET_MAX_BALANCE_KES = _env_number('WALLET_MAX_BALANCE_KES', 50000)
+WALLET_WITHDRAW_MIN_KES = _env_number('WALLET_WITHDRAW_MIN_KES', 50)
+WALLET_WITHDRAW_MAX_KES = _env_number('WALLET_WITHDRAW_MAX_KES', 20000)
+WALLET_WITHDRAW_DAILY_LIMIT_KES = _env_number('WALLET_WITHDRAW_DAILY_LIMIT_KES', 30000)
 
 
 # --- Production hardening (active only when DEBUG is off) ---
@@ -386,3 +450,10 @@ if not DEBUG and SECURE_SSL_REDIRECT and not globals().get('SECURE_PROXY_SSL_HEA
     raise ValueError("CRITICAL: SECURE_SSL_REDIRECT is on but no TLS proxy header is trusted; set BEHIND_TLS_PROXY=True behind nginx (otherwise every request redirects in a loop).")
 
 CRON_SECRET = __import__('os').environ.get('CRON_SECRET', '')
+# Unset stays allowed (the cron endpoint then answers 404); a set-but-guessable value is not.
+if not DEBUG and CRON_SECRET and len(CRON_SECRET) < 32:
+    raise ValueError("CRITICAL: CRON_SECRET must be at least 32 characters in production (or unset to disable the cron endpoint).")
+
+# A '*' host would accept any Host header, and ws_origin.py also trusts ALLOWED_HOSTS as origins.
+if not DEBUG and '*' in ALLOWED_HOSTS:
+    raise ValueError("CRITICAL: ALLOWED_HOSTS must not contain '*' in production; list the real host names.")

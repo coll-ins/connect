@@ -40,18 +40,20 @@ def _headers():
     }
 
 
-def initialize(*, email, amount, reference, callback_url, metadata):
+def initialize(*, email, amount, reference, callback_url, metadata, channels=None):
+    payload = {
+        'email': email,
+        'amount': int(Decimal(amount) * 100),
+        'currency': 'KES',
+        'reference': reference,
+        'callback_url': callback_url,
+        'metadata': metadata,
+    }
+    if channels:
+        payload['channels'] = list(channels)
     try:
         response = requests.post(
-            f'{API}/transaction/initialize',
-            json={
-                'email': email,
-                'amount': int(Decimal(amount) * 100),
-                'currency': 'KES',
-                'reference': reference,
-                'callback_url': callback_url,
-                'metadata': metadata,
-            },
+            f'{API}/transaction/initialize', json=payload,
             headers=_headers(), timeout=30,
         )
     except requests.RequestException:
@@ -248,8 +250,46 @@ def send_refund(row):
     return True
 
 
+def route_refund(refunds, own_id, expected, other_ids=(), other_amounts=()):
+    """
+    Pick which of Paystack's refunds for ONE transaction belongs to one of our
+    records. The stored refund id decides first; the amount (in subunits) only
+    when the id is unknown. `other_ids` and `other_amounts` describe the
+    sibling records on the same transaction, so their refunds are not taken.
+
+    Returns ('match', item), ('none', None) or ('ambiguous', items).
+    """
+    if own_id:
+        for item in refunds:
+            if str(item.get('id')) == str(own_id):
+                return 'match', item
+    pool = [r for r in refunds if str(r.get('id')) not in {str(i) for i in other_ids}]
+    if not pool:
+        return 'none', None
+    exact = [
+        r for r in pool
+        if r.get('amount') is not None and int(r['amount']) == expected
+    ]
+    if len(exact) == 1 and expected not in other_amounts:
+        return 'match', exact[0]
+    if exact:
+        return 'ambiguous', exact
+    # A refund whose amount is a sibling's is the sibling's, not ours.
+    unclaimed = [
+        r for r in pool
+        if r.get('amount') is None or int(r['amount']) not in other_amounts
+    ]
+    if not unclaimed:
+        return 'none', None
+    if len(unclaimed) == 1:
+        return 'match', unclaimed[0]
+    return 'ambiguous', unclaimed
+
+
 def reconcile_refund(row):
     """Ask Paystack about a 'refunding' row. Returns 'refunded', 'none', 'odd' or 'error'."""
+    from bookings.models import Payment
+
     try:
         response = requests.get(
             f'{API}/refund', params={'reference': row.reference},
@@ -263,11 +303,25 @@ def reconcile_refund(row):
     refunds = body.get('data') or []
     if not refunds:
         return 'none'
-    if len(refunds) == 1 and refunds[0].get('status') in ('pending', 'processing', 'processed'):
+
+    # The booking refund on the same charge is a sibling, not an odd extra.
+    other_ids, other_amounts = [], []
+    sibling = Payment.objects.filter(provider_reference=row.reference).first()
+    if sibling is not None:
+        if sibling.refund_reference:
+            other_ids.append(sibling.refund_reference)
+        elif sibling.refund_status in ('processing', 'pending') and sibling.refund_amount:
+            other_amounts.append(int(sibling.refund_amount * 100))
+    verdict, item = route_refund(
+        refunds, row.refund_reference, int((row.amount or 0) * 100),
+        other_ids, other_amounts)
+    if verdict == 'none':
+        return 'none'
+    if verdict == 'match' and item.get('status') in ('pending', 'processing', 'processed'):
         _finish(
             row, status='refunded',
-            refund_status=refunds[0]['status'],
-            refund_reference=str(refunds[0].get('id') or '')[:100],
+            refund_status=item['status'],
+            refund_reference=str(item.get('id') or '')[:100],
         )
         return 'refunded'
     return 'odd'

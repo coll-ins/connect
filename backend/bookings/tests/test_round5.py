@@ -10,7 +10,7 @@ import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.db import connection, transaction
+from django.db import connection
 from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -177,29 +177,26 @@ class LatePaymentTests(_Fixture, APITestCase):
         self.assertEqual(payment.refund_status, 'pending')
         mock_post.assert_called_once()
 
-    def test_mark_payment_confirmed_is_idempotent(self):
-        from bookings.views import _mark_payment_confirmed
+    def test_confirm_booking_payment_is_idempotent(self):
+        from bookings.services import confirm_booking_payment
 
         booking, payment = self.booking('pending', 'REF_IDEM')
-        for _ in range(2):
-            with transaction.atomic():
-                locked = (
-                    Payment.objects.select_for_update()
-                    .select_related('booking').get(pk=payment.pk)
-                )
-                self.assertTrue(_mark_payment_confirmed(locked, 80000, 'KES'))
+        results = [
+            confirm_booking_payment(
+                payment_id=payment.pk, paid_amount=80000, currency='KES'
+            ).result
+            for _ in range(2)
+        ]
+        self.assertEqual(results, ['confirmed', 'ignored'])
         self.assertEqual(BookingHold.objects.filter(booking=booking).count(), 1)
 
-    def test_mark_payment_confirmed_rejects_other_currency(self):
-        from bookings.views import _mark_payment_confirmed
+    def test_confirm_booking_payment_rejects_other_currency(self):
+        from bookings.services import confirm_booking_payment
 
         booking, payment = self.booking('pending', 'REF_USD')
-        with transaction.atomic():
-            locked = (
-                Payment.objects.select_for_update()
-                .select_related('booking').get(pk=payment.pk)
-            )
-            self.assertFalse(_mark_payment_confirmed(locked, 80000, 'USD'))
+        outcome = confirm_booking_payment(
+            payment_id=payment.pk, paid_amount=80000, currency='USD')
+        self.assertEqual(outcome.result, 'rejected')
         payment.refresh_from_db()
         self.assertEqual(payment.status, 'failed')
         self.assertFalse(BookingHold.objects.filter(booking=booking).exists())

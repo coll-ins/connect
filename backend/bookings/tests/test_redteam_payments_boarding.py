@@ -100,7 +100,9 @@ class RedTeamPaymentBoardingTests(APITestCase):
                             ("stranger", self.stranger), ("other manager", self.mgr_b),
                             ("other driver", self.drv2)):
             with self.subTest(attacker=label):
-                self.assertIn(self._board(user).status_code, DENIED)
+                # Outsiders get the 404 a missing id gets; the owner gets 403.
+                expected = (404,) if label in ("stranger", "other manager", "other driver") else DENIED
+                self.assertIn(self._board(user).status_code, expected)
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, "confirmed")
         self.assertFalse(BoardingEvent.objects.filter(booking=self.booking).exists())

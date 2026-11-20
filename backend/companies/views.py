@@ -1,9 +1,7 @@
 from datetime import timedelta
-from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Sum, Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -12,7 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from bookings.models import Booking, Payment, BoardingEvent
+from bookings.models import Booking
 from users.permissions import (
     can_manage_company,
     can_access_company,
@@ -393,15 +391,16 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     Company staff may only access trips belonging to their own company.
     Superusers may access every company.
     """
-    from django.db.models import Q as _Q, Sum as _Sum
+    from django.db.models import Sum as _Sum
     from django.db.models.functions import Coalesce as _Coalesce
+    from bookings.services import active_seat_q
     queryset = Trip.objects.select_related(
         'route',
         'driver',
         'route__company',
     ).annotate(
         booked_annot=_Coalesce(
-            _Sum('bookings__seats', filter=~_Q(bookings__status='cancelled')),
+            _Sum('bookings__seats', filter=active_seat_q(prefix='bookings__')),
             0,
         )
     )
@@ -482,12 +481,19 @@ def get_trips(request, company_id=None, route_id=None, *args, **kwargs):
     if not is_company_staff and not user.is_superuser:
         from django.utils import timezone
         from django.db.models import Q
-        from bookings.services import BOARDING_BOOKABLE_WINDOW as _win
         _now = timezone.now()
-        queryset = queryset.filter(
-            Q(status='scheduled', departure_at__gt=_now)
-            | Q(status='boarding', departure_at__gt=_now - _win)
-        )
+        # Online booking closes at departure minus the company's cut-off, so a
+        # late boarding bus is no longer listed either. One Q per distinct
+        # cut-off value instead of date arithmetic on a column: the same SQL
+        # works on SQLite and Postgres, and there are only a handful of values.
+        _open = Q()
+        for _minutes in Company.objects.values_list(
+                'booking_cutoff_minutes', flat=True).distinct():
+            _open |= Q(
+                route__company__booking_cutoff_minutes=_minutes,
+                departure_at__gt=_now + timedelta(minutes=_minutes),
+            )
+        queryset = queryset.filter(_open, status__in=('scheduled', 'boarding'))
 
         selected_date = request.query_params.get('date')
         if selected_date:
@@ -1622,7 +1628,7 @@ def route_health(request):
 @permission_classes([IsAuthenticated])
 def update_trip_capacity(request, trip_id, *args, **kwargs):
     """Change a trip's seat capacity without recreating the trip."""
-    from django.db.models import Sum
+    from bookings.services import seats_taken
 
     trip = (
         Trip.objects.select_related('route__company')
@@ -1669,10 +1675,7 @@ def update_trip_capacity(request, trip_id, *args, **kwargs):
                 {'error': f'Capacity cannot be changed on a {locked.status} trip.'},
                 status=status.HTTP_409_CONFLICT,
             )
-        taken = (
-            locked.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
-        )
+        taken = seats_taken(locked)
         if capacity < taken:
             return Response(
                 {
@@ -1849,3 +1852,92 @@ def route_alternatives(request, route_id):
             'via': [{'latitude': la, 'longitude': lo} for la, lo in sample_via(geometry, via_count)],
         })
     return Response({'options': options})
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def booking_settings(request):
+    """The manager's own company: how many minutes before departure online booking closes."""
+    from django.conf import settings as django_settings
+
+    user = request.user
+    if user.is_superuser or user.role != 'company_manager' or user.company_id is None:
+        return Response({'error': 'Company manager access required.'},
+                        status=status.HTTP_403_FORBIDDEN)
+    company = Company.objects.get(id=user.company_id)
+    if request.method == 'PATCH':
+        value = request.data.get('booking_cutoff_minutes')
+        limit = django_settings.BOOKING_CUTOFF_MAX_MINUTES
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= limit:
+            return Response(
+                {'error': f'booking_cutoff_minutes must be a whole number from 0 to {limit}.'},
+                status=status.HTTP_400_BAD_REQUEST)
+        company.booking_cutoff_minutes = value
+        company.save(update_fields=['booking_cutoff_minutes'])
+    return Response({'booking_cutoff_minutes': company.booking_cutoff_minutes})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def trip_seat_summary(request, trip_id):
+    """
+    Booked and open seats for the stage. open_seats comes from the same helper the
+    walk-in check uses. Anyone outside the trip's company or route scope gets the
+    404 a missing trip gets.
+    """
+    from bookings.services import (
+        active_seat_q, booking_closes_at, seats_taken, trip_has_departed,
+    )
+
+    not_found = Response({'error': 'Trip not found'}, status=status.HTTP_404_NOT_FOUND)
+    trip = Trip.objects.select_related('route__company', 'driver').filter(pk=trip_id).first()
+    if trip is None:
+        return not_found
+
+    user = request.user
+    allowed = (
+        user.is_superuser
+        or (
+            user.role in {'company_manager', 'company_auditor', 'company_operator'}
+            and user.company_id == trip.route.company_id
+            and can_handle_route(user, trip.route_id)
+        )
+        or is_driver_account_for(user, trip.driver)
+    )
+    if not allowed:
+        return not_found
+
+    now = timezone.now()
+    live = trip.bookings.filter(active_seat_q(now))
+    seats = lambda qs: sum(qs.values_list('seats', flat=True))  # noqa: E731
+    pending = live.filter(status='pending')
+    taken = seats_taken(trip, now)
+    closes_at = booking_closes_at(trip)
+    open_for_trip = trip.status in ('scheduled', 'boarding')
+    by_stage = [
+        {
+            'stage_id': stage.id,
+            'name': stage.name,
+            'booked_seats': seats(live.filter(pickup_stage_id=stage.id)),
+        }
+        for stage in trip.route.pickup_stages.filter(is_active=True).order_by('order', 'id')
+    ]
+    return Response({
+        'trip_id': trip.id,
+        'capacity': trip.capacity,
+        'confirmed_seats': seats(live.exclude(status='pending')),
+        'pending_seats': seats(pending),
+        'pending_expires_at': (
+            pending.exclude(held_until__isnull=True).order_by('held_until')
+            .values_list('held_until', flat=True).first()
+        ),
+        'boarded_seats': seats(live.filter(boarding_event__isnull=False)),
+        'open_seats': trip.capacity - taken,
+        'online_open': open_for_trip and now < closes_at,
+        'online_closes_at': closes_at,
+        'walkup_allowed': (
+            not trip_has_departed(trip)
+            and (trip.status == 'boarding' or (trip.status == 'scheduled' and now >= closes_at))
+        ),
+        'by_stage': by_stage,
+    })

@@ -2,7 +2,7 @@
 Report (default) or record (--apply) a manual payout to a transport company.
 
 Streams in one payout:
-  seats     digital, confirmed seat payments that are boarding-eligible, or whose
+  seats     digital or wallet, confirmed seat payments that are boarding-eligible, or whose
             refund is processed with part of the fare retained. Per payment:
             retained = amount - processed refund; fee = min(PLATFORM_FEE_PER_SEAT
             x seats, retained), so the company's share is never negative.
@@ -114,7 +114,7 @@ class Command(BaseCommand):
                     .select_related('booking')
                     .filter(
                         booking__route__company=company,
-                        method='digital',
+                        method__in=('digital', 'wallet'),
                         status='confirmed',
                         payout__isnull=True,
                     )

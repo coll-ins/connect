@@ -55,3 +55,22 @@ class CronEndpointTests(TestCase):
             r = self.post()
         self.assertEqual(r.status_code, 500)
         self.assertIsNone(cache.get(LOCK))
+
+
+class CronJobRegistryTests(TestCase):
+    def test_wallet_sweeps_job_runs_the_wallet_sweeps_command(self):
+        from connect.cron import JOBS
+        self.assertEqual(JOBS['wallet-sweeps'], ('wallet_sweeps', []))
+
+    def test_every_job_is_a_real_command_and_is_scheduled(self):
+        from pathlib import Path
+        from django.core.management import get_commands
+        from django.conf import settings
+        from connect.cron import JOBS
+        commands = get_commands()
+        for job, (name, _args) in JOBS.items():
+            self.assertIn(name, commands, f'{job} points at a missing command')
+        workflow = Path(settings.BASE_DIR).parent / '.github' / 'workflows' / 'scheduled-jobs.yml'
+        text = workflow.read_text(encoding='utf-8')
+        for job in JOBS:
+            self.assertIn(job, text, f'{job} is never called by scheduled-jobs.yml')

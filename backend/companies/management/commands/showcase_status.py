@@ -43,15 +43,13 @@ class Command(BaseCommand):
                 return
 
     def _show(self, trip):
-        from django.db.models import Sum
         from bookings.live_signals import location_freshness
         from bookings.models import Booking
+        from bookings.services import seats_taken
 
         driver = trip.driver
         stage = trip.route.pickup_stages.filter(is_active=True).order_by('order', 'id').first()
-        taken = (
-            trip.bookings.exclude(status='cancelled').aggregate(t=Sum('seats'))['t'] or 0
-        )
+        taken = seats_taken(trip)
         fresh = location_freshness(driver)
         age = fresh['location_age_seconds']
         gps = (

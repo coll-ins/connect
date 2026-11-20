@@ -339,7 +339,13 @@ def company_staff(request):
                 {'error': 'company is required.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        company_id = requested_company_id
+        try:
+            company_id = int(requested_company_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'company': ['company must be a company id (a whole number).']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     else:
         company_id = user.company_id
 
@@ -504,6 +510,15 @@ def company_staff_detail(request, staff_id):
             return Response(
                 {'error': 'You cannot remove your own account.'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        if staff_user.bookings.exists():
+            # Deleting the user would cascade away their bookings and payments.
+            staff_user.is_active = False
+            staff_user.save(update_fields=['is_active'])
+            return Response(
+                {'message': 'Staff member deactivated. Their booking and '
+                            'payment records are kept.'},
+                status=status.HTTP_200_OK
             )
         staff_user.delete()
 

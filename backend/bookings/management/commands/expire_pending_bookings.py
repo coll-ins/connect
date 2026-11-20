@@ -1,7 +1,8 @@
 """
-Cancel unpaid pending bookings that have been open longer than
-PENDING_BOOKING_TTL_MINUTES, so abandoned checkouts stop holding seats.
-Run from cron every 5 minutes.
+Cancel unpaid pending bookings whose hold (held_until) has run out. A hold is
+PAYMENT_HOLD_MINUTES, or CASH_PENDING_TTL_MINUTES for a pay-at-stage booking.
+This is cleanup: seats_taken() already ignores an expired hold, so seats are
+free whether or not this runs. Run from cron every 5 minutes.
 
 Safe against races: each booking row is locked first. If a payment webhook
 confirmed it a moment earlier, it is no longer 'pending' and is skipped; if
@@ -12,6 +13,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import OperationalError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from bookings.models import Booking, Payment
@@ -25,12 +27,23 @@ class Command(BaseCommand):
         parser.add_argument('--ttl-minutes', type=int, default=None)
 
     def handle(self, *args, **options):
-        ttl = options['ttl_minutes'] or getattr(settings, 'PENDING_BOOKING_TTL_MINUTES', 20)
-        cutoff = timezone.now() - timedelta(minutes=ttl)
+        now = timezone.now()
+        ttl = options['ttl_minutes']
+
+        if ttl:
+            # Explicit override: judge by age, ignoring held_until.
+            expired = Q(created_at__lt=now - timedelta(minutes=ttl))
+        else:
+            hold = getattr(settings, 'PAYMENT_HOLD_MINUTES', 10)
+            expired = Q(held_until__lte=now) | Q(
+                # Row written without a hold (old code during a deploy).
+                held_until__isnull=True,
+                created_at__lt=now - timedelta(minutes=hold),
+            )
 
         candidate_ids = list(
             Booking.objects
-            .filter(status='pending', created_at__lt=cutoff, trip__status='scheduled')
+            .filter(expired, status='pending', trip__status__in=['scheduled', 'boarding'])
             .values_list('pk', flat=True)
         )
 
@@ -41,6 +54,8 @@ class Command(BaseCommand):
                     # No select_related: Booking.trip is nullable (see confirm_cash_payment).
                     booking = Booking.objects.select_for_update().get(pk=pk)
                     if booking.status != 'pending':
+                        continue
+                    if not ttl and booking.held_until is not None and booking.held_until > now:
                         continue
                     if Payment.objects.filter(booking=booking, status='confirmed').exists():
                         continue

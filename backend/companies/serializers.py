@@ -120,11 +120,26 @@ class TripSerializer(serializers.ModelSerializer):
         annotated = getattr(obj, 'booked_annot', None)
         if annotated is not None:
             return int(annotated)
-        from django.db.models import Sum
+        from bookings.services import seats_taken
+        return seats_taken(obj)
+
+    booking_closes_at = serializers.SerializerMethodField()
+    booking_open = serializers.SerializerMethodField()
+    seats_available = serializers.SerializerMethodField()
+
+    def get_booking_closes_at(self, obj):
+        from bookings.services import booking_closes_at
+        return booking_closes_at(obj)
+
+    def get_booking_open(self, obj):
+        from django.utils import timezone
         return (
-            obj.bookings.exclude(status='cancelled')
-            .aggregate(total=Sum('seats'))['total'] or 0
+            obj.status in ('scheduled', 'boarding')
+            and timezone.now() < self.get_booking_closes_at(obj)
         )
+
+    def get_seats_available(self, obj):
+        return max(obj.capacity - self.get_booked_seats(obj), 0)
 
     class Meta:
         model = Trip
@@ -140,6 +155,9 @@ class TripSerializer(serializers.ModelSerializer):
             'capacity',
             'status',
             'booked_seats',
+            'booking_closes_at',
+            'booking_open',
+            'seats_available',
         ]
         read_only_fields = [
             'id',

@@ -102,7 +102,7 @@ class AuditFixTests(APITestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_currency_check_normalises_and_tolerates_missing_field(self):
-        from bookings.views import _currency_ok
+        from bookings.services import currency_ok as _currency_ok
         self.assertTrue(_currency_ok('KES'))
         self.assertTrue(_currency_ok(' kes '))
         self.assertTrue(_currency_ok(None))

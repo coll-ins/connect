@@ -44,12 +44,12 @@ class VerifyBoardingIdentityTests(_Fixture, APITestCase):
 
     def test_passenger_with_the_drivers_number_is_refused(self):
         response = self._verify(self._user('r18_borrower'))
-        self.assertEqual(response.status_code, 403, response.data)
+        self.assertEqual(response.status_code, 404, response.data)
         self._untouched()
 
     def test_driver_account_of_another_company_is_refused(self):
         other = Company.objects.create(name='R18 Other Co')
         user = self._user('r18_foreign_driver', role='driver', company=other)
         response = self._verify(user)
-        self.assertEqual(response.status_code, 403, response.data)
+        self.assertEqual(response.status_code, 404, response.data)
         self._untouched()

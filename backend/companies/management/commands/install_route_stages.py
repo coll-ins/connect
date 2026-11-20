@@ -289,6 +289,27 @@ STAGES = {
     ],
 }
 
+# The migrations seed these routes as "Nairobi to X"; the stage lists above were
+# written for "CBD to X". Each key lists the seeded names it also applies to.
+ROUTE_ALIASES = {
+    "CBD to Nakuru": ["Nairobi to Nakuru"],
+    "CBD to Kisumu": ["Nairobi to Kisumu"],
+    "CBD to Kakamega": ["Nairobi to Kakamega"],
+}
+
+# Coordinates the geocoder returned earlier for the "CBD to Ngong" stages (kept in
+# route2_backup_before_stages.json). They make those stages installable with no
+# network. Every other stage still needs the geocoder: see --offline.
+OFFLINE_COORDINATES = {
+    "Kencom House": (Decimal("-1.285582"), Decimal("36.824962")),
+    "Prestige": (Decimal("-1.299720"), Decimal("36.787239")),
+    "Adams Arcade": (Decimal("-1.300038"), Decimal("36.780468")),
+    "Karen / Dagoretti Corner": (Decimal("-1.299765"), Decimal("36.759049")),
+    "Ngong Town": (Decimal("-1.352491"), Decimal("36.669895")),
+    "Nyayo Stadium": (Decimal("-1.304121"), Decimal("36.824669")),
+    "Kiserian Junction": (Decimal("-1.436581"), Decimal("36.685025")),
+}
+
 
 class Command(BaseCommand):
     help = "Install curated pickup stages using geocoded locations."
@@ -296,10 +317,25 @@ class Command(BaseCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cache = {}
+        self.offline = False
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--offline",
+            action="store_true",
+            help="Never call the geocoder; stages without a committed coordinate are skipped.",
+        )
 
     def geocode(self, name):
         if name in self.cache:
             return self.cache[name]
+
+        if name in OFFLINE_COORDINATES:
+            return OFFLINE_COORDINATES[name]
+
+        if self.offline:
+            self.stdout.write(self.style.WARNING(f"  no offline coordinate: {name}"))
+            return None
 
         url = "https://photon.komoot.io/api/"
 
@@ -352,12 +388,15 @@ class Command(BaseCommand):
             return None
 
     def handle(self, *args, **options):
+        self.offline = options.get("offline", False)
         created = 0
         existing = 0
         unresolved = 0
 
         for route_name, stage_names in STAGES.items():
-            routes = Route.objects.filter(name=route_name)
+            routes = Route.objects.filter(
+                name__in=[route_name, *ROUTE_ALIASES.get(route_name, [])]
+            )
 
             if not routes.exists():
                 self.stdout.write(

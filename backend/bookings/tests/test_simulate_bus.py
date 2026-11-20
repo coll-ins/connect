@@ -2,12 +2,9 @@ import json
 
 from django.core.management import call_command, CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
-from django.utils import timezone
 
-from companies.models import Company, Route, Trip
 from companies.geo import haversine_m, orient_path, parse_geometry, point_along
 from companies.management.commands.simulate_bus import path_length_m
-from drivers.models import Driver
 
 LINE = {'type': 'LineString', 'coordinates': [[36.82, -1.28], [36.83, -1.29]]}
 

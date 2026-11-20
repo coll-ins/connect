@@ -1,9 +1,11 @@
 from decimal import Decimal
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from wallets import services
 from wallets.models import Wallet
 
 User = get_user_model()
@@ -17,11 +19,9 @@ class WalletsAppTests(APITestCase):
             password="password123",
             phone_number="+254700000002",
         )
-        self.wallet = Wallet.objects.create(
-            user=self.user,
-            available_balance=Decimal("1500.00"),
-            held_balance=Decimal("0.00"),
-        )
+        with transaction.atomic():
+            services.credit(self.user, Decimal("1500.00"), "deposit", "topup:seed")
+        self.wallet = Wallet.objects.get(user=self.user)
 
     def _resolve_url(self, primary_name, fallback_name=None, kwargs=None):
         try:
@@ -34,6 +34,7 @@ class WalletsAppTests(APITestCase):
         url = reverse("my-wallet")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["available_balance"], "1500.00")
 
     def test_wallet_detail_unauthenticated(self):
         url = reverse("my-wallet")

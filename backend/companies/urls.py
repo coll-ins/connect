@@ -37,7 +37,9 @@ urlpatterns = [
     path('schedules/create/', schedule_views.create_schedule, name='create_schedule'),
     path('schedules/<int:schedule_id>/', schedule_views.manage_schedule, name='manage_schedule'),
 
+    path('booking-settings/', views.booking_settings, name='booking-settings'),
     path('trips/<int:trip_id>/', views.get_trip_details, name='get_trip_details'),
+    path('trips/<int:trip_id>/seat-summary/', views.trip_seat_summary, name='trip-seat-summary'),
     path(
         'trips/<int:trip_id>/status/',
         views.update_trip_status,

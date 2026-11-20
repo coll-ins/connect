@@ -29,7 +29,9 @@ class Command(BaseCommand):
         applied = escalated = refunded = reconciled = 0
 
         # 1. transient failures
-        for row in UnappliedPayment.objects.filter(status='retry').order_by('pk'):
+        # kind='booking' rows are never applied: they are refunded or reviewed.
+        retryable = UnappliedPayment.objects.filter(status='retry').exclude(kind='booking')
+        for row in retryable.order_by('pk'):
             attempts = row.attempts + 1
             try:
                 px.apply_charge(row.reference, row.payload)
@@ -86,3 +88,11 @@ class Command(BaseCommand):
         )
         for row in UnappliedPayment.objects.filter(status='review').order_by('pk'):
             self.stdout.write(f'NEEDS A HUMAN: {row.reference} KES {row.amount}: {row.reason}')
+            # A row that has waited past the minimum age is re-alerted once a
+            # day until someone clears it. A newer one was alerted when it
+            # was written.
+            if row.updated_at < cutoff and cache.add(f'unapplied-review-alert:{row.pk}', 1, 24 * 60 * 60):
+                px._alert(
+                    f'Payment {row.reference} (KES {row.amount}) needs a human: '
+                    f'{row.reason[:90]}. Check Paystack and refund manually if appropriate.'
+                )

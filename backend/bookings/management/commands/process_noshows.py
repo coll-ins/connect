@@ -1,14 +1,16 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.cache import cache
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from companies.models import Trip
-from bookings.models import Booking, Payment
+from bookings.models import Payment
 from bookings.services import (
+    _alert_admin,
     claim_booking_refund,
     run_refund_claims,
     settle_booking_fault,
@@ -117,7 +119,7 @@ class Command(BaseCommand):
             run_refund_claims(trip_claims)
 
         stuck_refunds = Payment.objects.filter(
-            method="digital",
+            method__in=("digital", "wallet"),
             status="confirmed",
             booking__status="no_show",
             refund_status__in=["not_requested", "failed"],
@@ -140,7 +142,7 @@ class Command(BaseCommand):
 
         # Refunds Paystack refused when the company cancelled the trip.
         stuck_cancelled_trip_refunds = Payment.objects.filter(
-            method="digital",
+            method__in=("digital", "wallet"),
             status="confirmed",
             booking__status="cancelled",
             booking__trip__status="cancelled",
@@ -160,6 +162,38 @@ class Command(BaseCommand):
                     f"Refund retry failed for "
                     f"{payment.booking.booking_number}: {e}"
                 )
+
+        # Money that arrived for a booking that could not be used (late,
+        # resold, cancelled). The refund runs right after the webhook; this
+        # is the net for a process that died in between. No trip-status
+        # filter: a boarding, departed or cancelled trip still owes it.
+        stuck_late_payments = Payment.objects.filter(
+            method__in=("digital", "wallet"),
+            status="confirmed",
+            refund_reason="late_payment",
+            refund_status__in=["not_requested", "failed"],
+            amount__gte=Decimal("5.00"),
+        ).select_related("booking")
+
+        for payment in stuck_late_payments:
+            try:
+                settle_booking_fault(
+                    payment.booking,
+                    fault_party="company",
+                )
+                refunds_retried += 1
+            except ValueError as e:
+                self.stderr.write(
+                    f"Late-payment refund retry failed for "
+                    f"{payment.booking.booking_number}: {e}"
+                )
+                # One alert per payment per day, not one per 10-minute run.
+                if cache.add(f"late-refund-alert:{payment.pk}", 1, 24 * 60 * 60):
+                    _alert_admin(
+                        f"Late payment for booking "
+                        f"{payment.booking.booking_number} "
+                        f"(KES {payment.amount}) could not be refunded: {e}"
+                    )
 
         self.stdout.write(
             self.style.SUCCESS(

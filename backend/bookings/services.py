@@ -1,14 +1,88 @@
+import re
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 import requests
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .models import BookingHold
 
 # How long past its departure time a boarding trip stays bookable/payable.
 BOARDING_BOOKABLE_WINDOW = timedelta(hours=2)
+
+# Statuses that always take a seat. A pending booking takes one only while
+# its hold lasts (see active_seat_q).
+_SEAT_STATUSES = ('confirmed', 'completed', 'no_show')
+
+
+class NotEnoughSeats(Exception):
+    def __init__(self, available):
+        super().__init__(f'Only {available} seats remaining.')
+        self.available = max(available, 0)
+
+
+def active_seat_q(now=None, prefix=''):
+    """
+    The one definition of "this booking takes a seat", as a Q.
+
+    prefix is the lookup path from the model being queried to Booking
+    (for example 'bookings__' when annotating Trip).
+
+    A pending booking with no held_until counts as held: such a row was
+    written by code that predates the hold (or by an old process during a
+    rolling deploy), and counting it can never oversell.
+    """
+    now = now or timezone.now()
+    return (
+        Q(**{f'{prefix}status__in': _SEAT_STATUSES})
+        | (
+            Q(**{f'{prefix}status': 'pending'})
+            & (
+                Q(**{f'{prefix}held_until__isnull': True})
+                | Q(**{f'{prefix}held_until__gt': now})
+            )
+        )
+    )
+
+
+def seats_taken(trip, now=None, exclude_booking_id=None):
+    """Seats on `trip` that count against its capacity right now."""
+    qs = trip.bookings.filter(active_seat_q(now))
+    if exclude_booking_id is not None:
+        qs = qs.exclude(pk=exclude_booking_id)
+    return qs.aggregate(total=Sum('seats'))['total'] or 0
+
+
+def reserve_seats(trip, seats, now=None, exclude_booking_id=None):
+    """
+    Check that `seats` more fit on `trip`. The caller must already hold the
+    Trip row lock. Returns the seats left after this request, or raises
+    NotEnoughSeats carrying how many were available.
+    """
+    available = trip.capacity - seats_taken(trip, now, exclude_booking_id)
+    if seats > available:
+        raise NotEnoughSeats(available)
+    return available - seats
+
+
+def booking_closes_at(trip):
+    """When online booking and passenger moves onto `trip` stop."""
+    minutes = trip.route.company.booking_cutoff_minutes
+    return trip.departure_at - timedelta(minutes=minutes)
+
+
+def hold_deadline(trip, now=None, minutes=None):
+    """held_until for a booking that is pending as of `now`. Never past departure."""
+    now = now or timezone.now()
+    if minutes is None:
+        minutes = getattr(settings, 'PAYMENT_HOLD_MINUTES', 10)
+    deadline = now + timedelta(minutes=minutes)
+    if trip is not None and trip.departure_at < deadline:
+        return trip.departure_at
+    return deadline
 
 
 def trip_has_departed(trip):
@@ -112,6 +186,38 @@ def _alert_admin(message):
         logger.exception('Admin alert failed: %s', message)
 
 
+def _refund_to_wallet(booking, payment, refund_amount):
+    from wallets import services as wallet_services
+
+    hold = (
+        BookingHold.objects
+        .select_for_update()
+        .filter(booking_id=booking.pk)
+        .first()
+    )
+    if hold is not None and refund_amount > hold.amount:
+        raise ValueError('Refund amount exceeds the booking hold amount.')
+    if refund_amount <= 0:
+        payment.refund_amount = refund_amount
+        payment.refund_status = 'not_requested'
+        payment.save(update_fields=['refund_amount', 'refund_status'])
+        return refund_amount
+
+    # The payer gets the money, whoever (staff or sweep) triggered the refund.
+    wallet_services.credit(
+        booking.user, refund_amount, 'refund', f'refund:{payment.pk}',
+        booking=booking,
+    )
+    payment.refund_amount = refund_amount
+    payment.refund_claimed_at = timezone.now()
+    payment.save(update_fields=['refund_amount', 'refund_claimed_at'])
+    return record_refund_result(
+        RefundClaim(payment.pk, booking.pk, booking.booking_number,
+                    None, refund_amount),
+        'processed', f'WALLET-{payment.pk}',
+    )
+
+
 def claim_booking_refund(booking, fault_party):
     """
     DATABASE ONLY - never talks to Paystack.
@@ -123,16 +229,20 @@ def claim_booking_refund(booking, fault_party):
     Passenger fault: 50% refund. Company fault: 100% refund.
 
     Returns (refund_amount, claim). claim is None when nothing has to be sent
-    to Paystack (no confirmed payment, cash, below the gateway minimum, or a
-    refund that is already pending/processing/processed).
+    to Paystack (no confirmed payment, cash, wallet (credited here), below the
+    gateway minimum, or a refund that is already pending/processing/processed).
     """
-    from .models import Payment
+    from .models import Booking, Payment
 
     with transaction.atomic():
+        # Booking before Payment, the order every other path uses. A caller
+        # that already holds the lock (cancel_booking) is not blocked: row
+        # locks are re-entrant within one transaction.
+        Booking.objects.select_for_update(of=('self',)).filter(pk=booking.pk).first()
         try:
             payment = (
                 Payment.objects
-                .select_for_update()
+                .select_for_update(of=('self',))
                 .get(booking_id=booking.pk)
             )
         except Payment.DoesNotExist:
@@ -163,6 +273,12 @@ def claim_booking_refund(booking, fault_party):
             payment.refund_status = 'not_requested'
             payment.save(update_fields=['refund_amount', 'refund_status'])
             return refund_amount, None
+
+        # Wallet money is ours to give back at once: no gateway step, and no
+        # KES 5 floor (that is a Paystack limit). Booking, Payment and Hold are
+        # locked above and below; the Wallet is locked last, inside credit().
+        if payment.method == 'wallet':
+            return _refund_to_wallet(booking, payment, refund_amount), None
 
         if payment.method != 'digital':
             raise ValueError('Unsupported payment method.')
@@ -412,7 +528,8 @@ def settle_booking_fault(booking, fault_party):
 
     Passenger fault: 50% refund. Company fault: 100% refund.
     Cash: nothing is sent to Paystack; the amount is recorded for the
-    separate cash workflow. This does NOT modify Django wallet balances.
+    separate cash workflow. Wallet: the refund is credited to the payer's
+    wallet at once (no Paystack call). Paystack payments never touch wallets.
     """
     refund_amount, claim = claim_booking_refund(booking, fault_party)
 
@@ -544,7 +661,7 @@ def cancel_trip_bookings(trip, claims):
 
     for booking in (
         trip.bookings
-        .select_for_update()
+        .select_for_update(of=('self',))
         .select_related('user')
         .filter(status__in=('pending', 'confirmed'))
     ):
@@ -559,10 +676,13 @@ def cancel_trip_bookings(trip, claims):
                 logger.warning(
                     'Refund failed for %s: %s', booking.booking_number, exc
                 )
-                _alert_admin(
+                # Sent after commit so no external call runs under row locks;
+                # a rollback drops it with the cancellation it describes.
+                alert = (
                     f'Trip {trip.pk} was cancelled but booking '
                     f'{booking.booking_number} could not be refunded: {exc}'
                 )
+                transaction.on_commit(lambda alert=alert: _alert_admin(alert))
 
         booking.status = 'cancelled'
         booking.save(update_fields=['status'])
@@ -593,7 +713,7 @@ def settle_unboarded_no_shows(trip, claims=None):
         return 0, confirmed.count()
 
     settled = 0
-    for booking in confirmed.select_for_update().select_related('user'):
+    for booking in confirmed.select_for_update(of=('self',)).select_related('user'):
         try:
             if claims is None:
                 settle_booking_fault(booking, fault_party='passenger')
@@ -620,3 +740,450 @@ def settle_unboarded_no_shows(trip, claims=None):
         settled += 1
 
     return settled, 0
+
+
+# ============================================================
+# ONE CONFIRM PATH FOR A DIGITAL PAYMENT
+# ============================================================
+
+def currency_ok(currency):
+    # Reject a currency Paystack reports as something other than KES. A
+    # missing field is not rejected: the amount check still applies and the
+    # payload shape is not verified against Paystack's docs.
+    return currency is None or str(currency).strip().upper() == 'KES'
+
+
+class PaymentOutcome:
+    """What confirm_booking_payment decided. `result` is one of:
+
+    not_found  no payment has that reference
+    retry      the booking moved trips while we waited for locks: try again
+    ignored    already confirmed/refunded, or not a digital payment: nothing done
+    rejected   amount/currency wrong: payment marked failed and a review row
+               written; `alert` says why (None when this is a replay)
+    refund     payment confirmed but the booking cannot be used: caller must
+               refund after commit (settle_booking_fault, company fault)
+    confirmed  booking confirmed and the financial hold created
+
+    `extra_refunds` holds the UnappliedPayment row of an overpayment's
+    difference. The caller sends it after commit (or alerts, when the row is
+    'review'); process_unapplied sends it if the caller dies first.
+    """
+
+    __slots__ = ('result', 'payment', 'booking', 'alert', 'extra_refunds')
+
+    def __init__(self, result, payment=None, booking=None, alert=None,
+                 extra_refunds=None):
+        self.result = result
+        self.payment = payment
+        self.booking = booking
+        self.alert = alert
+        self.extra_refunds = extra_refunds or []
+
+
+# Paystack refuses refunds below this, so a smaller difference needs a human.
+MIN_GATEWAY_REFUND = Decimal('5.00')
+
+CONNECT_REF = re.compile(r'^CONNECT-\d+-[0-9a-f]{32}$')
+
+
+def _kes(subunits):
+    return (Decimal(subunits) / Decimal(100)).quantize(Decimal('0.01'))
+
+
+def charge_refund_totals(payment):
+    """
+    (paid, refunded) in KES for one charge: what Paystack took and what has
+    been refunded or is owed back, counting the booking refund and any
+    UnappliedPayment rows on the same reference. For a late payment the two
+    are equal; they must never differ by a refund too many.
+    """
+    from .models import UnappliedPayment
+
+    paid = payment.paid_amount if payment.paid_amount is not None else payment.amount
+    refunded = Decimal('0.00')
+    if payment.refund_status in ('pending', 'processing', 'processed'):
+        refunded += payment.refund_amount or Decimal('0.00')
+    extra = (
+        UnappliedPayment.objects
+        .filter(reference=payment.provider_reference,
+                status__in=('refund_due', 'refunding', 'refunded'))
+        .aggregate(total=Sum('amount'))['total']
+    )
+    return paid, refunded + (extra or Decimal('0.00'))
+
+
+def record_unmatched_charge(reference, paid_amount, currency):
+    """
+    A signed charge.success for a CONNECT reference that matches no Payment
+    (an old checkout paid after re-initiation, a duplicate charge). The money
+    is ours to give back: one UnappliedPayment per reference, refund_due for
+    a full refund, review when the amount or currency cannot be trusted.
+
+    Returns (row, created), or (None, False) for a reference that is not ours.
+    """
+    from .models import UnappliedPayment
+
+    if not CONNECT_REF.match(reference or ''):
+        return None, False
+    amount = None
+    try:
+        paid = int(paid_amount)
+        if paid > 0:
+            amount = _kes(paid)
+    except (TypeError, ValueError):
+        pass
+    refundable = (
+        amount is not None
+        and amount >= MIN_GATEWAY_REFUND
+        and str(currency or '').strip().upper() == 'KES'
+    )
+    return UnappliedPayment.objects.get_or_create(
+        reference=reference,
+        defaults={
+            'kind': 'booking',
+            'amount': amount,
+            'currency': str(currency or '')[:10],
+            'reason': 'no booking payment matches this reference',
+            'payload': {'amount': str(paid_amount)[:20], 'currency': str(currency or '')[:10]},
+            'status': 'refund_due' if refundable else 'review',
+        },
+    )
+
+
+def _lock_payment_chain(payment_id, booking_id, trip_id):
+    """
+    Lock Trip -> Booking -> Payment, the one order every money and seat path
+    uses (create_booking, cancel_booking, cash confirm). of=('self',) keeps
+    each lock to its own table: no joined User or Route rows are locked.
+    """
+    from companies.models import Trip
+    from .models import Booking, Payment
+
+    trip = (
+        Trip.objects.select_for_update(of=('self',)).get(pk=trip_id)
+        if trip_id is not None else None
+    )
+    booking = Booking.objects.select_for_update(of=('self',)).get(pk=booking_id)
+    payment = Payment.objects.select_for_update(of=('self',)).get(pk=payment_id)
+    return trip, booking, payment
+
+
+def confirm_booking_payment(*, paid_amount, currency, reference=None, payment_id=None):
+    """
+    The only place a digital payment turns a booking into a paid one. Used by
+    the webhook, payment_status and verify_paystack_payment.
+
+    The caller must NOT hold a transaction open (this opens its own) and must
+    refund after it returns when the outcome is 'refund'.
+    """
+    from .models import Payment
+
+    lookup = (
+        {'provider_reference': reference} if reference is not None
+        else {'pk': payment_id}
+    )
+    ids = (
+        Payment.objects.filter(**lookup)
+        .values('pk', 'booking_id', 'booking__trip_id').first()
+    )
+    if ids is None:
+        return PaymentOutcome('not_found')
+
+    with transaction.atomic():
+        trip, booking, payment = _lock_payment_chain(
+            ids['pk'], ids['booking_id'], ids['booking__trip_id'])
+
+        if booking.trip_id != ids['booking__trip_id']:
+            return PaymentOutcome('retry', payment, booking)
+
+        # Wallet pay may have taken this Payment over (clearing its reference)
+        # between the lookup above and our locks. The charge then belongs to
+        # no payment: the webhook records it as unmatched and refunds it.
+        if reference is not None and payment.provider_reference != reference:
+            return PaymentOutcome('not_found')
+
+        # Paystack may retry the same webhook; verify/status may race it.
+        if payment.status in ('confirmed', 'refunded') or payment.method != 'digital':
+            return PaymentOutcome('ignored', payment, booking)
+
+        ref = payment.provider_reference
+        problem = None
+        paid = None
+        if paid_amount is None:
+            problem = 'amount missing in webhook'
+        else:
+            try:
+                paid = int(paid_amount)
+            except (TypeError, ValueError):
+                problem = 'amount unreadable in webhook'
+        expected = int(payment.amount * Decimal('100'))
+        if problem is None:
+            # Never trust the gateway response blindly: the amount must match
+            # what CONNECT expected. Paying MORE in KES is accepted below.
+            if paid < expected or not currency_ok(currency):
+                problem = (
+                    f'amount/currency mismatch: paid {paid} {currency}, '
+                    f'expected {expected}'
+                )
+        if problem is not None:
+            from .models import UnappliedPayment
+
+            payment.status = 'failed'
+            payment.save(update_fields=['status'])
+            _, created = UnappliedPayment.objects.get_or_create(
+                reference=ref,
+                defaults={
+                    'kind': 'booking',
+                    'amount': _kes(paid) if paid is not None and paid > 0 else None,
+                    'currency': str(currency or '')[:10],
+                    'reason': problem[:255],
+                    'payload': {'booking_id': booking.pk, 'expected': expected},
+                    'status': 'review',
+                },
+            )
+            return PaymentOutcome('rejected', payment, booking,
+                                  alert=(ref, problem) if created else None)
+
+        # -------------------------------------------------
+        # PAYMENT CONFIRMED
+        # -------------------------------------------------
+        #
+        # We deliberately do NOT add money to the user's
+        # Django Wallet here.
+        #
+        # Paystack confirmation means the payment succeeded.
+        # It does NOT mean CONNECT has released the money
+        # to the transport company.
+        #
+        now = timezone.now()
+        update_fields = ['status', 'settlement_status', 'confirmed_at']
+
+        # The difference is recorded first and unconditionally, so it is owed
+        # back whether the booking is then confirmed or refunded as late.
+        extra_refunds = []
+        if paid > expected:
+            from .models import UnappliedPayment
+
+            excess = _kes(paid - expected)
+            payment.paid_amount = _kes(paid)
+            update_fields.append('paid_amount')
+            row, created = UnappliedPayment.objects.get_or_create(
+                reference=ref,
+                defaults={
+                    'kind': 'booking',
+                    'amount': excess,
+                    'currency': 'KES',
+                    'reason': 'overpayment',
+                    'payload': {'booking_id': booking.pk, 'paid': paid,
+                                'expected': expected},
+                    # Under the gateway minimum nothing can be sent.
+                    'status': ('refund_due' if excess >= MIN_GATEWAY_REFUND
+                               else 'review'),
+                },
+            )
+            if created:
+                extra_refunds.append(row)
+
+        payment.status = 'confirmed'
+        payment.settlement_status = 'not_ready'
+        payment.confirmed_at = now
+
+        # A booking that cannot be used: closed, the trip is gone, the hold
+        # ran out (past the arrival tolerance) or ran out a little earlier and
+        # the seat has been resold. Money is never kept: the caller refunds
+        # after commit and the sweep covers a crash. The booking is never
+        # revived. An unstamped hold (held_until NULL) is never late.
+        tolerance = timedelta(
+            seconds=getattr(settings, 'PAYMENT_ARRIVAL_TOLERANCE_SECONDS', 60))
+        unusable = (
+            booking.status in ('cancelled', 'completed', 'no_show')
+            or trip_has_departed(trip)
+            or (
+                booking.status == 'pending'
+                and booking.held_until is not None
+                and now > booking.held_until + tolerance
+            )
+        )
+        if (
+            not unusable
+            and booking.status == 'pending'
+            and booking.held_until is not None
+            and booking.held_until <= now
+        ):
+            unusable = (
+                seats_taken(trip, now, exclude_booking_id=booking.pk)
+                + booking.seats > trip.capacity
+            )
+
+        if unusable:
+            payment.refund_reason = 'late_payment'
+            update_fields.append('refund_reason')
+        payment.save(update_fields=update_fields)
+
+        if unusable:
+            if booking.status in ('pending', 'confirmed'):
+                booking.status = 'cancelled'
+                booking.save(update_fields=['status'])
+            return PaymentOutcome('refund', payment, booking,
+                                  extra_refunds=extra_refunds)
+
+        booking.status = 'confirmed'
+        booking.save(update_fields=['status'])
+        create_booking_hold(booking)
+        return PaymentOutcome('confirmed', payment, booking,
+                              extra_refunds=extra_refunds)
+
+
+class BookingMoved(Exception):
+    """The booking changed trips while we waited for its locks."""
+
+
+def lock_trip_then_booking(booking_id, **filters):
+    """
+    Lock the booking's Trip, then the Booking: the order cancel_booking uses.
+    Returns (trip, booking); trip is None for a booking with no trip.
+    Raises Booking.DoesNotExist, or BookingMoved if it changed trips.
+    """
+    from companies.models import Trip
+    from .models import Booking
+
+    ref = Booking.objects.filter(pk=booking_id, **filters).values('trip_id').first()
+    if ref is None:
+        raise Booking.DoesNotExist
+    trip = (
+        Trip.objects.select_for_update(of=('self',)).get(pk=ref['trip_id'])
+        if ref['trip_id'] is not None else None
+    )
+    # No select_related: Booking.trip is nullable and Postgres rejects
+    # FOR UPDATE over the outer join it would produce.
+    booking = Booking.objects.select_for_update(of=('self',)).get(
+        pk=booking_id, **filters)
+    if booking.trip_id != ref['trip_id']:
+        raise BookingMoved
+    return trip, booking
+
+
+def hold_expired_and_seat_gone(booking, trip, now=None):
+    """True for a pending booking whose hold ran out and whose seats are taken."""
+    now = now or timezone.now()
+    return (
+        booking.status == 'pending'
+        and booking.held_until is not None
+        and booking.held_until <= now
+        and trip is not None
+        and seats_taken(trip, now, exclude_booking_id=booking.pk)
+        + booking.seats > trip.capacity
+    )
+
+
+class WalletPayRefused(Exception):
+    """A wallet payment that must not go ahead. Nothing was changed."""
+
+    def __init__(self, code, message, http_status, **extra):
+        super().__init__(message)
+        self.code = code
+        self.http_status = http_status
+        self.extra = extra
+
+
+def pay_booking_from_wallet(booking_id, user, echoed_amounts=()):
+    """
+    Pay a pending booking from the passenger's wallet, in one transaction:
+    Trip -> Booking -> Payment -> BookingHold -> Wallet -> ledger.
+
+    Returns (booking, payment, replayed). Raises Booking.DoesNotExist (not the
+    caller's booking), WalletPayRefused, or wallets InsufficientFunds (the
+    transaction has then rolled back: nothing changed). The debit amount is
+    always the server's total_amount; `echoed_amounts` are client-sent figures
+    that are only compared with it.
+    """
+    from decimal import InvalidOperation
+    from wallets import services as wallet_services
+    from wallets.models import WalletTransaction
+    from .models import Payment
+
+    if user.role != 'passenger':
+        raise WalletPayRefused(
+            'passenger_only', 'The wallet is for passenger accounts.', 403)
+
+    reference = f'spend:{booking_id}'
+    with transaction.atomic():
+        try:
+            trip, booking = lock_trip_then_booking(booking_id, user=user)
+        except BookingMoved:
+            raise WalletPayRefused(
+                'booking_moved', 'This booking changed trips. Please try again.', 409)
+        payment = (
+            Payment.objects.select_for_update(of=('self',))
+            .filter(booking=booking).first()
+        )
+
+        # The ledger row is the proof that this booking was paid from the
+        # wallet, so it is checked before any status: a replay returns the
+        # same result and changes nothing, even after the booking moved on.
+        if WalletTransaction.objects.filter(reference=reference).exists():
+            if (
+                payment is not None and payment.method == 'wallet'
+                and payment.status == 'confirmed'
+                and booking.status in ('confirmed', 'completed')
+            ):
+                return booking, payment, True
+            raise WalletPayRefused(
+                'already_paid', 'This booking has already been paid for.', 409)
+
+        if payment is not None and payment.status in ('confirmed', 'refunded'):
+            raise WalletPayRefused(
+                'already_paid', 'This booking has already been paid for.', 409)
+        if booking.status != 'pending':
+            raise WalletPayRefused(
+                'booking_not_payable',
+                f'Cannot pay for booking with status: {booking.status}', 400)
+
+        total = booking.total_amount
+        for sent in echoed_amounts:
+            try:
+                same = Decimal(str(sent)) == total
+            except (InvalidOperation, ValueError):
+                same = False
+            if not same:
+                raise WalletPayRefused(
+                    'amount_mismatch', 'The amount does not match this booking.',
+                    400, expected=str(total))
+
+        if trip_has_departed(trip):
+            raise WalletPayRefused(
+                'trip_departed',
+                'This trip has already departed. Payment can no longer be made.', 400)
+        # No capacity recheck: a live pending booking still holds its seat.
+        # An unstamped hold (held_until NULL) is never late.
+        now = timezone.now()
+        if booking.held_until is not None and now > booking.held_until:
+            raise WalletPayRefused(
+                'hold_expired', 'The time to hold this booking has run out.', 409)
+
+        fields = {
+            'amount': total, 'method': 'wallet', 'status': 'confirmed',
+            'settlement_status': 'not_ready',
+            # Clearing the reference turns a later success on an abandoned
+            # checkout into an unmatched charge, which is refunded in full.
+            'provider_reference': None, 'idempotency_key': None,
+            'confirmed_at': now, 'refunded_at': None, 'refund_reference': None,
+            'refund_status': 'not_requested', 'refund_reason': '',
+            'paid_amount': total, 'refund_amount': None,
+        }
+        if payment is None:
+            payment = Payment.objects.create(booking=booking, **fields)
+        else:
+            for name, value in fields.items():
+                setattr(payment, name, value)
+            payment.save(update_fields=list(fields))
+
+        booking.status = 'confirmed'
+        booking.save(update_fields=['status'])
+        try:
+            create_booking_hold(booking)
+        except ValueError as exc:
+            raise WalletPayRefused('hold_conflict', str(exc), 409)
+        wallet_services.debit(user, total, 'spend', reference, booking=booking)
+    return booking, payment, False
