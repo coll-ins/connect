@@ -1,10 +1,11 @@
 """login and signup are AllowAny, so they must check the CSRF token and the Origin themselves."""
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
 User = get_user_model()
 LOC = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
-GOOD_ORIGIN = 'http://localhost:5173'
+GOOD_ORIGIN = settings.CORS_ALLOWED_ORIGINS[0]
 EVIL_ORIGIN = 'https://evil.example'
 LOGIN = {'phone_number': '0711900001', 'password': 'pw-123456'}
 SIGNUP = {'phone_number': '0711900002', 'password': 'Zx9-longer-pass', 'name': 'Alice Wanjiru',

@@ -8,6 +8,7 @@ from io import StringIO
 from unittest import mock
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.management import call_command
 from django.utils import timezone
 
@@ -29,6 +30,8 @@ class RoutingBase(MoneyBase):
 
     def setUp(self):
         super().setUp()
+        # A shared (Redis) cache keeps the once-a-day alert key from an earlier test that used the same payment id.
+        cache.clear()
         self.b = self.booking(1, 'cancelled')
         self.pay = Payment.objects.create(
             booking=self.b, amount=Decimal('100'), method='digital',
