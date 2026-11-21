@@ -37,6 +37,10 @@ LOGIN_FAILURES_PER_PHONE = 100
 
 
 def _phone_ident(raw):
+    # 'ip:<address>' is a subject that is not a phone (admin login with a name
+    # nobody owns); it is kept whole so it cannot collide with a phone's digits.
+    if isinstance(raw, str) and raw.startswith('ip:'):
+        return raw
     digits = ''.join(ch for ch in str(raw or '') if ch.isdigit())
     return digits[-9:] or None
 

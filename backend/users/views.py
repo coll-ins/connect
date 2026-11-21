@@ -4,9 +4,10 @@ from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
-from django.middleware.csrf import get_token
+from django.middleware.csrf import CsrfViewMiddleware, get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from rest_framework import status
 from django.contrib.auth.hashers import make_password
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -16,6 +17,7 @@ from rest_framework.response import Response
 
 from .models import CustomUser
 from .phone import canonical_phone, phone_variants
+from wallets.models import Wallet
 from .throttles import (
     LoginIPThrottle,
     SignupIPThrottle,
@@ -36,6 +38,74 @@ def normalize_phone_number(phone_number):
     if digits.startswith('0'):
         return f'+254{digits[1:]}'
     return f'+254{digits}' if digits else ''
+
+
+# The same body the serializer gives for an exact duplicate, so a phone that
+# is taken never looks different from one spelled another way.
+PHONE_TAKEN = {'phone_number': ['user with this phone number already exists.']}
+
+
+def signup_phone(raw):
+    """The canonical phone for a signup body value, or '' when it is not usable text."""
+    if not isinstance(raw, str) or not raw.isascii():
+        return ''
+    canonical = canonical_phone(raw)
+    return canonical if any(ch.isdigit() for ch in canonical) else ''
+
+
+def is_claimable_walk_in(user):
+    """A password-less passenger account made by a walk-in booking."""
+    return (
+        user.is_active
+        and user.role == 'passenger'
+        and not user.has_usable_password()
+        and not user.is_superuser
+        and not user.is_staff
+        and user.company_id is None
+    )
+
+
+def claim_walk_in_account(request, data, phone):
+    """Give the owner of a walk-in phone a password, keeping the booking history.
+
+    Returns the claimed user, a Response when the body is invalid or the phone
+    is not claimable, or None when no account has that phone.
+    """
+    with transaction.atomic():
+        rows = list(
+            CustomUser.objects.select_for_update()
+            .filter(phone_number__in=phone_variants(phone))
+        )
+        if not rows:
+            return None
+        # Claiming needs no SMS proof, so an account holding wallet money is
+        # never handed over: only booking history is.
+        if (
+            len(rows) > 1
+            or not is_claimable_walk_in(rows[0])
+            or Wallet.objects.filter(user=rows[0]).filter(
+                Q(available_balance__gt=0) | Q(held_balance__gt=0)).exists()
+        ):
+            return Response(PHONE_TAKEN, status=status.HTTP_400_BAD_REQUEST)
+        user = rows[0]
+        serializer = UserSerializer(data=data)
+        serializer.fields['phone_number'].validators = [
+            v for v in serializer.fields['phone_number'].validators
+            if v.__class__.__name__ != 'UniqueValidator'
+        ]
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        first, _, last = serializer.validated_data['name'].partition(' ')
+        user.set_password(serializer.validated_data['password'])
+        user.first_name, user.last_name = first, last
+        user.save(update_fields=['password', 'first_name', 'last_name'])
+        return user
+
+
+def stamp_terms(user):
+    user.terms_version = settings.TERMS_VERSION
+    user.terms_accepted_at = timezone.now()
+    user.save(update_fields=['terms_version', 'terms_accepted_at'])
 
 
 def session_role(user):
@@ -71,6 +141,24 @@ def serialize_session_user(user):
     }
 
 
+def csrf_refused(request):
+    """A 403 Response unless the request carries a valid CSRF token and a trusted Origin.
+
+    login and signup are AllowAny, so DRF's session authentication never runs
+    its own CSRF check on them; a cross-site form could otherwise sign a
+    victim's browser into an account chosen by the attacker.
+    """
+    check = CsrfViewMiddleware(lambda request: None)
+    check.process_request(request._request)
+    reason = check.process_view(request._request, None, (), {})
+    if reason is None:
+        return None
+    return Response(
+        {'error': 'CSRF check failed. Reload the page and try again.'},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
 @ensure_csrf_cookie
 def csrf_token(request):
     return JsonResponse({'csrfToken': get_token(request)})
@@ -80,19 +168,15 @@ def csrf_token(request):
 @permission_classes([AllowAny])
 @throttle_classes([SignupPhoneThrottle, SignupIPThrottle, AnonRateThrottle])
 def signup(request):
+    refused = csrf_refused(request)
+    if refused is not None:
+        return refused
     data = request.data.copy()
-    data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
+    data['phone_number'] = signup_phone(data.get('phone_number'))
 
     if not data.get('phone_number') or not data.get('password'):
         return Response(
             {'error': 'Phone number and password are required.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Older rows may hold 07... or 2547...; one number, one account.
-    if CustomUser.objects.filter(phone_number__in=phone_variants(data['phone_number'])).exists():
-        return Response(
-            {'error': 'This phone number already has an account. Sign in instead.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -107,12 +191,26 @@ def signup(request):
             {'error': 'Accept the Terms of Service and Privacy Policy to create an account.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    claimed = claim_walk_in_account(request, data, data['phone_number'])
+    if isinstance(claimed, Response):
+        return claimed
+    if claimed is not None:
+        stamp_terms(claimed)
+        login(request, claimed)
+        return Response(
+            {'message': 'Account created', 'user': serialize_session_user(claimed)},
+            status=status.HTTP_201_CREATED,
+        )
+
     serializer = UserSerializer(data=data)
     if serializer.is_valid():
-        user = serializer.save()
-        user.terms_version = settings.TERMS_VERSION
-        user.terms_accepted_at = timezone.now()
-        user.save(update_fields=['terms_version', 'terms_accepted_at'])
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                stamp_terms(user)
+        except IntegrityError:
+            return Response(PHONE_TAKEN, status=status.HTTP_400_BAD_REQUEST)
         login(request, user)
         return Response(
             {'message': 'Account created', 'user': serialize_session_user(user)},
@@ -138,7 +236,11 @@ def admin_signup(request):
         )
 
     data = request.data.copy()
-    data['phone_number'] = canonical_phone(data.get('phone_number')) or ''
+    data['phone_number'] = signup_phone(data.get('phone_number'))
+
+    if data['phone_number'] and CustomUser.objects.filter(
+            phone_number__in=phone_variants(data['phone_number'])).exists():
+        return Response(PHONE_TAKEN, status=status.HTTP_400_BAD_REQUEST)
 
     serializer = UserSerializer(data=data)
     if serializer.is_valid():
@@ -165,6 +267,9 @@ def admin_signup(request):
 @permission_classes([AllowAny])
 @throttle_classes([LoginIPThrottle])
 def user_login(request):
+    refused = csrf_refused(request)
+    if refused is not None:
+        return refused
     raw_phone = request.data.get('phone_number')
     password = request.data.get('password')
 
@@ -410,7 +515,13 @@ def company_staff(request):
                 {'error': 'company is required.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        company_id = requested_company_id
+        try:
+            company_id = int(requested_company_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'company': ['company must be a company id (a whole number).']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     else:
         company_id = user.company_id
 
@@ -583,6 +694,15 @@ def company_staff_detail(request, staff_id):
             return Response(
                 {'error': 'You cannot remove your own account.'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        if staff_user.bookings.exists():
+            # Deleting the user would cascade away their bookings and payments.
+            staff_user.is_active = False
+            staff_user.save(update_fields=['is_active'])
+            return Response(
+                {'message': 'Staff member deactivated. Their booking and '
+                            'payment records are kept.'},
+                status=status.HTTP_200_OK
             )
         staff_user.delete()
 

@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import { Eye, Plus, Save } from 'lucide-react';
 
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
 import { useAuth } from '../../context/AuthContext';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import '../shared/Services.css';
@@ -69,8 +70,8 @@ function nearestOnLine(line, lat, lng) {
 const mkIcon = (cls) => L.divIcon({
   className: 'rp2-pin',
   html: `<span class="rp2-dot ${cls}"></span>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
+  iconSize: [44, 44],
+  iconAnchor: [22, 22],
 });
 const ICONS = { on: mkIcon(''), moved: mkIcon('moved') };
 
@@ -95,7 +96,8 @@ function StagePin({ stage, number, position, moved, onLive, onDrop }) {
   }), [stage.id, stage.name, onLive, onDrop]);
   return (
     <Marker position={position} draggable icon={moved ? ICONS.moved : ICONS.on}
-      eventHandlers={handlers} zIndexOffset={500}>
+      eventHandlers={handlers} zIndexOffset={500}
+      title={`${number}. ${stage.name}`}>
       <Tooltip>{number}. {stage.name}</Tooltip>
     </Marker>
   );
@@ -127,6 +129,7 @@ export default function RoutePlanner() {
   const [tick, setTick] = useState(0);
 
   const [health, setHealth] = useState({});
+  const [routesFailed, setRoutesFailed] = useState(false);
 
   const fail = useCallback((title, e) => {
     const text = typeof e === 'string' ? e : (e?.message || 'Something went wrong. Please try again.');
@@ -135,7 +138,7 @@ export default function RoutePlanner() {
 
   const loadHealth = useCallback(async () => {
     try {
-      const d = await apiRequest('/companies/routes/health/');
+      const d = await apiRequest('/companies/routes/health/', { silent: true });
       const rows = Array.isArray(d) ? d : d?.results || [];
       const map = {};
       rows.forEach((h) => { map[h.id] = h; });
@@ -148,15 +151,16 @@ export default function RoutePlanner() {
   const loadRoutes = useCallback(async () => {
     if (!companyId) return;
     try {
-      const d = await apiRequest(`/companies/${companyId}/routes/`);
+      const d = await apiRequest(`/companies/${companyId}/routes/`, { silent: true });
       setRoutes(Array.isArray(d) ? d : d?.results || []);
-    } catch (e) { fail('Could not load your routes', e); setRoutes([]); }
+      setRoutesFailed(false);
+    } catch { setRoutesFailed(true); }
   }, [companyId, fail]);
 
   const loadStages = useCallback(async (fit = false) => {
     if (!routeId) return;
     try {
-      const d = await apiRequest(`/companies/routes/${routeId}/pickup-stages/`);
+      const d = await apiRequest(`/companies/routes/${routeId}/pickup-stages/`, { silent: true });
       setStages(Array.isArray(d) ? d : d?.stages || d?.results || []);
       if (fit) setTick((t) => t + 1);
     } catch (e) { fail('Could not load the stages', e); }
@@ -454,7 +458,9 @@ export default function RoutePlanner() {
         </div>
       </div>
 
-      {routes === null ? (
+      {routes === null && routesFailed ? (
+        <AsyncPanel status="error" title="your routes" onRetry={() => { setRoutesFailed(false); loadRoutes(); }} />
+      ) : routes === null ? (
         <div className="glass-empty">Loading…</div>
       ) : !routes.length ? (
         <div className="glass-empty"><strong>You have no routes yet.</strong></div>
@@ -494,7 +500,7 @@ export default function RoutePlanner() {
                       <Polyline positions={savedLine}
                         pathOptions={draftLine
                           ? { color: '#94a3b8', weight: 4, dashArray: '8 8' }
-                          : { color: '#34d399', weight: 5 }} />
+                          : { color: '#3ddc97', weight: 5 }} />
                     )}
                     {altLines.map((line, i) => (
                       <Polyline key={`alt-${i}`} positions={line}
@@ -518,7 +524,7 @@ export default function RoutePlanner() {
                     ))}
                     {start && (
                       <CircleMarker center={[start.latitude, start.longitude]} radius={11}
-                        pathOptions={{ color: '#22c55e', fillOpacity: 0.8 }}>
+                        pathOptions={{ color: '#3ddc97', fillOpacity: 0.8 }}>
                         <Tooltip permanent>Start{start.name ? `: ${start.name}` : ''}</Tooltip>
                       </CircleMarker>
                     )}

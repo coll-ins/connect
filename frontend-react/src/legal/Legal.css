@@ -112,5 +112,5 @@
 
 /* Legal links under the sign-in form */
 .auth-legal { display: flex; justify-content: center; gap: 16px; margin-top: 16px; }
-.auth-legal a { min-height: 44px; display: inline-flex; align-items: center; color: var(--text-3); font-size: 13px; }
+.auth-legal a { min-height: 44px; min-width: 44px; justify-content: center; display: inline-flex; align-items: center; color: var(--text-3); font-size: 13px; }
 .auth-legal a:hover { color: var(--text); }

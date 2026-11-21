@@ -24,7 +24,7 @@ test('manager creates a route, a driver and a trip', async ({ page }) => {
 
   await page.goto('/company-manager/routes');
   await page.getByRole('button', { name: 'Create Route' }).first().click();
-  const modal = page.locator('.company-modal');
+  const modal = page.getByRole('dialog');
   await modal.getByLabel('Route name').fill(`Test ${tag} - Rongai`);
   await modal.getByLabel('Starting point').fill('Railways');
   await modal.getByLabel('Destination').fill('Rongai');

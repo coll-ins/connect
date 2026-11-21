@@ -1,10 +1,11 @@
 .cn-stack {
   position: fixed;
-  top: max(14px, env(safe-area-inset-top));
+  top: calc(var(--connect-topbar-height, 76px) + 8px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10001;
-  width: min(560px, calc(100vw - 24px));
+  width: min(560px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   display: grid;
   gap: 10px;
   pointer-events: none;
@@ -16,13 +17,13 @@
   gap: 12px;
   padding: 14px 16px;
   border: 1px solid;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   font-size: 14px;
   line-height: 1.45;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
 }
 .cn-notice-error { background: #3b0d12; border-color: #f87171; color: #fff1f1; }
-.cn-notice-success { background: #06281d; border-color: #34d399; color: #eafff6; }
+.cn-notice-success { background: var(--surface-2); border-color: var(--success); color: var(--text); }
 .cn-notice-info { background: #0c2538; border-color: #38bdf8; color: #e0f2fe; }
 .cn-notice-icon {
   flex: none;
@@ -35,7 +36,7 @@
   color: #111;
 }
 .cn-notice-error .cn-notice-icon { background: #f87171; }
-.cn-notice-success .cn-notice-icon { background: #34d399; }
+.cn-notice-success .cn-notice-icon { background: var(--success); }
 .cn-notice-body { flex: 1; min-width: 0; }
 .cn-notice-body strong { display: block; margin-bottom: 2px; }
 .cn-notice-close {

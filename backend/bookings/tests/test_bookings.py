@@ -198,7 +198,7 @@ class BookingsAppTests(APITestCase):
         )
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_booking_detail_other_passenger_forbidden(self):
         other_passenger = User.objects.create_user(
@@ -215,7 +215,7 @@ class BookingsAppTests(APITestCase):
         )
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_cancel_booking(self):
         self.client.force_authenticate(user=self.passenger)
@@ -607,7 +607,7 @@ class BookingsAppTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     def test_verify_boarding_random_staff_forbidden(self):
@@ -629,7 +629,7 @@ class BookingsAppTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     def test_update_passenger_location(self):
@@ -883,7 +883,7 @@ class BookingsAppTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_cancel_booking_random_staff_forbidden(self):
         staff_user = User.objects.create_user(
@@ -906,7 +906,7 @@ class BookingsAppTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_resolve_url_fallback(self):
         resolved = self._resolve_url("bookings:non-existent-url", "bookings:get-my-bookings")
@@ -1015,7 +1015,7 @@ class BookingsAppTests(APITestCase):
 
         url = reverse("bookings:confirm-cash-payment", kwargs={"booking_id": self.booking.id})
         response = self.client.post(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_confirm_cash_payment_not_found_or_non_cash(self):
         admin_user = User.objects.create_superuser(username="admin_cash", password="password")
@@ -1240,7 +1240,7 @@ class BookingsAppTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     def test_confirm_cash_payment_random_staff_forbidden(self):
@@ -1270,7 +1270,7 @@ class BookingsAppTests(APITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     @patch("bookings.services.requests.post")

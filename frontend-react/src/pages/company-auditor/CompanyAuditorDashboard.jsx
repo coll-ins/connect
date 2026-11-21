@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -19,14 +19,14 @@ import {
   Menu,
 } from 'lucide-react';
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
 import { useAuth } from '../../context/AuthContext';
+import useAsyncData from '../../hooks/useAsyncData';
+import { formatMoney } from '../../utils/money';
+import { asList } from '../company-manager/companyData';
 import './CompanyAuditorDashboard.css';
 
-const money = (value) =>
-  `KES ${Number(value || 0).toLocaleString('en-KE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const money = formatMoney;
 
 const date = (value) =>
   value
@@ -467,7 +467,7 @@ function Payments({ bookings }) {
                 <td><strong>{b.booking_number}</strong></td>
                 <td>{b.user || '—'}</td>
                 <td>{b.route_name || '—'}</td>
-                <td>{money(b.total_amount || b.amount)}</td>
+                <td>{money(b.total_amount ?? b.amount)}</td>
                 <td><Status value={b.payment_status} /></td>
                 <td>{b.payment_reference || '—'}</td>
               </tr>
@@ -516,7 +516,7 @@ function Transactions({ bookings }) {
                 <td>{b.booking_number}</td>
                 <td>{b.user || '—'}</td>
                 <td>{b.payment_reference || '—'}</td>
-                <td>{money(b.total_amount || b.amount)}</td>
+                <td>{money(b.total_amount ?? b.amount)}</td>
                 <td><Status value={b.payment_status} /></td>
                 <td>{date(b.created_at)}</td>
               </tr>
@@ -677,6 +677,8 @@ function Receipts({ onSearch }) {
   );
 }
 
+const NO_MATCH = 'No matching records found.';
+
 function SearchPage() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -703,7 +705,7 @@ function SearchPage() {
       setResults(Array.isArray(data) ? data : []);
       setSelected(data?.[0] || null);
 
-      if (!data?.length) setError('No matching records found.');
+      if (!data?.length) setError(NO_MATCH);
     } catch (err) {
       setError(err.message || 'Search failed.');
       setResults([]);
@@ -729,13 +731,24 @@ function SearchPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Receipt, booking, payment reference, username or phone"
+            aria-label="Search by receipt, booking, payment reference, username or phone"
+            aria-invalid={Boolean(error) && error !== NO_MATCH}
+            aria-describedby={error ? 'audit-search-message' : undefined}
           />
           <button disabled={loading}>
             {loading ? 'Searching…' : 'Search'}
           </button>
         </form>
 
-        {error && <div className="audit-search-error">{error}</div>}
+        {error && (
+          <div
+            id="audit-search-message"
+            className="audit-search-error"
+            role={error === NO_MATCH ? 'status' : 'alert'}
+          >
+            {error}
+          </div>
+        )}
       </section>
 
       {results.length > 0 && (
@@ -863,14 +876,11 @@ function Reports({ analytics, bookings, trips }) {
 }
 
 function Incidents() {
-  const [incidents, setIncidents] = useState(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    apiRequest('/bookings/incidents/')
-      .then((data) => setIncidents(Array.isArray(data) ? data : []))
-      .catch((err) => setError(err.message || 'Incidents could not be loaded.'));
-  }, []);
+  const { status, data, reload } = useAsyncData(
+    () => apiRequest('/bookings/incidents/', { silent: true }).then(asList),
+    [],
+  );
+  const incidents = data || null;
 
   return (
     <>
@@ -894,9 +904,7 @@ function Incidents() {
           <AlertTriangle size={19} />
         </div>
 
-        {error ? (
-          <p className="audit-table-empty">{error}</p>
-        ) : (
+        <AsyncPanel status={status} onRetry={reload} title="incidents">
           <DataTable empty={incidents?.length === 0 && 'No incidents reported. Drivers report breakdowns and road issues from their live trip screen.'}>
             <thead>
               <tr>
@@ -921,7 +929,7 @@ function Incidents() {
               ))}
             </tbody>
           </DataTable>
-        )}
+        </AsyncPanel>
       </section>
     </>
   );
@@ -971,60 +979,51 @@ export default function CompanyAuditorDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [analytics, setAnalytics] = useState(null);
-  const [trips, setTrips] = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const companyId = user?.company_id;
+
+  // Three independent requests start together; the whole console shows Retry
+  // if any fails rather than empty registers.
+  const { status, data, reload } = useAsyncData(async () => {
+    if (!companyId) return null;
+    const get = (path) => apiRequest(path, { silent: true });
+    const [analyticsData, tripsData, bookingsData] = await Promise.all([
+      get(`/companies/${companyId}/analytics/`),
+      get(`/companies/${companyId}/trips/`),
+      get(`/bookings/all/?company_id=${companyId}`),
+    ]);
+    return {
+      analytics: analyticsData || null,
+      trips: asList(tripsData),
+      bookings: asList(bookingsData),
+    };
+  }, [companyId]);
+  const { analytics, trips, bookings } = data || { analytics: null, trips: [], bookings: [] };
 
   const section = location.pathname
     .replace('/company-auditor', '')
     .replace(/^\/+/, '')
     .split('/')[0] || 'overview';
 
-  useEffect(() => {
-    async function loadAuditData() {
-      if (!user?.company_id) return;
-
-      setLoading(true);
-
-      try {
-        const [analyticsData, tripsData, bookingsData] = await Promise.all([
-          apiRequest(`/companies/${user.company_id}/analytics/`),
-          apiRequest(`/companies/${user.company_id}/trips/`),
-          apiRequest(`/bookings/all/?company_id=${user.company_id}`),
-        ]);
-
-        setAnalytics(analyticsData || null);
-        setTrips(Array.isArray(tripsData) ? tripsData : []);
-        setBookings(Array.isArray(bookingsData) ? bookingsData : []);
-      } catch (err) {
-        setError(err.message || 'Unable to load audit records.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadAuditData();
-  }, [user?.company_id]);
-
   const content = (() => {
-    if (loading) {
+    if (!companyId) {
       return (
-        <div className="audit-loading">
-          <ShieldCheck size={28} />
-          <span>Loading company audit records…</span>
+        <div className="audit-error-page" role="alert">
+          <AlertTriangle size={28} />
+          <h2>Audit data could not be loaded</h2>
+          <p>This account is not linked to a company.</p>
         </div>
       );
     }
 
-    if (error && section !== 'search') {
+    // Search and incidents load their own data.
+    if (status !== 'ready' && !['search', 'incidents'].includes(section)) {
       return (
-        <div className="audit-error-page">
-          <AlertTriangle size={28} />
-          <h2>Audit data could not be loaded</h2>
-          <p>{error}</p>
-        </div>
+        <AsyncPanel
+          status={status}
+          onRetry={reload}
+          title="company audit records"
+          loadingText="Loading company audit records…"
+        />
       );
     }
 

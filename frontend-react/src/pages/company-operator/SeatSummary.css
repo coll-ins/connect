@@ -1,0 +1,7 @@
+.seat-summary { margin-top: 12px; display: grid; gap: 8px; font-size: 13px; }
+.seat-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0; }
+.seat-summary-grid dt { color: var(--text-2); font-size: var(--text-xs); margin-bottom: 2px; }
+.seat-summary-grid dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.seat-summary-grid small { display: block; font-weight: 400; color: var(--text-2); }
+.seat-summary-stages { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; color: var(--text-2); }
+.walkin-blocked { color: var(--warn); }

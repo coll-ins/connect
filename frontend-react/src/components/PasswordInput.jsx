@@ -13,7 +13,6 @@ export default function PasswordInput({
       <input
         {...props}
         type={show ? "text" : "password"}
-        aria-label="Password"
         autoComplete={autoComplete}
         className={className}
         style={{ ...style, paddingRight: 44, width: "100%" }}
@@ -22,10 +21,9 @@ export default function PasswordInput({
         type="button"
         onClick={() => setShow((s) => !s)}
         aria-label={show ? "Hide password" : "Show password"}
-        tabIndex={-1}
         style={{
           position: "absolute",
-          right: 12,
+          right: 0,
           top: "50%",
           transform: "translateY(-50%)",
           background: "none",
@@ -33,7 +31,11 @@ export default function PasswordInput({
           cursor: "pointer",
           color: "#94a3b8",
           padding: 0,
+          width: 44,
+          height: 44,
           display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         {show ? (

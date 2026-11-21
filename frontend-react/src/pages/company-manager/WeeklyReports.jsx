@@ -47,7 +47,7 @@ export default function WeeklyReports() {
     else setLoading(true);
     setError('');
     try {
-      const data = await apiRequest(`/companies/${companyId}/weekly-reports/`);
+      const data = await apiRequest(`/companies/${companyId}/weekly-reports/`, { silent: true });
       setReports(Array.isArray(data) ? data : []);
     } catch (requestError) {
       setError(requestError?.message || 'Weekly reports could not be loaded.');
@@ -66,7 +66,7 @@ export default function WeeklyReports() {
       <header className="weekly-reports-heading">
         <div>
           <span>Operations summary</span>
-          <h2>Weekly reports</h2>
+          <h1>Weekly reports</h1>
           <p>
             Review the previous week before auto-renewal, or the day before a
             manual schedule needs renewal.
@@ -78,7 +78,12 @@ export default function WeeklyReports() {
         </button>
       </header>
 
-      {error && <div className="weekly-reports-error" role="alert">{error}</div>}
+      {error && (
+        <div className="weekly-reports-error" role="alert">
+          {error}{' '}
+          <button type="button" onClick={() => load()}>Retry</button>
+        </div>
+      )}
       {loading && <p role="status">Loading reports…</p>}
       {!loading && !error && reports.length === 0 && (
         <div className="weekly-report-empty">

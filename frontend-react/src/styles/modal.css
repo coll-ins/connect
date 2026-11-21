@@ -1,0 +1,11 @@
+.modal-backdrop,
+.modal {
+  overscroll-behavior: contain;
+}
+
+/* The booking dialog is a flex column: the float used elsewhere does nothing. */
+.modal.modern-booking-modal > .modal-close {
+  flex: none;
+  align-self: flex-end;
+  margin-bottom: 8px;
+}

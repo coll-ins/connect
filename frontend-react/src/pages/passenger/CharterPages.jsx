@@ -4,6 +4,7 @@ import { Bus, Plus } from 'lucide-react';
 
 import { apiRequest } from '../../api';
 import AppShell from '../../components/layout/AppShell';
+import AsyncPanel from '../../components/ui/AsyncPanel';
 import { label, localInput, localToIso, money, when } from '../shared/serviceUtils';
 import '../shared/Services.css';
 
@@ -18,11 +19,14 @@ export function CharterList() {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    apiRequest('/charters/')
+  const load = useCallback(() => {
+    setError('');
+    apiRequest('/charters/', { silent: true })
       .then((d) => setRows(Array.isArray(d) ? d : []))
-      .catch((e) => { setError(e.message); setRows([]); });
+      .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
     <AppShell>
@@ -36,10 +40,10 @@ export function CharterList() {
           <Link className="btn btn-primary" to="/passenger/charter/new"><Plus size={16} /> Request a bus</Link>
         </div>
 
-        {error && <div className="svc-error">{error}</div>}
-
-        {rows === null ? (
-          <div className="glass-empty">Loading…</div>
+        {error ? (
+          <AsyncPanel status="error" title="your requests" onRetry={load} />
+        ) : rows === null ? (
+          <div className="glass-empty" role="status" aria-busy="true">Loading…</div>
         ) : !rows.length ? (
           <div className="glass-empty"><Bus size={28} /><strong>No requests yet.</strong><span>Hire a whole bus for a school trip, wedding or event. You only pay once you accept a quote.</span></div>
         ) : (
@@ -184,7 +188,7 @@ export function CharterDetail() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    try { setC(await apiRequest(`/charters/${id}/`)); } catch (e) { setError(e.message); }
+    try { setC(await apiRequest(`/charters/${id}/`, { silent: true })); } catch (e) { setError(e.message); }
   }, [id]);
 
   const verify = useCallback(async () => {
@@ -232,9 +236,10 @@ export function CharterDetail() {
           {c && <Badge status={c.status} />}
         </div>
 
-        {error && <div className="svc-error">{error}</div>}
+        {error && c && <div className="svc-error" role="alert">{error}</div>}
         {note && <div className="svc-note">{note}</div>}
-        {!c && !error && <div className="glass-empty">Loading…</div>}
+        {!c && error && <AsyncPanel status="error" title="this request" onRetry={() => { setError(''); load(); }} />}
+        {!c && !error && <div className="glass-empty" role="status" aria-busy="true">Loading…</div>}
 
         {c && (
           <>

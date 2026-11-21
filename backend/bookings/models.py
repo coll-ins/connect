@@ -54,7 +54,17 @@ class Booking(models.Model):
     stage_departure_at = models.DateTimeField(null=True, blank=True)
     # Set once the rider was told the bus passed the stage before theirs.
     approach_alert_at = models.DateTimeField(null=True, blank=True)
-    
+
+    # A pending booking is the seat hold: it counts toward capacity only
+    # until this time. See services.seats_taken.
+    held_until = models.DateTimeField(null=True, blank=True)
+
+    # Client-chosen key that makes a repeated create request return the first
+    # booking. The fingerprint (a hash of the request) catches a key reused
+    # for a different request.
+    idempotency_key = models.CharField(max_length=64, null=True, blank=True)
+    idempotency_fingerprint = models.CharField(max_length=64, blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -66,6 +76,18 @@ class Booking(models.Model):
         indexes = [
             models.Index(fields=['booking_number']),
             models.Index(fields=['status']),
+            models.Index(fields=['trip', 'status', 'held_until']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'idempotency_key'],
+                condition=models.Q(idempotency_key__isnull=False),
+                name='uniq_booking_idem_per_user',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(seats__gte=1),
+                name='booking_seats_at_least_one',
+            ),
         ]
 
 
@@ -81,6 +103,7 @@ class Payment(models.Model):
     METHOD_CHOICES = [
         ('digital', 'Digital (M-Pesa/Card)'),
         ('cash', 'Cash'),
+        ('wallet', 'Wallet'),
     ]
 
     STATUS_CHOICES = [
@@ -167,6 +190,15 @@ class Payment(models.Model):
         blank=True,
     )
 
+    # Set when money arrived for a booking that could not be used (hold
+    # expired, seat resold, booking cancelled): the whole payment is owed back
+    # and the process_noshows sweep retries it until it is refunded.
+    refund_reason = models.CharField(max_length=20, blank=True, default='')
+
+    # What the gateway actually charged, when it differs from `amount`.
+    paid_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True)
+
     refund_status = models.CharField(
         max_length=20,
         choices=[
@@ -175,9 +207,15 @@ class Payment(models.Model):
             ('processing', 'Processing'),
             ('processed', 'Processed'),
             ('failed', 'Failed'),
+            ('review', 'Needs review'),
         ],
         default='not_requested',
     )
+
+    # The process_noshows refund sweep: how many times it has tried and when it
+    # may try again. 'review' means it gave up and a human must decide.
+    refund_attempts = models.PositiveSmallIntegerField(default=0)
+    refund_next_try_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(
         auto_now_add=True
@@ -188,6 +226,20 @@ class Payment(models.Model):
             f"Payment {self.booking.booking_number} - "
             f"{self.amount} ({self.status}/{self.settlement_status})"
         )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(refund_amount__isnull=True)
+                    | (
+                        models.Q(refund_amount__gte=0)
+                        & models.Q(refund_amount__lte=models.F('amount'))
+                    )
+                ),
+                name='payment_refund_within_amount',
+            ),
+        ]
     
 
 class BoardingEvent(models.Model):
@@ -351,6 +403,17 @@ class BookingHold(models.Model):
             f"{self.amount} - {self.status}"
         )
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(refunded_amount__gte=0)
+                    & models.Q(refunded_amount__lte=models.F('amount'))
+                ),
+                name='bookinghold_refunded_within_amount',
+            ),
+        ]
+
 class IncidentResolution(models.Model):
     RESOLUTION_CHOICES = [
         ('refund', 'Refund'),
@@ -434,7 +497,11 @@ class Payout(models.Model):
 
 
 class UnappliedPayment(models.Model):
-    """A successful Paystack charge for a parcel or bus hire that could not be applied."""
+    """
+    A successful Paystack charge that could not be applied: a parcel, a bus
+    hire, or a booking payment (kind='booking') that was overpaid, matched no
+    booking, or had a wrong amount or currency.
+    """
 
     STATUS_CHOICES = [
         ('retry', 'Retry'),

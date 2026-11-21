@@ -18,8 +18,16 @@ import {
 } from 'lucide-react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import SeatSummary from './SeatSummary';
+import { walkInDesk } from '../../utils/seatSummary';
+import Modal from '../../components/ui/Modal';
+import useAsyncData from '../../hooks/useAsyncData';
+import { deriveStatus } from '../../utils/loadStatus';
 import { confirmTripCancel } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
+import { bookedSeatsOf } from '../company-manager/companyData';
+import { MAX_SEATS_PER_BOOKING } from '../../utils/payment';
 import './CompanyOperatorDashboard.css';
 import SeatMap from '../../components/SeatMap';
 import { TripBusPicker, useCompanyBuses } from '../../components/Fleet';
@@ -574,7 +582,8 @@ function TripSeats({ trip }) {
   );
 }
 
-function WalkInForm({ trip, onDone }) {
+
+function WalkInForm({ trip, onDone, onSettled, blockedReason = '' }) {
   const [phone, setPhone] = useState('');
   const [seats, setSeats] = useState('1');
   const [busy, setBusy] = useState(false);
@@ -590,6 +599,7 @@ function WalkInForm({ trip, onDone }) {
       const res = await apiRequest(`/bookings/walk-in/${trip.id}/`, {
         method: 'POST',
         body: { phone_number: phone.trim(), seats: Number(seats) },
+        silent: true,
       });
       setOk(true);
       setMsg(`Boarded ${res?.booking_number || ''} · ${res?.seats_remaining ?? '?'} seats left`);
@@ -600,6 +610,7 @@ function WalkInForm({ trip, onDone }) {
       setMsg(err?.message || 'Could not book this passenger');
     } finally {
       setBusy(false);
+      if (onSettled) onSettled();
     }
   };
 
@@ -607,38 +618,75 @@ function WalkInForm({ trip, onDone }) {
     <form className="operator-walkin" onSubmit={submit}>
       <strong>Book at stage (cash)</strong>
       <div className="operator-walkin-row">
-        <input
-          type="tel"
-          inputMode="tel"
-          maxLength={16}
-          placeholder="Passenger phone e.g. 0712345678"
-          aria-label="Passenger phone number"
-          aria-describedby="walkin-phone-note"
-          aria-invalid={Boolean(phone.trim() && checkPhone(phone))}
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          required
-        />
-        <input
-          type="number"
-          min="1"
-          max="20"
-          value={seats}
-          onChange={(e) => setSeats(e.target.value)}
-          aria-label="Seats"
-        />
-        <button type="submit" disabled={busy || Boolean(checkPhone(phone))}>
+        <label className="operator-walkin-field operator-walkin-phone">
+          <span>Passenger phone</span>
+          <input
+            type="tel"
+            inputMode="tel"
+            maxLength={16}
+            autoComplete="tel"
+            placeholder="e.g. 0712345678"
+            aria-describedby={`walkin-phone-note-${trip.id}`}
+            aria-invalid={Boolean(phone.trim() && checkPhone(phone))}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+          />
+        </label>
+        <label className="operator-walkin-field">
+          <span>Seats</span>
+          <input
+            type="number"
+            min="1"
+            max={MAX_SEATS_PER_BOOKING}
+            value={seats}
+            onChange={(e) => setSeats(e.target.value)}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={busy || Boolean(checkPhone(phone)) || Boolean(blockedReason)}
+          aria-describedby={blockedReason ? `walkin-blocked-${trip.id}` : undefined}
+        >
           {busy ? 'Booking…' : 'Book & board'}
         </button>
       </div>
-      <FieldNote id="walkin-phone-note" value={phone} error={checkPhone(phone)}
+      <FieldNote id={`walkin-phone-note-${trip.id}`} value={phone} error={checkPhone(phone)}
         hint={`The passenger's own phone: their ticket and boarding PIN go to it. ${PHONE_HINT}`} />
+      {blockedReason && (
+        <small id={`walkin-blocked-${trip.id}`} className="walkin-blocked">{blockedReason}</small>
+      )}
       {msg && (
-        <small role="status" className={ok ? 'walkin-ok' : 'walkin-err'}>
+        <small role={ok ? 'status' : 'alert'} className={ok ? 'walkin-ok' : 'walkin-err'}>
           {msg}
         </small>
       )}
     </form>
+  );
+}
+
+// Seat summary and walk-in share one server answer, so a refused or accepted
+// walk-in refreshes the open-seat count the operator sees.
+function TripSeatDesk({ trip, onDone }) {
+  const query = useAsyncData(
+    () => apiRequest(`/companies/trips/${trip.id}/seat-summary/`, { silent: true }),
+    [trip.id],
+  );
+  const desk = walkInDesk(trip.status, query.data);
+  return (
+    <>
+      <SeatSummary query={query} />
+      {desk.showForm ? (
+        <WalkInForm
+          trip={trip}
+          onDone={onDone}
+          onSettled={query.reload}
+          blockedReason={desk.reason}
+        />
+      ) : (
+        desk.reason && <small className="walkin-blocked">{desk.reason}</small>
+      )}
+    </>
   );
 }
 
@@ -705,11 +753,11 @@ export default function CompanyOperatorDashboard() {
 
       try {
         const [tripData, driverData, bookingData, incidentData, scheduleExceptionData] = await Promise.all([
-          apiRequest(`/companies/${companyId}/trips/`),
-          apiRequest(`/drivers/?company_id=${companyId}`),
-          apiRequest(`/bookings/all/?company_id=${companyId}`),
-          apiRequest('/bookings/incidents/'),
-          apiRequest(`/companies/${companyId}/schedule-exceptions/`),
+          apiRequest(`/companies/${companyId}/trips/`, { silent: true }),
+          apiRequest(`/drivers/?company_id=${companyId}`, { silent: true }),
+          apiRequest(`/bookings/all/?company_id=${companyId}`, { silent: true }),
+          apiRequest('/bookings/incidents/', { silent: true }),
+          apiRequest(`/companies/${companyId}/schedule-exceptions/`, { silent: true }),
         ]);
 
         const operationalTrips = (
@@ -1556,11 +1604,14 @@ export default function CompanyOperatorDashboard() {
                 String(booking.trip_id) === String(trip.id)
             );
 
-            const bookedSeats = tripBookings.reduce(
-              (total, booking) =>
-                total +
-                Number(getBookingSeats(booking) || 0),
-              0
+            const bookedSeats = bookedSeatsOf(
+              trip,
+              tripBookings.reduce(
+                (total, booking) =>
+                  total +
+                  Number(getBookingSeats(booking) || 0),
+                0
+              )
             );
 
             const capacity = Number(trip.capacity || 0);
@@ -1615,12 +1666,10 @@ export default function CompanyOperatorDashboard() {
 
                 <TripSeats trip={trip} />
 
-                {String(trip.status).toLowerCase() === 'boarding' && (
-                  <WalkInForm
-                    trip={trip}
-                    onDone={() => loadOperations(true)}
-                  />
-                )}
+                <TripSeatDesk
+                  trip={trip}
+                  onDone={() => loadOperations(true)}
+                />
 
                 <div className="operator-capacity-footer">
                   <span>
@@ -1809,16 +1858,28 @@ export default function CompanyOperatorDashboard() {
     </>
   );
 
+  // A failed first load must not render as an empty dashboard; once data has
+  // arrived, a failed refresh keeps it on screen and shows the banner.
+  const loadStatus = deriveStatus({ loading, error, hasData: dataLoadedAt > 0 });
+
   const renderSection = () => {
-    if (loading) {
+    if (!companyId) {
       return (
-        <div className="operator-loading">
-          <RefreshCw
-            className="operator-spin"
-            size={23}
-          />
-          <span>Loading company operations...</span>
+        <div className="operator-error-banner" role="alert">
+          <AlertCircle size={18} />
+          <span>Your operator account is not assigned to a company.</span>
         </div>
+      );
+    }
+
+    if (loadStatus !== 'ready') {
+      return (
+        <AsyncPanel
+          status={loadStatus}
+          onRetry={() => loadOperations()}
+          title="company operations"
+          loadingText="Loading company operations…"
+        />
       );
     }
 
@@ -1861,8 +1922,8 @@ export default function CompanyOperatorDashboard() {
         setActiveSection={setActiveSection}
         onLogout={logout}
       >
-        {error && (
-          <div className="operator-error-banner">
+        {error && dataLoadedAt > 0 && (
+          <div className="operator-error-banner" role="alert">
             <AlertCircle size={18} />
             <span>{error}</span>
 
@@ -1881,13 +1942,11 @@ export default function CompanyOperatorDashboard() {
       </OperatorShell>
 
       {assigningBooking && (
-        <div className="operator-modal-backdrop">
-          <div
-            className="operator-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="operator-assignment-title"
-          >
+        <Modal
+          labelledBy="operator-assignment-title"
+          className="operator-modal"
+          onClose={closeAssignment}
+        >
             <div className="operator-modal-header">
               <div>
                 <span className="operator-eyebrow">
@@ -1897,16 +1956,6 @@ export default function CompanyOperatorDashboard() {
                   Assign existing driver
                 </h2>
               </div>
-
-              <button
-                type="button"
-                className="operator-modal-close"
-                onClick={closeAssignment}
-                disabled={savingAssignment}
-                aria-label="Close assignment dialog"
-              >
-                <X size={19} />
-              </button>
             </div>
 
             <div className="operator-modal-booking">
@@ -2019,7 +2068,7 @@ export default function CompanyOperatorDashboard() {
                 </select>
 
                 {moveError && (
-                  <p className="operator-modal-note">{moveError}</p>
+                  <p className="operator-modal-note" role="alert">{moveError}</p>
                 )}
 
                 <button
@@ -2056,8 +2105,7 @@ export default function CompanyOperatorDashboard() {
                   : 'Assign driver'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

@@ -7,7 +7,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 chk "http redirects to https"        "$(code "http://$H/")" 301
 chk "frontend loads"                 "$(code "$B/")" 200
 chk "HSTS header present"            "$(curl -sI "$B/" | grep -ci '^strict-transport-security')" 1
-chk "admin login page reachable"     "$(code "$B/admin/login/")" 200
+chk "admin login page off or reachable" "$(code "$B/admin/login/")" "200|404"   # 404 unless ADMIN_SITE_ENABLED=true
 chk "static files served"            "$(code "$B/static/admin/css/base.css")" 200
 chk "my bookings needs login"        "$(code "$B/api/bookings/my/")" "401|403"
 chk "unsigned paystack webhook refused" "$(code -X POST -d '{}' "$B/api/bookings/webhooks/paystack/")" "400|401|403"

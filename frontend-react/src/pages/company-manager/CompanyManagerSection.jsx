@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bus,
@@ -21,6 +21,13 @@ import { checkName, checkPhone, checkPlace, NAME_HINT, PHONE_HINT } from '../../
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import { DEFAULT_VEHICLE, FleetManager, TripBusPicker, VehicleOptions, driverVehicle, useCompanyBuses } from '../../components/Fleet';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import Modal from '../../components/ui/Modal';
+import useAsyncData from '../../hooks/useAsyncData';
+import { formatMoney } from '../../utils/money';
+import BookingCutoffSetting from './BookingCutoffSetting';
+import { asList, findCompany, normalizeOperatorRoutes, staffOfCompany } from './companyData';
+import { humanLabel } from '../../utils/labels';
 
 const EMPTY_COPY = {
   routes: ['No routes yet', 'Create a route to start selling seats on it.'],
@@ -32,11 +39,7 @@ const EMPTY_COPY = {
   capacity: ['No upcoming trips', 'Scheduled and boarding trips show here with their bus and seats.'],
 };
 
-const money = (value) =>
-  `KES ${Number(value || 0).toLocaleString('en-KE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const money = formatMoney;
 
 const formatDate = (value) =>
   value
@@ -101,24 +104,15 @@ const sectionConfig = {
 
 
 function OperatorRouteAssignments() {
-  const [state, setState] = useState({ routes: [], operators: [] });
+  const { status, data, reload } = useAsyncData(
+    () => apiRequest('/companies/operator-routes/', { silent: true })
+      .then(normalizeOperatorRoutes),
+    [],
+  );
+  const state = data || { routes: [], operators: [] };
   const [drafts, setDrafts] = useState({});
   const [saving, setSaving] = useState(null);
   const [message, setMessage] = useState('');
-
-  const load = useCallback(async () => {
-    try {
-      const res = await apiRequest('/companies/operator-routes/');
-      setState(res || { routes: [], operators: [] });
-      setDrafts({});
-    } catch (e) {
-      setMessage(e?.message || 'Could not load operator routes.');
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const draftFor = (op) =>
     drafts[op.id] || { all: op.all_routes, ids: op.route_ids };
@@ -144,7 +138,8 @@ function OperatorRouteAssignments() {
         body: { all_routes: d.all, route_ids: d.all ? [] : d.ids },
       });
       setMessage(`Saved routes for ${op.username}.`);
-      await load();
+      await reload();
+      setDrafts({});
     } catch (e) {
       setMessage(e?.message || 'Could not save.');
     } finally {
@@ -152,7 +147,8 @@ function OperatorRouteAssignments() {
     }
   };
 
-  if (!state.operators.length) return null;
+  // The operators list below already shows "No operators yet".
+  if (status === 'ready' && !state.operators.length) return null;
 
   return (
     <section className="op-routes">
@@ -161,6 +157,7 @@ function OperatorRouteAssignments() {
         Choose which routes each operator handles. Operators only see and act
         on the routes assigned to them.
       </p>
+      <AsyncPanel status={status} onRetry={reload} title="operator routes">
       {state.operators.map((op) => {
         const d = draftFor(op);
         const dirty =
@@ -211,6 +208,7 @@ function OperatorRouteAssignments() {
           </div>
         );
       })}
+      </AsyncPanel>
       {message && <small role="status">{message}</small>}
     </section>
   );
@@ -265,19 +263,16 @@ function Select({ label, children, ...props }) {
   );
 }
 
-function Modal({ title, children, onClose }) {
+// Heading plus the save error: the page behind the backdrop is out of sight, so
+// a failed save has to be announced inside the dialog.
+function FormModal({ title, error, onClose, children }) {
+  const titleId = useId();
   return (
-    <div className="company-modal-backdrop">
-      <div className="company-modal">
-        <div className="company-modal-header">
-          <h3>{title}</h3>
-          <button onClick={onClose} className="company-icon-button">
-            <X size={19} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <Modal labelledBy={titleId} onClose={onClose}>
+      <h3 id={titleId}>{title}</h3>
+      {error && <div className="company-error" role="alert">{error}</div>}
+      {children}
+    </Modal>
   );
 }
 
@@ -287,12 +282,6 @@ export default function CompanyManagerSection({ section }) {
   const config = sectionConfig[section] || sectionConfig.settings;
   const Icon = config.icon;
 
-  const [data, setData] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
-  const [company, setCompany] = useState(null);
-  const [drivers, setDrivers] = useState([]);
-  const [routes, setRoutes] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [modal, setModal] = useState(null);
@@ -333,101 +322,57 @@ export default function CompanyManagerSection({ section }) {
     password: '',
   });
 
-  const load = useCallback(async () => {
-    if (!companyId) {
-      setError('This account is not linked to a company.');
-      setLoading(false);
-      return;
+  // Page loads: one fetch per section, independent requests together. A failed
+  // load shows Retry; `error` below is for failed actions only.
+  const { status, data: loaded, reload: load } = useAsyncData(async () => {
+    const get = (path) => apiRequest(path, { silent: true });
+    const out = { data: [], analytics: null, company: null, drivers: [], routes: [] };
+    if (!companyId) return out;
+
+    if (section === 'company') {
+      const [companies, analyticsData] = await Promise.all([
+        get('/companies/'),
+        get(`/companies/${companyId}/analytics/`),
+      ]);
+      out.company = findCompany(companies, companyId);
+      out.analytics = analyticsData;
     }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      if (section === 'company') {
-        const [companies, analyticsData] = await Promise.all([
-          apiRequest('/companies/'),
-          apiRequest(`/companies/${companyId}/analytics/`),
-        ]);
-
-        setCompany(
-          (companies || []).find(
-            (item) => Number(item.id) === Number(companyId)
-          ) || null
-        );
-        setAnalytics(analyticsData);
-      }
-
-      if (section === 'routes' || section === 'pricing') {
-        const result = await apiRequest(
-          `/companies/${companyId}/routes/`
-        );
-        setData(result || []);
-      }
-
-      if (
-        section === 'trips' ||
-        section === 'capacity'
-      ) {
-        const result = await apiRequest(
-          `/companies/${companyId}/trips/`
-        );
-        setData(result || []);
-
-        const routeData = await apiRequest(
-          `/companies/${companyId}/routes/`
-        );
-        setRoutes(routeData || []);
-
-        const driverData = await apiRequest(
-          `/drivers/?company_id=${companyId}`
-        );
-        setDrivers(driverData || []);
-      }
-
-      if (section === 'drivers') {
-        const result = await apiRequest(
-          `/drivers/?company_id=${companyId}`
-        );
-        setData(result || []);
-      }
-
-      if (section === 'operators') {
-        const result = await apiRequest('/users/company-staff/');
-        setData(
-          (result || []).filter(
-            (item) => Number(item.company) === Number(companyId)
-          )
-        );
-      }
-
-      if (section === 'bookings') {
-        const result = await apiRequest(
-          `/bookings/all/?company_id=${companyId}`
-        );
-        setData(result || []);
-      }
-
-      if (section === 'revenue') {
-        const result = await apiRequest(
-          `/companies/${companyId}/analytics/`
-        );
-        setAnalytics(result);
-      }
-    } catch (err) {
-      setError(err.message || 'Unable to load this section.');
-    } finally {
-      setLoading(false);
+    if (section === 'routes' || section === 'pricing') {
+      out.data = asList(await get(`/companies/${companyId}/routes/`));
     }
+    if (section === 'trips' || section === 'capacity') {
+      const [trips, routeData, driverData] = await Promise.all([
+        get(`/companies/${companyId}/trips/`),
+        get(`/companies/${companyId}/routes/`),
+        get(`/drivers/?company_id=${companyId}`),
+      ]);
+      out.data = asList(trips);
+      out.routes = asList(routeData);
+      out.drivers = asList(driverData);
+    }
+    if (section === 'drivers') {
+      out.data = asList(await get(`/drivers/?company_id=${companyId}`));
+    }
+    if (section === 'operators') {
+      out.data = staffOfCompany(await get('/users/company-staff/'), companyId);
+    }
+    if (section === 'bookings') {
+      out.data = asList(await get(`/bookings/all/?company_id=${companyId}`));
+    }
+    if (section === 'revenue') {
+      out.analytics = await get(`/companies/${companyId}/analytics/`);
+    }
+    return out;
   }, [companyId, section]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, analytics, company, drivers, routes } = loaded || {
+    data: [], analytics: null, company: null, drivers: [], routes: [],
+  };
 
   const closeModal = () => {
     setModal(null);
     setEditing(null);
+    setError('');
   };
 
   const createRoute = async (event) => {
@@ -740,6 +685,7 @@ export default function CompanyManagerSection({ section }) {
           className="company-primary-button"
           onClick={() => {
             setEditing(null);
+            setError('');
 
             if (section === 'routes') {
               setRouteForm({
@@ -798,34 +744,40 @@ export default function CompanyManagerSection({ section }) {
   return (
     <div className="company-inner-page">
 
-      <main className="company-management-main">
+      <div className="company-management-main">
         <section className="company-content">
           {renderHeader()}
 
-          {error && (
-            <div className="company-error">
+          {error && !modal && (
+            <div className="company-error" role="alert">
               {error}
-              <button onClick={() => setError('')}>
+              <button type="button" aria-label="Dismiss error" onClick={() => setError('')}>
                 <X size={16} />
               </button>
             </div>
           )}
 
           {message && (
-            <div className="company-success">
+            <div className="company-success" role="status">
               <CheckCircle2 size={18} />
               {message}
-              <button onClick={() => setMessage('')}>
+              <button type="button" aria-label="Dismiss message" onClick={() => setMessage('')}>
                 <X size={16} />
               </button>
             </div>
           )}
 
-          {loading ? (
-            <div className="company-loading">
-              Loading {config.title.toLowerCase()}...
+          {!companyId ? (
+            <div className="company-error" role="alert">
+              This account is not linked to a company.
             </div>
           ) : (
+            <AsyncPanel
+              status={status}
+              onRetry={load}
+              title={config.title.toLowerCase()}
+              loadingText={`Loading ${config.title.toLowerCase()}…`}
+            >
             <>
               {section === 'company' && company && (
                 <div className="company-profile-grid">
@@ -858,7 +810,7 @@ export default function CompanyManagerSection({ section }) {
                       <Route size={19} />
                       <div>
                         <span>Routes</span>
-                        <strong>{analytics?.total_routes ?? 0}</strong>
+                        <strong>{analytics?.total_routes ?? '--'}</strong>
                       </div>
                     </div>
 
@@ -866,7 +818,7 @@ export default function CompanyManagerSection({ section }) {
                       <CalendarDays size={19} />
                       <div>
                         <span>Trips</span>
-                        <strong>{analytics?.total_trips ?? 0}</strong>
+                        <strong>{analytics?.total_trips ?? '--'}</strong>
                       </div>
                     </div>
 
@@ -912,8 +864,10 @@ export default function CompanyManagerSection({ section }) {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => deleteRoute(route)}
                           className="company-danger-button"
+                          aria-label={`Delete ${route.name}`}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -968,13 +922,15 @@ export default function CompanyManagerSection({ section }) {
                         key={key}
                         type="button"
                         onClick={() => setTripView(key)}
+                        aria-pressed={tripView === key}
                         style={{
+                          minHeight: 44,
                           padding: '7px 14px',
                           borderRadius: 8,
                           border: '1px solid rgba(255,255,255,0.18)',
                           background:
-                            tripView === key ? '#5fd9b0' : 'transparent',
-                          color: tripView === key ? '#03120d' : 'inherit',
+                            tripView === key ? 'var(--primary)' : 'transparent',
+                          color: tripView === key ? 'var(--primary-ink)' : 'inherit',
                           fontSize: 12,
                           fontWeight: 800,
                           cursor: 'pointer',
@@ -1048,6 +1004,7 @@ export default function CompanyManagerSection({ section }) {
                       </div>
 
                       <Select
+                        aria-label={`Status of trip ${trip.id}`}
                         value={trip.status}
                         onChange={(event) =>
                           changeTripStatus(
@@ -1136,7 +1093,7 @@ export default function CompanyManagerSection({ section }) {
                       </div>
 
                       <span className="company-status available">
-                        {operator.role}
+                        {humanLabel(operator.role)}
                       </span>
 
                       <div className="company-card-actions">
@@ -1149,8 +1106,10 @@ export default function CompanyManagerSection({ section }) {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => deleteOperator(operator)}
                           className="company-danger-button"
+                          aria-label={`Remove ${operator.username}`}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -1182,8 +1141,8 @@ export default function CompanyManagerSection({ section }) {
                       <div>
                         <strong>
                           {money(
-                            booking.total_amount ||
-                              booking.amount ||
+                            booking.total_amount ??
+                              booking.amount ??
                               booking.fare
                           )}
                         </strong>
@@ -1270,7 +1229,7 @@ export default function CompanyManagerSection({ section }) {
                   <div className="company-revenue-side">
                     <WalletCards size={30} />
                     <span>Active bookings</span>
-                    <strong>{analytics?.active_bookings ?? 0}</strong>
+                    <strong>{analytics?.active_bookings ?? '--'}</strong>
                   </div>
                 </div>
               )}
@@ -1292,6 +1251,8 @@ export default function CompanyManagerSection({ section }) {
                 </div>
               )}
 
+              {section === 'settings' && <BookingCutoffSetting />}
+
               {data.length === 0 &&
                 ['routes', 'pricing', 'trips', 'drivers', 'operators', 'bookings', 'capacity'].includes(section) && (
                   <div className="company-empty">
@@ -1301,12 +1262,14 @@ export default function CompanyManagerSection({ section }) {
                   </div>
                 )}
             </>
+            </AsyncPanel>
           )}
         </section>
-      </main>
+      </div>
 
       {modal === 'route' && (
-        <Modal
+        <FormModal
+          error={error}
           title={editing ? 'Edit Route' : 'Create Route'}
           onClose={closeModal}
         >
@@ -1380,11 +1343,11 @@ export default function CompanyManagerSection({ section }) {
               {editing ? 'Save Changes' : 'Create Route'}
             </button>
           </form>
-        </Modal>
+        </FormModal>
       )}
 
       {modal === 'trip' && (
-        <Modal title="Create Trip" onClose={closeModal}>
+        <FormModal title="Create Trip" error={error} onClose={closeModal}>
           <form onSubmit={createTrip}>
             <Select
               label="Route"
@@ -1459,11 +1422,12 @@ export default function CompanyManagerSection({ section }) {
               Create Trip
             </button>
           </form>
-        </Modal>
+        </FormModal>
       )}
 
       {modal === 'driver' && (
-        <Modal
+        <FormModal
+          error={error}
           title={editing ? 'Edit Driver' : 'Add Driver'}
           onClose={closeModal}
         >
@@ -1479,7 +1443,7 @@ export default function CompanyManagerSection({ section }) {
             >
               <div
                 style={{
-                  fontSize: '11px',
+                  fontSize: 'var(--text-xs)',
                   fontWeight: 600,
                   opacity: 0.65,
                   marginBottom: '4px',
@@ -1564,11 +1528,12 @@ export default function CompanyManagerSection({ section }) {
               {editing ? 'Save Driver' : 'Add Driver'}
             </button>
           </form>
-        </Modal>
+        </FormModal>
       )}
 
       {modal === 'operator' && (
-        <Modal
+        <FormModal
+          error={error}
           title={editing ? 'Edit Operator' : 'Add Operator'}
           onClose={closeModal}
         >
@@ -1650,7 +1615,7 @@ export default function CompanyManagerSection({ section }) {
               {editing ? 'Save Operator' : 'Create Operator'}
             </button>
           </form>
-        </Modal>
+        </FormModal>
       )}
     </div>
   );

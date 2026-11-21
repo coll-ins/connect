@@ -1,7 +1,7 @@
 from connect.frontend import frontend_url
 from django.core.exceptions import ValidationError as DjangoValidationError
 from connect.validation import free_text, kenyan_mobile
-from django.db.models import Q
+from django.db.models import Q, Sum
 import hmac
 import logging
 import hashlib
@@ -9,14 +9,15 @@ import json
 import requests
 import uuid
 
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from django.db import transaction
-from django.db.models import Sum
+from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from rest_framework import status
@@ -25,9 +26,9 @@ from rest_framework.decorators import (
     permission_classes,
     throttle_classes,
 )
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 
 from companies.models import Trip, PickupStage
 from .models import Incident, IncidentResolution
@@ -35,10 +36,11 @@ from users.permissions import can_manage_company, can_access_company
 from notifications import push
 from notifications.sms import send_admin_alert_sms
 from drivers.models import Driver
-from wallets.models import Wallet, WalletTransaction
 
 from .models import Booking, BookingHold, Payment, BoardingEvent
-from .seats import SeatError, assign_seats, move_seats, seat_map, seats_taken
+from .seats import (
+    SeatError, assign_seats, ensure_numbers, move_seats, purge_dead_rows, seat_map,
+)
 from .services import (
     settle_booking_fault,
     cancel_dead_pending_bookings,
@@ -46,8 +48,20 @@ from .services import (
     before_change_cutoff,
     cash_still_payable,
     trip_has_departed,
-    create_booking_hold,
     release_booking_hold,
+    NotEnoughSeats,
+    BookingMoved,
+    WalletPayRefused,
+    pay_booking_from_wallet,
+    booking_closes_at,
+    confirm_booking_payment,
+    hold_deadline,
+    hold_expired_and_seat_gone,
+    lock_trip_then_booking,
+    record_unmatched_charge,
+    active_seat_q,
+    reserve_seats,
+    seats_taken,
 )
 from .serializers import (
     BookingCreateSerializer,
@@ -57,6 +71,7 @@ from .serializers import (
 )
 from users.identity import drivers_for_user, is_driver_account_for
 from users.route_scope import operator_route_ids
+from connect.ids import parse_id
 
 
 # ============================================================
@@ -141,6 +156,35 @@ def _release_dead_digital_attempt(booking_id, user):
             pk=payment.pk, status='pending', provider_reference=reference,
         ).update(status='failed')
 
+
+def _tampered_amount(request, expected):
+    """
+    The amount is always computed on the server. A client may send `amount`
+    or `total_amount` only if it repeats that figure; anything else is refused
+    before any payment row or gateway call exists.
+    """
+    from decimal import InvalidOperation
+
+    for field in ('amount', 'total_amount'):
+        sent = request.data.get(field)
+        if sent is None or sent == '':
+            continue
+        try:
+            same = Decimal(str(sent)) == expected
+        except (InvalidOperation, ValueError):
+            same = False
+        if not same:
+            return Response(
+                {
+                    'error': 'The amount does not match this booking.',
+                    'code': 'amount_mismatch',
+                    'expected': str(expected),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    return None
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_paystack_payment(request, booking_id):
@@ -169,6 +213,10 @@ def initialize_paystack_payment(request, booking_id):
                     {'error': 'This booking is already completed'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            tampered = _tampered_amount(request, booking.total_amount)
+            if tampered is not None:
+                return tampered
 
             if trip_has_departed(booking.trip):
                 return Response(
@@ -232,6 +280,8 @@ def initialize_paystack_payment(request, booking_id):
                 payment.refunded_at = None
                 payment.refund_reference = None
                 payment.refund_status = 'not_requested'
+                payment.refund_reason = ''
+                payment.paid_amount = None
                 payment.save(
                     update_fields=[
                         'amount',
@@ -244,6 +294,8 @@ def initialize_paystack_payment(request, booking_id):
                         'refunded_at',
                         'refund_reference',
                         'refund_status',
+                        'refund_reason',
+                        'paid_amount',
                     ]
                 )
             else:
@@ -432,6 +484,10 @@ def initialize_mpesa_payment(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            tampered = _tampered_amount(request, booking.total_amount)
+            if tampered is not None:
+                return tampered
+
             phone = (
                 request.data.get('phone_number')
                 or booking.user.phone_number
@@ -500,6 +556,8 @@ def initialize_mpesa_payment(request, booking_id):
                 payment.refunded_at = None
                 payment.refund_reference = None
                 payment.refund_status = 'not_requested'
+                payment.refund_reason = ''
+                payment.paid_amount = None
                 payment.save(
                     update_fields=[
                         'amount',
@@ -512,6 +570,8 @@ def initialize_mpesa_payment(request, booking_id):
                         'refunded_at',
                         'refund_reference',
                         'refund_status',
+                        'refund_reason',
+                        'paid_amount',
                     ]
                 )
             else:
@@ -659,13 +719,6 @@ def initialize_mpesa_payment(request, booking_id):
 # PAYMENT STATUS / VERIFY
 # ============================================================
 
-def _currency_ok(currency):
-    # Reject a currency Paystack reports as something other than KES. A
-    # missing field is not rejected: the amount check still applies and the
-    # payload shape is not verified against Paystack's docs.
-    return currency is None or str(currency).strip().upper() == 'KES'
-
-
 def _push_booked(booking):
     """Phone alert once the seat is paid. After commit, so a rollback sends nothing.
     Never lets an alert problem fail the payment."""
@@ -681,74 +734,63 @@ def _push_booked(booking):
         logging.getLogger(__name__).exception('booking %s: seat-booked alert not queued', booking.id)
 
 
-def _mark_payment_confirmed(payment, paystack_amount, currency):
+def _finish_confirm(outcome, send_refunds=True):
     """
-    Confirm a Paystack payment and create the internal financial hold.
+    Side effects of confirm_booking_payment that need no open transaction.
 
-    The hold represents money received by CONNECT that is not yet
-    eligible for company settlement.
-
-    This function is idempotent:
-    - Repeated webhook/verification calls do not create duplicate holds.
+    send_refunds=False is for a GET: it never calls the refund endpoint. The
+    refund is already recorded (Payment.refund_reason, or a refund_due row)
+    and the process_noshows / process_unapplied sweeps send it.
     """
+    if outcome.result == 'confirmed':
+        _push_booked(outcome.booking)
+    if outcome.result == 'rejected' and outcome.alert:
+        _alert_payment_problem(*outcome.alert)
+    elif outcome.result == 'refund' and send_refunds:
+        payment = outcome.payment
+        try:
+            settle_booking_fault(outcome.booking, fault_party='company')
+        except Exception:
+            _alert_payment_problem(
+                payment.provider_reference,
+                'late payment confirmed but the automatic refund failed',
+            )
+    from connect import paystack_extra as px
+    for row in outcome.extra_refunds:
+        try:
+            if row.status == 'review':
+                px._alert(
+                    f'Payment {row.reference}: overpaid by KES {row.amount}, '
+                    f'below the refund minimum. Refund manually.')
+            elif send_refunds and px.claim_refund(row):
+                row.refresh_from_db()
+                px.send_refund(row)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                'Overpayment refund for %s failed', row.reference)
+    return outcome
 
-    if payment.status in ('confirmed', 'refunded'):
-        return True
 
-    expected_amount = int(payment.amount * Decimal('100'))
+class PaymentStatusThrottle(SimpleRateThrottle):
+    """The status poll can call Paystack synchronously: limit it per user."""
+    scope = 'payment_status'
+    # Class-level so settings.py needs no DEFAULT_THROTTLE_RATES entry.
+    rate = '30/min'
 
-    # No amount in the answer: cannot judge it, so leave the payment pending
-    # for the signed webhook instead of flagging a possibly valid charge.
-    if paystack_amount in (None, '', 0, '0'):
-        return False
+    def get_cache_key(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return self.cache_format % {'scope': self.scope, 'ident': request.user.pk}
 
-    if int(paystack_amount) != expected_amount or not _currency_ok(currency):
-        payment.status = 'failed'
-        payment.save(update_fields=['status'])
-        _queue_charge_refund(
-            payment.provider_reference,
-            {'amount': paystack_amount, 'currency': currency},
-            f'amount/currency mismatch: paid {paystack_amount} {currency}, '
-            f'expected {expected_amount}',
-        )
-        return False
 
-    booking = payment.booking
+class PaymentVerifyThrottle(PaymentStatusThrottle):
+    scope = 'payment_verify'
+    rate = '20/min'
 
-    payment.status = 'confirmed'
-    payment.settlement_status = 'not_ready'
-    payment.confirmed_at = timezone.now()
-
-    payment.save(
-        update_fields=[
-            'status',
-            'settlement_status',
-            'confirmed_at',
-        ]
-    )
-
-    if trip_has_departed(booking.trip) or booking.status in (
-        'cancelled',
-        'completed',
-        'no_show',
-    ):
-        # Money arrived for a booking that cannot be used. The caller must
-        # refund it after this transaction commits.
-        if booking.status in ('pending', 'confirmed'):
-            booking.status = 'cancelled'
-            booking.save(update_fields=['status'])
-        payment._needs_refund = True
-        return True
-
-    booking.status = 'confirmed'
-    booking.save(update_fields=['status'])
-    create_booking_hold(booking)
-    _push_booked(booking)
-
-    return True
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([UserRateThrottle, PaymentStatusThrottle])
 def payment_status(request, booking_id):
     try:
         payment = Payment.objects.select_related('booking').get(
@@ -777,7 +819,8 @@ def payment_status(request, booking_id):
             gateway_response = requests.get(
                 f'https://api.paystack.co/transaction/verify/{payment.provider_reference}',
                 headers=headers,
-                timeout=30,
+                timeout=getattr(
+                    settings, 'PAYMENT_STATUS_VERIFY_TIMEOUT_SECONDS', 10),
             )
             result = gateway_response.json()
         except (requests.RequestException, ValueError):
@@ -790,30 +833,18 @@ def payment_status(request, booking_id):
             and gateway_response.status_code == 200
             and result.get('status')
             and data.get('status') == 'success'
+            # No amount in the answer: cannot judge it, so leave the payment
+            # pending for the signed webhook instead of flagging a charge
+            # that may be valid.
+            and data.get('amount') not in (None, '', 0, '0')
         ):
-            with transaction.atomic():
-                payment = (
-                    Payment.objects
-                    .select_for_update()
-                    .select_related('booking')
-                    .get(pk=payment.pk)
-                )
-                _mark_payment_confirmed(
-                    payment,
-                    data.get('amount', 0),
-                    data.get('currency'),
-                )
-
-            if getattr(payment, '_needs_refund', False):
-                try:
-                    settle_booking_fault(payment.booking, fault_party='company')
-                except Exception:
-                    _alert_payment_problem(
-                        payment.provider_reference,
-                        'late payment confirmed but the automatic refund failed',
-                    )
-                payment.refresh_from_db()
-                payment.booking.refresh_from_db()
+            _finish_confirm(confirm_booking_payment(
+                payment_id=payment.pk,
+                paid_amount=data.get('amount', 0),
+                currency=data.get('currency'),
+            ), send_refunds=False)
+            payment.refresh_from_db()
+            payment.booking.refresh_from_db()
 
     return Response({
         'booking_id': booking_id,
@@ -829,6 +860,7 @@ def payment_status(request, booking_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([UserRateThrottle, PaymentVerifyThrottle])
 def verify_paystack_payment(request, booking_id):
     """Verify a Paystack transaction after a hosted checkout return."""
     try:
@@ -867,21 +899,20 @@ def verify_paystack_payment(request, booking_id):
             status=400,
         )
 
-    if data.get('status') == 'success':
-        with transaction.atomic():
-            payment = Payment.objects.select_for_update().select_related('booking').get(pk=payment.pk)
-            _mark_payment_confirmed(payment, data.get('amount', 0), data.get('currency'))
-
-        if getattr(payment, '_needs_refund', False):
-            try:
-                settle_booking_fault(payment.booking, fault_party='company')
-            except Exception:
-                _alert_payment_problem(
-                    payment.provider_reference,
-                    'late payment confirmed but the automatic refund failed',
-                )
-            payment.refresh_from_db()
-            payment.booking.refresh_from_db()
+    # No amount in the answer: leave it pending for the signed webhook.
+    if data.get('status') == 'success' and data.get('amount') not in (None, '', 0, '0'):
+        outcome = _finish_confirm(confirm_booking_payment(
+            payment_id=payment.pk,
+            paid_amount=data.get('amount', 0),
+            currency=data.get('currency'),
+        ))
+        if outcome.result == 'retry':
+            return Response(
+                {'error': 'This booking changed trips. Please try again.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        payment.refresh_from_db()
+        payment.booking.refresh_from_db()
         return Response({'payment_status': payment.status, 'booking_status': payment.booking.status})
 
     return Response({
@@ -893,41 +924,6 @@ def verify_paystack_payment(request, booking_id):
 # ============================================================
 # PAYSTACK WEBHOOK
 # ============================================================
-
-def _queue_charge_refund(reference, data, reason):
-    """
-    Durably queue a full refund of a successful charge CONNECT will not apply
-    (replaced reference, wrong amount or currency). process_unapplied sends it
-    (one-winner claim, reconcile, never resends). A charge whose amount or
-    currency is unusable goes to a human instead. Replays hit the unique
-    reference and do nothing. Raises if the row cannot be written, so the
-    caller can make Paystack resend.
-    """
-    from bookings.models import UnappliedPayment
-    from connect.paystack_extra import GatewayError, to_kes
-
-    try:
-        amount = to_kes(data.get('amount'))
-    except GatewayError:
-        amount = None
-    refundable = amount is not None and amount > 0 and _currency_ok(data.get('currency'))
-    _, created = UnappliedPayment.objects.get_or_create(
-        reference=reference,
-        defaults={
-            'kind': 'booking',
-            'amount': amount,
-            'currency': str(data.get('currency') or '')[:10],
-            'reason': reason[:255],
-            'payload': data,
-            'status': 'refund_due' if refundable else 'review',
-        },
-    )
-    if created:
-        tail = ('automatic refund queued' if refundable
-                else 'amount/currency unusable: refund manually')
-        transaction.on_commit(
-            lambda: _alert_payment_problem(reference, f'{reason}: {tail}'))
-
 
 def _alert_payment_problem(reference, reason):
     """Log and SMS the admins about money that needs a human. Never raises."""
@@ -941,6 +937,15 @@ def _alert_payment_problem(reference, reason):
         )
     except Exception:
         log.exception('Admin alert failed for %s', reference)
+
+
+def _signed_event(body):
+    """The JSON object in a signed webhook body, or None when it is not one."""
+    try:
+        event = json.loads(body.decode('utf-8'))
+    except (ValueError, RecursionError):
+        return None
+    return event if isinstance(event, dict) else None
 
 
 @csrf_exempt
@@ -962,10 +967,20 @@ def paystack_webhook(request):
     if not hmac.compare_digest(signature.encode('utf-8'), computed_signature.encode('utf-8')):
         return HttpResponse(status=400)
 
-    try:
-        event = json.loads(body)
-    except json.JSONDecodeError:
+    event = _signed_event(body)
+    if event is None:
         return HttpResponse(status=400)
+
+    # Wallet top-up charges carry a TOPUP- reference and must never reach the
+    # booking lookup below (it would refund them as an unknown booking). An
+    # error is answered 500 so Paystack delivers the event again.
+    from wallets.webhook import handle_event
+    try:
+        if handle_event(event):
+            return HttpResponse(status=200)
+    except Exception:
+        logging.getLogger(__name__).exception('wallet webhook handler failed')
+        return HttpResponse(status=500)
 
     # Paystack allows ONE webhook URL per mode, so refund events arrive here.
     # The refund handler re-verifies the signature itself.
@@ -975,10 +990,11 @@ def paystack_webhook(request):
     if event.get('event') != 'charge.success':
         return HttpResponse(status=200)
 
-    data = event.get('data', {})
+    data = event.get('data')
+    data = data if isinstance(data, dict) else {}
     reference = data.get('reference')
 
-    if not reference:
+    if not reference or not isinstance(reference, str):
         return HttpResponse(status=400)
 
     # Parcel and bus-hire payments carry their own references.
@@ -986,142 +1002,53 @@ def paystack_webhook(request):
     if handle_extra_charge(reference, data):
         return HttpResponse(status=200)
 
-    refund_after_commit = False
-    try:
-        with transaction.atomic():
-            payment = (
-                Payment.objects
-                .select_for_update()
-                .select_related('booking__user')
-                .get(provider_reference=reference)
-            )
+    outcome = confirm_booking_payment(
+        reference=reference,
+        paid_amount=data.get('amount'),
+        currency=data.get('currency'),
+    )
 
-            booking = payment.booking
-
-            # Paystack may retry the same webhook.
-            # If we already processed it, do nothing.
-            if payment.status in ('confirmed', 'refunded'):
-                return HttpResponse(status=200)
-
-            # This webhook is only for digital payments.
-            if payment.method != 'digital':
-                return HttpResponse(status=200)
-
-            paystack_amount = data.get('amount')
-
-            if paystack_amount is None:
-                payment.status = 'failed'
-                payment.save(update_fields=['status'])
-                _queue_charge_refund(reference, data, 'amount missing in webhook')
-                return HttpResponse(status=200)
-
-            expected_amount = int(
-                payment.amount * Decimal('100')
-            )
-
-            try:
-                paystack_amount = int(paystack_amount)
-            except (TypeError, ValueError):
-                payment.status = 'failed'
-                payment.save(update_fields=['status'])
-                _queue_charge_refund(reference, data, 'amount unreadable in webhook')
-                return HttpResponse(status=200)
-
-            # Never trust the gateway response blindly.
-            # The amount must match what CONNECT expected.
-            if (
-                paystack_amount != expected_amount
-                or not _currency_ok(data.get('currency'))
-            ):
-                payment.status = 'failed'
-                payment.save(update_fields=['status'])
-                _queue_charge_refund(
-                    reference, data,
-                    f'amount/currency mismatch: paid {paystack_amount} '
-                    f'{data.get("currency")}, expected {expected_amount}',
-                )
-                return HttpResponse(status=200)
-
-            # -------------------------------------------------
-            # PAYMENT CONFIRMED
-            # -------------------------------------------------
-            #
-            # We deliberately do NOT add money to the user's
-            # Django Wallet here.
-            #
-            # Paystack confirmation means the payment succeeded.
-            # It does NOT mean CONNECT has released the money
-            # to the transport company.
-            #
-
-            payment.status = 'confirmed'
-            payment.settlement_status = 'not_ready'
-            payment.confirmed_at = timezone.now()
-
-            payment.save(
-                update_fields=[
-                    'status',
-                    'settlement_status',
-                    'confirmed_at',
-                ]
-            )
-
-            # If the trip has already departed by the time the
-            # successful payment webhook arrives, the booking
-            # cannot be used.
-            dead_booking = booking.status in (
-                'cancelled',
-                'completed',
-                'no_show',
-            )
-
-            if trip_has_departed(booking.trip) or dead_booking:
-                # Money arrived for a booking that can no longer be used:
-                # the trip is gone, or the booking was cancelled/expired and
-                # its seat may already be resold. Refund it; never revive it.
-                # The refund calls Paystack, so it runs AFTER this
-                # transaction commits (see below).
-                if booking.status in ('pending', 'confirmed'):
-                    booking.status = 'cancelled'
-                    booking.save(update_fields=['status'])
-                refund_after_commit = True
-            else:
-                booking.status = 'confirmed'
-                booking.save(update_fields=['status'])
-                create_booking_hold(booking)
-                _push_booked(booking)
-
-    except Payment.DoesNotExist:
+    if outcome.result == 'not_found':
         # Unknown references must not cause endless Paystack retries, but a
-        # signed successful charge we cannot match is real money.
-        if str(reference).startswith('CONNECT-'):
-            try:
-                with transaction.atomic():
-                    _queue_charge_refund(reference, data, 'paid a replaced booking checkout')
-            except Exception:
-                # Not recorded: answer non-200 so Paystack resends (safe:
-                # the reference is unique).
-                logging.getLogger(__name__).exception(
-                    'Could not record unmatched charge %s', reference)
-                _alert_payment_problem(reference, 'unmatched booking charge NOT recorded yet')
-                return HttpResponse(status=500)
-        else:
-            _alert_payment_problem(reference, 'charge.success for an unknown reference')
+        # signed successful charge we cannot match is real money. One of our
+        # own references is refunded in full (once: the row's reference is
+        # unique); anything else is alerted for a human.
+        try:
+            row, created = record_unmatched_charge(
+                reference, data.get('amount'), data.get('currency'))
+        except Exception:
+            # Not recorded: answer non-200 so Paystack resends (safe: the
+            # reference is unique).
+            logging.getLogger(__name__).exception(
+                'Could not record unmatched charge %s', reference)
+            _alert_payment_problem(reference, 'unmatched booking charge NOT recorded yet')
+            return HttpResponse(status=500)
+        if row is None:
+            _alert_payment_problem(
+                reference, 'charge.success for an unknown reference')
+        elif created:
+            # Never refunded inline: the webhook stays fast and
+            # process_unapplied sends the refund (one winner, never twice).
+            if row.status == 'refund_due':
+                _alert_payment_problem(
+                    reference,
+                    f'matches no booking payment: KES {row.amount} is queued '
+                    'for automatic refund')
+            else:
+                _alert_payment_problem(
+                    reference,
+                    'charge.success matches no booking payment and its '
+                    'amount or currency is unusable')
         return HttpResponse(status=200)
 
-    if refund_after_commit:
-        try:
-            settle_booking_fault(booking, fault_party='company')
-        except Exception:
-            logging.getLogger(__name__).exception(
-                'Refund for late payment %s failed; needs follow-up', reference)
-            try:
-                send_admin_alert_sms(
-                    f'Late payment {reference} confirmed but refund failed. '
-                    f'Check booking {booking.booking_number}.')
-            except Exception:
-                pass
+    if outcome.result == 'retry':
+        # The booking moved trips while we waited for its locks. Nothing was
+        # changed; a 500 makes Paystack deliver the event again.
+        return HttpResponse(status=500)
 
+    # A refund or alert runs here, after the confirming transaction has
+    # committed, because it calls Paystack or SMS.
+    _finish_confirm(outcome)
     return HttpResponse(status=200)
 
 
@@ -1135,6 +1062,103 @@ REFUND_EVENT_STATUS_MAP = {
     'refund.processed': 'processed',
     'refund.failed': 'failed',
 }
+
+
+def _route_refund_event(transaction_reference, data, new_refund_status):
+    """
+    One charge can carry two refunds: the booking refund (Payment) and an
+    overpayment's difference (UnappliedPayment). Decide which one a refund
+    event is about. The stored refund id wins; the amount is only a fallback;
+    if it is still unclear nothing is touched and an admin is alerted once.
+
+    Returns True when the event was handled here, False when the charge has no
+    UnappliedPayment row and the caller should use the plain Payment path.
+    """
+    from connect import paystack_extra as px
+    from .models import UnappliedPayment
+
+    # Which field carries Paystack's refund id in the event is UNVERIFIED, so
+    # either is matched against the id stored when the refund was sent.
+    ids = [
+        str(v) for v in (data.get('refund_reference'), data.get('id'))
+        if v not in (None, '')
+    ]
+    try:
+        event_amount = int(data['amount']) if data.get('amount') is not None else None
+    except (TypeError, ValueError, OverflowError):
+        event_amount = None
+
+    def fits(stored_id, stored_amount):
+        if ids and stored_id:
+            return stored_id in ids
+        if event_amount is not None and stored_amount is not None:
+            return int(stored_amount * 100) == event_amount
+        return True
+
+    with transaction.atomic():
+        payment = (
+            Payment.objects.select_for_update()
+            .filter(provider_reference=transaction_reference).first()
+        )
+        rows = list(
+            UnappliedPayment.objects.select_for_update()
+            .filter(reference=transaction_reference,
+                    status__in=('refunding', 'refunded'))
+        )
+        if not rows:
+            return False
+
+        row_by_id = next(
+            (r for r in rows if r.refund_reference and r.refund_reference in ids),
+            None)
+        pay_by_id = bool(
+            payment is not None and payment.refund_reference
+            and payment.refund_reference in ids)
+        if row_by_id is not None and not pay_by_id:
+            target = row_by_id
+        elif pay_by_id and row_by_id is None:
+            return False
+        else:
+            candidates = [r for r in rows if fits(r.refund_reference, r.amount)]
+            pay_fits = (
+                payment is not None
+                and payment.refund_status != 'not_requested'
+                and fits(payment.refund_reference, payment.refund_amount)
+            )
+            if len(candidates) + (1 if pay_fits else 0) != 1:
+                key = (f'refund-ambiguous:{transaction_reference}:'
+                       f'{new_refund_status}:{ids}:{event_amount}')
+                if cache.add(key, 1, 24 * 60 * 60):
+                    ambiguous_alert = (
+                        f'Refund event for {transaction_reference} '
+                        f'(amount {event_amount}) cannot be matched to one '
+                        f'refund. Nothing was changed; check Paystack.'
+                    )
+                    # After commit: no SMS call while the rows are locked.
+                    transaction.on_commit(lambda: px._alert(ambiguous_alert))
+                return True
+            if pay_fits:
+                return False
+            target = candidates[0]
+
+        if target.refund_status == 'processed':
+            return True
+        fields = {'refund_status': new_refund_status}
+        if new_refund_status == 'failed':
+            fields.update(status='review', reason='refund failed at Paystack')
+        else:
+            fields['status'] = 'refunded'
+        if not target.refund_reference and ids:
+            fields['refund_reference'] = ids[0][:100]
+        UnappliedPayment.objects.filter(pk=target.pk).update(
+            updated_at=timezone.now(), **fields)
+        if new_refund_status == 'failed':
+            failed_reason = (
+                f'automatic refund of KES {target.amount} FAILED at Paystack: '
+                f'refund manually')
+            transaction.on_commit(
+                lambda: _alert_payment_problem(target.reference, failed_reason))
+    return True
 
 
 @csrf_exempt
@@ -1156,9 +1180,8 @@ def paystack_refund_webhook(request):
     if not hmac.compare_digest(signature.encode('utf-8'), computed_signature.encode('utf-8')):
         return HttpResponse(status=400)
 
-    try:
-        event = json.loads(body)
-    except json.JSONDecodeError:
+    event = _signed_event(body)
+    if event is None:
         return HttpResponse(status=400)
 
     event_type = event.get('event')
@@ -1168,23 +1191,15 @@ def paystack_refund_webhook(request):
         # Not a refund event we care about.
         return HttpResponse(status=200)
 
-    data = event.get('data', {})
+    data = event.get('data')
+    data = data if isinstance(data, dict) else {}
     transaction_reference = data.get('transaction_reference')
 
-    if not transaction_reference:
+    if not transaction_reference or not isinstance(transaction_reference, str):
         return HttpResponse(status=400)
 
-    # A refund process_unapplied sent may still fail later: hand it to a
-    # human instead of leaving it marked refunded.
-    if new_refund_status == 'failed':
-        from bookings.models import UnappliedPayment
-        if UnappliedPayment.objects.filter(
-            reference=transaction_reference,
-            status__in=('refunding', 'refunded'),
-        ).update(status='review', refund_status='failed',
-                 reason='Paystack refund failed', updated_at=timezone.now()):
-            _alert_payment_problem(
-                transaction_reference, 'automatic refund FAILED: refund manually')
+    if _route_refund_event(transaction_reference, data, new_refund_status):
+        return HttpResponse(status=200)
 
     try:
         with transaction.atomic():
@@ -1193,6 +1208,34 @@ def paystack_refund_webhook(request):
                 .select_for_update()
                 .get(provider_reference=transaction_reference)
             )
+
+            # An event about another refund (a redelivery for one that was
+            # superseded by a retry) must not touch this one.
+            event_ids = [
+                str(v) for v in (data.get('refund_reference'), data.get('id'))
+                if v not in (None, '')
+            ]
+            if event_ids and payment.refund_reference:
+                if payment.refund_reference not in event_ids:
+                    # Dropped silently, so tell an admin once a day per payment.
+                    if cache.add(f"refund-event-dropped:{payment.pk}", 1, 24 * 60 * 60):
+                        dropped_alert = (
+                            f"Refund event dropped for payment #{payment.pk}: "
+                            f"it does not match the stored refund "
+                            f"{payment.refund_reference}."
+                        )
+                        transaction.on_commit(
+                            lambda: send_admin_alert_sms(dropped_alert)
+                        )
+                    return HttpResponse(status=200)
+            elif (
+                event_ids and new_refund_status == 'failed'
+                and payment.refund_status == 'processing'
+            ):
+                # The retry has been claimed but Paystack's answer is not
+                # recorded yet, so this cannot be told from a stale event.
+                # reconcile_refunds flags a failed status for a human.
+                return HttpResponse(status=200)
 
             # A processed refund is final and must never be
             # downgraded by a later/duplicate webhook.
@@ -1228,13 +1271,17 @@ def paystack_refund_webhook(request):
                 # This MUST be surfaced to an administrator instead of
                 # silently disappearing.
                 if new_refund_status == 'failed':
-                    send_admin_alert_sms(
+                    # After commit: no SMS call while the payment row is locked.
+                    failed_alert = (
                         f"Refund FAILED for booking "
                         f"{payment.booking.booking_number} "
                         f"(payment #{payment.id}, amount "
                         f"{payment.refund_amount}). "
                         f"Paystack could not process the reversal - "
                         f"needs manual follow-up."
+                    )
+                    transaction.on_commit(
+                        lambda: send_admin_alert_sms(failed_alert)
                     )
 
                 payment.save(update_fields=update_fields)
@@ -1291,6 +1338,72 @@ def paystack_refund_webhook(request):
 
 
 # ============================================================
+# WALLET PAYMENT
+# ============================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def pay_from_wallet(request, booking_id):
+    """
+    Pay a pending booking from the passenger's wallet. No gateway call; the
+    debit and the confirmation are one transaction. Calling it again on a
+    booking that is already wallet-paid returns the same 200.
+    """
+    from wallets.models import Wallet
+    from wallets.services import InsufficientFunds
+
+    echoed = [
+        request.data.get(f) for f in ('amount', 'total_amount')
+        if request.data.get(f) not in (None, '')
+    ]
+    try:
+        booking, payment, replayed = pay_booking_from_wallet(
+            booking_id, request.user, echoed)
+    except Booking.DoesNotExist:
+        return Response(
+            {'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+    except WalletPayRefused as exc:
+        return Response(
+            {'error': str(exc), 'code': exc.code, **exc.extra},
+            status=exc.http_status)
+    except InsufficientFunds:
+        balance = (
+            Wallet.objects.filter(user=request.user)
+            .values_list('available_balance', flat=True).first()
+            or Decimal('0.00')
+        )
+        required = (
+            Booking.objects.filter(pk=booking_id, user=request.user)
+            .values_list('total_amount', flat=True).first()
+        )
+        return Response(
+            {
+                'error': 'Your wallet balance is too low for this booking.',
+                'code': 'insufficient_funds',
+                'balance': str(balance),
+                'required': str(required),
+            },
+            status=status.HTTP_400_BAD_REQUEST)
+
+    if not replayed:
+        _push_booked(booking)
+    balance = Wallet.objects.get(user=request.user).available_balance
+    return Response(
+        {
+            'message': 'Booking paid from your wallet.',
+            'booking_id': booking.id,
+            'payment_id': payment.id,
+            'amount': str(payment.amount),
+            'method': payment.method,
+            'status': payment.status,
+            'booking_status': booking.status,
+            'balance': str(balance),
+            'replayed': replayed,
+        },
+        status=status.HTTP_200_OK)
+
+
+# ============================================================
 # CASH PAYMENT INITIALIZATION
 # ============================================================
 
@@ -1324,14 +1437,9 @@ def initialize_cash_payment(request, booking_id):
 
     try:
         with transaction.atomic():
-            booking = (
-                Booking.objects
-                .select_for_update()
-                .get(
-                    id=booking_id,
-                    user=request.user,
-                )
-            )
+            # Trip first, then Booking (the order cancel_booking uses).
+            trip, booking = lock_trip_then_booking(
+                booking_id, user=request.user)
 
             if booking.status in (
                 'cancelled',
@@ -1358,6 +1466,10 @@ def initialize_cash_payment(request, booking_id):
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            tampered = _tampered_amount(request, booking.total_amount)
+            if tampered is not None:
+                return tampered
 
             payment = (
                 Payment.objects
@@ -1393,6 +1505,36 @@ def initialize_cash_payment(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            if booking.status == 'pending':
+                # The one extension a hold ever gets: cash is paid on board,
+                # possibly at a later stage, so the seat is held until the
+                # trip is over. Computed from the departure time, so
+                # repeating this call never moves it again.
+                cash_until = (
+                    trip.departure_at + timedelta(
+                        hours=getattr(settings, 'TRIP_AUTO_CLOSE_AFTER_HOURS', 12))
+                    if trip is not None else booking.held_until
+                )
+                if hold_expired_and_seat_gone(booking, trip):
+                    return Response(
+                        {
+                            'error': (
+                                'The time to hold this booking has run out.'
+                            ),
+                            'code': 'hold_expired',
+                        },
+                        status=status.HTTP_409_CONFLICT
+                    )
+                if cash_until is not None and (
+                    booking.held_until is None or cash_until > booking.held_until
+                ):
+                    booking.held_until = cash_until
+                    booking.save(update_fields=['held_until'])
+                # A lapsed hold had its seat rows purged; the capacity check
+                # above passed under this lock, so the numbers are free again.
+                if trip is not None:
+                    ensure_numbers(trip, booking)
+
             if payment is None:
                 payment = Payment.objects.create(
                     booking=booking,
@@ -1415,6 +1557,8 @@ def initialize_cash_payment(request, booking_id):
                 payment.refunded_at = None
                 payment.refund_reference = None
                 payment.refund_status = 'not_requested'
+                payment.refund_reason = ''
+                payment.paid_amount = None
                 payment.refund_amount = None
                 payment.save(
                     update_fields=[
@@ -1428,6 +1572,8 @@ def initialize_cash_payment(request, booking_id):
                         'refunded_at',
                         'refund_reference',
                         'refund_status',
+                        'refund_reason',
+                        'paid_amount',
                         'refund_amount',
                     ]
                 )
@@ -1452,6 +1598,11 @@ def initialize_cash_payment(request, booking_id):
             {'error': 'Booking not found'},
             status=status.HTTP_404_NOT_FOUND
         )
+    except BookingMoved:
+        return Response(
+            {'error': 'This booking changed trips. Please try again.'},
+            status=status.HTTP_409_CONFLICT
+        )
 
 
 # ============================================================
@@ -1472,11 +1623,7 @@ def confirm_cash_payment(request, booking_id):
             #
             # Lock only the Booking row. Related objects are
             # fetched separately below.
-            booking = (
-                Booking.objects
-                .select_for_update()
-                .get(id=booking_id)
-            )
+            trip, booking = lock_trip_then_booking(booking_id)
 
             user = request.user
 
@@ -1518,15 +1665,7 @@ def confirm_cash_payment(request, booking_id):
                     is_authorized = True
 
             if not is_authorized:
-                return Response(
-                    {
-                        'error': (
-                            'Unauthorized to confirm '
-                            'cash payments.'
-                        )
-                    },
-                    status=status.HTTP_403_FORBIDDEN
-                )
+                return _not_yours(user, booking)
 
             try:
                 payment = (
@@ -1573,6 +1712,21 @@ def confirm_cash_payment(request, booking_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # The hold ran out and the seat has been resold: confirming
+            # would oversell the trip. The operator boards a walk-up instead.
+            if hold_expired_and_seat_gone(booking, trip):
+                return Response(
+                    {
+                        'error': (
+                            'The time to hold this booking has run out and '
+                            'its seats are taken. Board a walk-up passenger '
+                            'instead.'
+                        ),
+                        'code': 'hold_expired',
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+
             # -------------------------------------------------
             # CASH CONFIRMED
             # -------------------------------------------------
@@ -1597,6 +1751,8 @@ def confirm_cash_payment(request, booking_id):
 
             booking.status = 'confirmed'
             booking.save(update_fields=['status'])
+            if trip is not None:
+                ensure_numbers(trip, booking)
             _push_booked(booking)
 
             return Response(
@@ -1619,11 +1775,44 @@ def confirm_cash_payment(request, booking_id):
             {'error': 'Booking not found.'},
             status=status.HTTP_404_NOT_FOUND
         )
+    except BookingMoved:
+        return Response(
+            {'error': 'This booking changed trips. Please try again.'},
+            status=status.HTTP_409_CONFLICT
+        )
 
 
 # ============================================================
 # CREATE BOOKING
 # ============================================================
+
+def _seat_limit(message):
+    return Response(
+        {'error': message, 'code': 'seat_limit'},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _booking_created_payload(booking):
+    return {
+        'message': (
+            'Booking created successfully. '
+            'Proceed to payment.'
+        ),
+        'booking_id': booking.id,
+        'booking_number': booking.booking_number,
+        'seat_numbers': sorted(
+            booking.seat_assignments.values_list('seat_no', flat=True)),
+        'total_amount': str(booking.total_amount),
+        'pay_before': booking.held_until,
+        'pickup_location': booking.pickup_location,
+        'pickup_stage_id': (
+            booking.pickup_stage_id
+            if booking.pickup_stage_id
+            else None
+        ),
+    }
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1632,6 +1821,12 @@ def create_booking(request):
         return Response(
             {'error': 'Login required'},
             status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    if not str(request.data.get('seats', '1')).isascii():
+        return Response(
+            {'seats': ['A valid integer is required.']},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
     serializer = BookingCreateSerializer(data=request.data)
@@ -1645,38 +1840,79 @@ def create_booking(request):
     validated_data = serializer.validated_data
     trip_id = validated_data['trip_id']
     seats = validated_data['seats']
+    if seats > settings.MAX_SEATS_PER_BOOKING:
+        return _seat_limit(
+            f'You can book at most {settings.MAX_SEATS_PER_BOOKING} seats at a time.')
     pickup_stage_id = validated_data.get('pickup_stage_id')
     legacy_pickup_location = validated_data.get(
         'pickup_location',
         ''
     ).strip()
+    idempotency_key = validated_data.get('idempotency_key') or None
+    picked = sorted(validated_data.get('seat_numbers') or [])
+    fingerprint = hashlib.sha256(
+        f'{trip_id}|{seats}|{pickup_stage_id or ""}|{legacy_pickup_location}|{picked}'
+        .encode('utf-8')
+    ).hexdigest()
 
     try:
         with transaction.atomic():
+            # of=('self',): lock only the Trip row, never the Route/Company
+            # rows joined in by select_related.
             trip = (
                 Trip.objects
-                .select_for_update()
+                .select_for_update(of=('self',))
                 .select_related('route')
                 .get(id=trip_id)
             )
 
-            if not (
-                (
-                    trip.status == 'scheduled'
-                    and trip.departure_at > timezone.now()
-                )
-                or (
-                    trip.status == 'boarding'
-                    and trip.departure_at
-                    > timezone.now() - _boarding_book_window()
-                )
-            ):
+            if idempotency_key:
+                # A repeat of an earlier request returns that booking, so it
+                # must be answered before the seat, cap and cut-off checks
+                # that the first booking itself now affects. The user row
+                # lock makes two simultaneous repeats take turns.
+                from django.contrib.auth import get_user_model
+                get_user_model().objects.select_for_update().get(
+                    pk=request.user.pk)
+                first = Booking.objects.filter(
+                    user=request.user, idempotency_key=idempotency_key
+                ).first()
+                if first is not None:
+                    if first.idempotency_fingerprint != fingerprint:
+                        return Response(
+                            {
+                                'error': (
+                                    'This idempotency_key was already used '
+                                    'for a different booking request.'
+                                ),
+                                'code': 'idempotency_key_reused',
+                            },
+                            status=status.HTTP_409_CONFLICT
+                        )
+                    payload = _booking_created_payload(first)
+                    payload['replayed'] = True
+                    payload['status'] = first.status
+                    return Response(payload, status=status.HTTP_200_OK)
+
+            if trip.status not in ('scheduled', 'boarding'):
                 return Response(
                     {
                         'error': (
                             'Cannot book trips that are not '
                             'scheduled or have already departed.'
                         )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            now = timezone.now()
+            closes_at = booking_closes_at(trip)
+            if now >= closes_at:
+                return Response(
+                    {
+                        'error': 'Online booking for this trip has closed.',
+                        'code': 'booking_closed',
+                        'closes_at': closes_at,
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
@@ -1755,7 +1991,7 @@ def create_booking(request):
             pending_cap = getattr(settings, 'MAX_PENDING_BOOKINGS_PER_USER', 3)
             if Booking.objects.filter(
                 user=request.user, status='pending'
-            ).count() >= pending_cap:
+            ).filter(active_seat_q(now)).count() >= pending_cap:
                 return Response(
                     {
                         'error': (
@@ -1767,11 +2003,12 @@ def create_booking(request):
                 )
 
             # Cap unpaid SEATS too: three bookings of a whole bus each would
-            # otherwise let one account empty three trips without paying.
+            # otherwise let one account empty three trips without paying. Only
+            # live holds count: a lapsed one has let its seats go.
             seat_cap = getattr(settings, 'MAX_PENDING_SEATS_PER_USER', 10)
             pending_seats = Booking.objects.filter(
                 user=request.user, status='pending'
-            ).aggregate(n=Sum('seats'))['n'] or 0
+            ).filter(active_seat_q(now)).aggregate(n=Sum('seats'))['n'] or 0
             if pending_seats + seats > seat_cap:
                 return Response(
                     {
@@ -1784,17 +2021,23 @@ def create_booking(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Live bookings plus seats an operator has blocked.
-            taken_seats = seats_taken(trip)
+            held_here = Booking.objects.filter(
+                user=request.user, trip=trip, status='pending',
+            ).filter(active_seat_q(now)).aggregate(n=Sum('seats'))['n'] or 0
+            if held_here + seats > settings.MAX_PENDING_SEATS_PER_TRIP:
+                return _seat_limit(
+                    'You already hold unpaid seats on this trip. Pay for them '
+                    'or let them lapse before booking more '
+                    f'(at most {settings.MAX_PENDING_SEATS_PER_TRIP} unpaid seats per trip).')
 
-            available_seats = trip.capacity - taken_seats
-
-            if seats > available_seats:
+            try:
+                reserve_seats(trip, seats, now)
+            except NotEnoughSeats as exc:
                 return Response(
                     {
                         'error': (
                             'Not enough seats available. '
-                            f'Only {available_seats} remaining.'
+                            f'Only {exc.available} remaining.'
                         )
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1803,6 +2046,15 @@ def create_booking(request):
             total_amount = (
                 trip.route.price * Decimal(str(seats))
             )
+            if total_amount >= Decimal('100000000'):
+                return Response(
+                    {'error': 'This fare is too large to book online.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            tampered = _tampered_amount(request, total_amount)
+            if tampered is not None:
+                return tampered
 
             booking = Booking.objects.create(
                 user=request.user,
@@ -1813,12 +2065,15 @@ def create_booking(request):
                 pickup_stage=pickup_stage,
                 seats=seats,
                 total_amount=total_amount,
-                status='pending'
+                status='pending',
+                held_until=hold_deadline(trip, now),
+                idempotency_key=idempotency_key,
+                idempotency_fingerprint=fingerprint if idempotency_key else '',
             )
 
             try:
-                seat_numbers = assign_seats(
-                    trip, booking, validated_data.get('seat_numbers')
+                assign_seats(
+                    trip, booking, validated_data.get('seat_numbers'), now
                 )
             except SeatError as exc:
                 transaction.set_rollback(True)
@@ -1828,22 +2083,7 @@ def create_booking(request):
                 )
 
         return Response(
-            {
-                'message': (
-                    'Booking created successfully. '
-                    'Proceed to payment.'
-                ),
-                'booking_id': booking.id,
-                'booking_number': booking.booking_number,
-                'seat_numbers': seat_numbers,
-                'total_amount': str(total_amount),
-                'pickup_location': booking.pickup_location,
-                'pickup_stage_id': (
-                    booking.pickup_stage_id
-                    if booking.pickup_stage_id
-                    else None
-                ),
-            },
+            _booking_created_payload(booking),
             status=status.HTTP_201_CREATED
         )
 
@@ -1911,6 +2151,7 @@ def get_my_bookings(request):
                 or cash_due_on_board(b, getattr(b, 'payment', None))
                 else None
             ),
+            'pay_before': b.held_until if b.status == 'pending' else None,
             'boarded': hasattr(b, 'boarding_event'),
             'seat_numbers': sorted(a.seat_no for a in b.seat_assignments.all()),
             'trip_id': trip.id if trip else None,
@@ -2111,6 +2352,26 @@ def get_all_bookings(request):
     )
 
 
+def _not_yours(user, booking):
+    """
+    Refusal for a booking the caller may not use. Its owner and staff of its
+    own company already know it exists, so they get 403. Anyone else gets the same
+    404 as a missing id, so booking ids cannot be enumerated.
+    """
+    if booking.user_id == user.id or (
+        user.role in {'company_manager', 'company_auditor', 'company_operator'}
+        and user.company_id == booking.route.company_id
+    ):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    return Response(
+        {'error': 'Booking not found'},
+        status=status.HTTP_404_NOT_FOUND
+    )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_booking_detail(request, booking_id):
@@ -2153,10 +2414,7 @@ def get_booking_detail(request, booking_id):
         and not user.is_superuser
         and not is_company_staff
     ):
-        return Response(
-            {'error': 'Unauthorized'},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        return _not_yours(user, booking)
 
     data = {
         'booking_id': booking.id,
@@ -2168,6 +2426,7 @@ def get_booking_detail(request, booking_id):
         'seats': booking.seats,
         'total_amount': str(booking.total_amount),
         'status': booking.status,
+        'pay_before': booking.held_until if booking.status == 'pending' else None,
         'payment_status': (
             booking.payment.status
             if hasattr(booking, 'payment')
@@ -2409,9 +2668,8 @@ def move_booking_to_trip(request, booking_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
-    try:
-        target_id = int(request.data.get('trip_id'))
-    except (TypeError, ValueError):
+    target_id = parse_id(request.data.get('trip_id'))
+    if target_id is None:
         return Response(
             {'error': 'trip_id is required.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -2454,6 +2712,14 @@ def move_booking_to_trip(request, booking_id):
                 status=status.HTTP_409_CONFLICT
             )
 
+        # The unlocked read picked which trips to lock; if the booking moved
+        # meanwhile, the old trip held here is the wrong one.
+        if old_trip is None or booking.trip_id != old_trip.id:
+            return Response(
+                {'error': 'The booking changed trips. Please try again.'},
+                status=status.HTTP_409_CONFLICT
+            )
+
         if new_trip is None:
             return Response(
                 {'error': 'Target trip not found.'},
@@ -2485,14 +2751,7 @@ def move_booking_to_trip(request, booking_id):
             )
 
         now = timezone.now()
-        bookable = (
-            (new_trip.status == 'scheduled' and new_trip.departure_at > now)
-            or (
-                new_trip.status == 'boarding'
-                and new_trip.departure_at > now - _boarding_book_window()
-            )
-        )
-        if not bookable:
+        if new_trip.status not in ('scheduled', 'boarding') or trip_has_departed(new_trip):
             return Response(
                 {'error': 'The target trip is not open for passengers.'},
                 status=status.HTTP_409_CONFLICT
@@ -2504,7 +2763,16 @@ def move_booking_to_trip(request, booking_id):
                 status=status.HTTP_409_CONFLICT
             )
 
-        available_seats = new_trip.capacity - seats_taken(new_trip)
+        # Staff moves are exempt from the booking cut-off: the stage organises
+        # seats inside it, and only passenger-initiated bookings are closed.
+        if not is_staff_move and now >= booking_closes_at(new_trip):
+            return Response(
+                {'error': 'Booking is closed for that trip. Pick a later one.',
+                 'code': 'booking_closed'},
+                status=status.HTTP_409_CONFLICT
+            )
+        available_seats = new_trip.capacity - seats_taken(
+            new_trip, now, exclude_booking_id=booking.pk)
         if booking.seats > available_seats:
             return Response(
                 {
@@ -2517,7 +2785,12 @@ def move_booking_to_trip(request, booking_id):
 
         booking.trip = new_trip
         booking.driver = new_trip.driver
-        booking.save(update_fields=['trip', 'driver', 'updated_at'])
+        update_fields = ['trip', 'driver', 'updated_at']
+        if booking.status == 'pending' and booking.held_until is not None:
+            # A hold never outlives the departure of the trip it is on.
+            booking.held_until = min(booking.held_until, new_trip.departure_at)
+            update_fields.append('held_until')
+        booking.save(update_fields=update_fields)
         move_seats(old_trip, new_trip, booking)
 
     import logging
@@ -2610,10 +2883,7 @@ def cancel_booking(request, booking_id):
                     )
                 )
             ):
-                return Response(
-                    {'error': 'Unauthorized'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+                return _not_yours(user, booking)
 
             if booking.status in (
                 'cancelled',
@@ -2762,7 +3032,7 @@ def cancel_booking(request, booking_id):
                 # The seat may have been resold or the trip may have left
                 # while Paystack was being called.
                 locked_trip = (
-                    Trip.objects.select_for_update()
+                    Trip.objects.select_for_update(of=('self',))
                     .filter(pk=booking_ref.trip_id).first()
                     if booking_ref.trip_id else None
                 )
@@ -2784,7 +3054,14 @@ def cancel_booking(request, booking_id):
                             restored.seat_assignments.values_list('seat_no', flat=True)
                         )
                         restored.status = previous_status
-                        restored.save(update_fields=['status'])
+                        restored.status = previous_status
+                        update_fields = ['status']
+                        if previous_status == 'pending':
+                            # A pending booking only holds its seat until
+                            # held_until, so give it a fresh hold.
+                            restored.held_until = hold_deadline(locked_trip)
+                            update_fields.append('held_until')
+                        restored.save(update_fields=update_fields)
                         if locked_trip is not None:
                             # Its seat may have been resold meanwhile: keep
                             # the old numbers if still free, else the lowest free.
@@ -2794,6 +3071,10 @@ def cancel_booking(request, booking_id):
                                 assign_seats(locked_trip, restored)
                     else:
                         seat_lost = True
+                        # The passenger is owed the refund: the
+                        # process_noshows sweep keeps retrying it.
+                        Payment.objects.filter(pk=refund_claim.payment_id).update(
+                            refund_reason=f'seat_lost_{refund_party.replace("passenger_", "")}')
             if seat_lost:
                 _alert_payment_problem(
                     refund_claim.provider_reference,
@@ -2865,6 +3146,23 @@ def _resolve_incident_inner(request, booking_id, deferred):
 
     try:
         with transaction.atomic():
+            # Trips first (ordered by id), then the Booking: the order
+            # move_booking_to_trip uses, so the two cannot deadlock. The
+            # booking's own trip is locked too because either choice frees
+            # its seat.
+            trip_ids = {
+                tid for tid in Booking.objects
+                .filter(pk=booking_id).values_list('trip_id', flat=True)
+                if tid is not None
+            }
+            requested_trip_id = parse_id(request.data.get('replacement_trip_id'))
+            if resolution == 'reschedule' and requested_trip_id:
+                trip_ids.add(requested_trip_id)
+            list(
+                Trip.objects.select_for_update(of=('self',))
+                .filter(pk__in=trip_ids).order_by('pk')
+            )
+
             booking = (
                 Booking.objects
                 .select_for_update()
@@ -2876,6 +3174,12 @@ def _resolve_incident_inner(request, booking_id, deferred):
                 .select_related('route', 'trip', 'user')
                 .get(id=booking.id)
             )
+
+            if booking.trip_id is not None and booking.trip_id not in trip_ids:
+                return Response(
+                    {'error': 'This booking changed trips. Please try again.'},
+                    status=status.HTTP_409_CONFLICT
+                )
 
             if booking.user_id != request.user.id:
                 return Response(
@@ -3008,10 +3312,17 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            replacement_trip_id = parse_id(replacement_trip_id)
+            if replacement_trip_id is None:
+                return Response(
+                    {'error': 'replacement_trip_id must be a valid id.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             try:
+                # Already locked at the top of this transaction.
                 replacement_trip = (
                     Trip.objects
-                    .select_for_update()
                     .select_related('route', 'driver')
                     .get(id=replacement_trip_id)
                 )
@@ -3054,6 +3365,9 @@ def _resolve_incident_inner(request, booking_id, deferred):
                     status=status.HTTP_409_CONFLICT
                 )
 
+            # Deliberately no booking cut-off check here: the passenger is
+            # being moved because of the incident, so only a trip that has
+            # already left is refused.
             if replacement_trip.departure_at <= timezone.now():
                 return Response(
                     {
@@ -3172,19 +3486,14 @@ def resolve_incident_booking(request, booking_id):
         # the resolution so the passenger can choose again.
         release_refund_claim(claim)
         seat_lost = False
-        trip_id = (
-            Booking.objects.filter(pk=booking_pk)
-            .values_list('trip_id', flat=True).first()
-        )
         with transaction.atomic():
-            # Lock order trip, then booking, as everywhere else. The seat may
+            # Trip first, then Booking (the cancel lock order). The seat may
             # have been resold while Paystack was being called. No departure
             # check: an incident can happen after the bus has left.
-            locked_trip = (
-                Trip.objects.select_for_update().filter(pk=trip_id).first()
-                if trip_id else None
-            )
-            restored = Booking.objects.select_for_update().get(pk=booking_pk)
+            try:
+                locked_trip, restored = lock_trip_then_booking(booking_pk)
+            except BookingMoved:
+                locked_trip, restored = lock_trip_then_booking(booking_pk)
             if restored.status == 'cancelled':
                 seat_free = locked_trip is None or (
                     seats_taken(locked_trip) + restored.seats
@@ -3195,7 +3504,12 @@ def resolve_incident_booking(request, booking_id):
                         restored.seat_assignments.values_list('seat_no', flat=True)
                     )
                     restored.status = previous_status
-                    restored.save(update_fields=['status'])
+                    update_fields = ['status']
+                    if previous_status == 'pending':
+                        # A pending booking only holds its seat until held_until.
+                        restored.held_until = hold_deadline(locked_trip)
+                        update_fields.append('held_until')
+                    restored.save(update_fields=update_fields)
                     if locked_trip is not None:
                         try:
                             assign_seats(locked_trip, restored, old_numbers or None)
@@ -3204,9 +3518,11 @@ def resolve_incident_booking(request, booking_id):
                     IncidentResolution.objects.filter(pk=resolution_pk).delete()
                 else:
                     seat_lost = True
+                    IncidentResolution.objects.filter(
+                        pk=resolution_pk).update(status='failed')
+            else:
+                IncidentResolution.objects.filter(pk=resolution_pk).delete()
         if seat_lost:
-            # Keep the resolution: the booking really is cancelled and still
-            # owed a refund, so the passenger must not be offered it again.
             _alert_payment_problem(
                 claim.provider_reference,
                 f'incident refund for booking {claim.booking_number} was '
@@ -3284,7 +3600,7 @@ def verify_boarding(request, booking_id):
 
             trip = (
                 Trip.objects
-                .select_for_update()
+                .select_for_update(of=('self',))
                 .select_related("driver")
                 .get(id=booking_ref.trip_id)
             )
@@ -3330,15 +3646,7 @@ def verify_boarding(request, booking_id):
                 is_authorized = True
 
             if not is_authorized:
-                return Response(
-                    {
-                        'error': (
-                            'Unauthorized: You cannot verify '
-                            'boarding for this trip.'
-                        )
-                    },
-                    status=status.HTTP_403_FORBIDDEN
-                )
+                return _not_yours(user, booking)
 
             payment = (
                 Payment.objects.select_for_update()
@@ -3497,6 +3805,23 @@ def verify_boarding(request, booking_id):
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            if pays_cash_now:
+                # Same rule as confirm_cash_payment: a lapsed hold whose seats
+                # were resold cannot board, and one still free gets numbers back.
+                if hold_expired_and_seat_gone(booking, trip):
+                    return Response(
+                        {
+                            'error': (
+                                'The time to hold this booking has run out '
+                                'and its seats are taken. Board a walk-up '
+                                'passenger instead.'
+                            ),
+                            'code': 'hold_expired',
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                ensure_numbers(trip, booking)
 
             # Record the real-world boarding event.
             BoardingEvent.objects.create(
@@ -3659,10 +3984,7 @@ def booking_live_location(request, booking_id):
         or is_company_staff
         or is_platform_admin
     ):
-        return Response(
-            {'error': 'Unauthorized'},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        return _not_yours(user, booking)
 
     if (
         booking.status in ('cancelled', 'no_show', 'completed')
@@ -3872,10 +4194,7 @@ def booking_reroute(request, booking_id):
             status=status.HTTP_404_NOT_FOUND,
         )
     if booking.user_id != request.user.id and not request.user.is_superuser:
-        return Response(
-            {'error': 'Unauthorized'},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        return _not_yours(request.user, booking)
 
     goal = request.query_params.get('goal')
     if goal not in ('pickup', 'destination'):
@@ -4274,6 +4593,13 @@ def report_incident(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    trip_id = parse_id(trip_id)
+    if trip_id is None:
+        return Response(
+            {'error': 'trip_id must be a valid id.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         trip = Trip.objects.select_related(
             'route',
@@ -4304,7 +4630,7 @@ def report_incident(request):
         for choice in Incident.INCIDENT_TYPE_CHOICES
     }
 
-    if incident_type not in valid_types:
+    if not isinstance(incident_type, str) or incident_type not in valid_types:
         return Response(
             {
                 'error': 'Invalid incident_type.',
@@ -4554,6 +4880,13 @@ def get_driver_bookings(request, driver_id):
                 "bookings": [],
             },
             status=status.HTTP_200_OK,
+        )
+
+    # A route-restricted operator reads passengers only on routes they handle.
+    if not can_handle_route(user, trip.route_id):
+        return Response(
+            {"error": "Not authorized for this route."},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     route = trip.route
@@ -5484,7 +5817,6 @@ def _active_incident_payload(booking):
 @permission_classes([IsAuthenticated])
 def booking_replacement_trips(request, booking_id):
     """Trips an incident-affected passenger could move their booking to."""
-    from django.db.models import Sum
     from django.utils import timezone
     from companies.models import Trip
 
@@ -5543,15 +5875,35 @@ def booking_replacement_trips(request, booking_id):
     return Response(result, status=status.HTTP_200_OK)
 
 
-def _boarding_book_window():
-    """How long past its departure time a boarding trip stays bookable."""
-    from .services import BOARDING_BOOKABLE_WINDOW
-    return BOARDING_BOOKABLE_WINDOW
-
-
 # ============================================================
 # WALK-IN BOOKING AT THE FIRST STAGE
 # ============================================================
+
+def _get_or_create_walk_in_user(User, phone):
+    """Find the account for a phone or create a password-less one.
+
+    Two trips can walk in the same new phone at once and each trip lock is
+    separate, so the loser of the insert race re-reads the winner's row
+    instead of failing the whole booking. The insert runs in a savepoint so
+    the caller's transaction (and its seat reservation) survives the clash.
+    """
+    for _ in range(5):
+        passenger = User.objects.filter(phone_number=phone).first()
+        if passenger is not None:
+            return passenger
+        base = f"walkin_{phone}".replace('+', '')
+        username, n = base, 1
+        while User.objects.filter(username=username).exists():
+            n += 1
+            username = f"{base}_{n}"
+        try:
+            with transaction.atomic():
+                return User.objects.create_user(
+                    username=username, phone_number=phone, password=None)
+        except IntegrityError:
+            continue
+    raise IntegrityError('Could not create or find the walk-in account.')
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -5563,20 +5915,26 @@ def walk_in_booking(request, trip_id):
     BoardingEvent, and the passenger's boarded_count incremented.
     """
     from django.contrib.auth import get_user_model
-    from django.db.models import F as _F, Sum
+    from django.db.models import F as _F
     from notifications import sms as _sms
 
     raw_seats = request.data.get('seats', 1)
     try:
         if isinstance(raw_seats, bool):
             raise ValueError
-        seats = int(str(raw_seats).strip())
+        text = str(raw_seats).strip()
+        if not text.isascii():
+            raise ValueError
+        seats = int(text)
     except (TypeError, ValueError):
         return Response({'error': 'seats must be a whole number.'},
                         status=status.HTTP_400_BAD_REQUEST)
-    if seats < 1 or seats > 20:
-        return Response({'error': 'seats must be between 1 and 20.'},
+    if seats < 1:
+        return Response({'error': 'seats must be at least 1.'},
                         status=status.HTTP_400_BAD_REQUEST)
+    if seats > settings.MAX_SEATS_PER_BOOKING:
+        return _seat_limit(
+            f'You can book at most {settings.MAX_SEATS_PER_BOOKING} seats at a time.')
 
     try:
         phone = kenyan_mobile(request.data.get('phone_number'))
@@ -5611,10 +5969,16 @@ def walk_in_booking(request, trip_id):
                 {'error': 'You cannot book passengers on this trip.'},
                 status=status.HTTP_403_FORBIDDEN)
 
-        if trip.status != 'boarding' or trip_has_departed(trip):
+        # Open once the stage is boarding, or once online booking has closed.
+        walk_up_open = trip.status == 'boarding' or (
+            trip.status == 'scheduled'
+            and timezone.now() >= booking_closes_at(trip)
+        )
+        if not walk_up_open or trip_has_departed(trip):
             return Response(
                 {'error': 'Walk-in booking is only available while the '
-                          'trip is boarding.'},
+                          'trip is boarding or after online booking has '
+                          'closed.'},
                 status=status.HTTP_409_CONFLICT)
 
         stage = (
@@ -5626,22 +5990,15 @@ def walk_in_booking(request, trip_id):
             return Response({'error': 'This route has no active first stage.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        available = trip.capacity - seats_taken(trip)
-        if seats > available:
+        try:
+            remaining = reserve_seats(trip, seats)
+        except NotEnoughSeats as exc:
             return Response(
-                {'error': f'Not enough seats available. Only {available} remaining.'},
+                {'error': f'Not enough seats available. Only {exc.available} remaining.'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        passenger = User.objects.filter(phone_number=phone).first()
-        if passenger is None:
-            base = f"walkin_{phone}".replace('+', '')
-            username, n = base, 1
-            while User.objects.filter(username=username).exists():
-                n += 1
-                username = f"{base}_{n}"
-            passenger = User.objects.create_user(
-                username=username, phone_number=phone, password=None)
-        elif passenger.role != 'passenger' or passenger.is_superuser:
+        passenger = _get_or_create_walk_in_user(User, phone)
+        if passenger.role != 'passenger' or passenger.is_superuser:
             return Response(
                 {'error': 'That phone number belongs to a staff account.'},
                 status=status.HTTP_400_BAD_REQUEST)
@@ -5685,7 +6042,7 @@ def walk_in_booking(request, trip_id):
         'seats': seats,
         'amount': str(total),
         'pickup_stage': stage.name,
-        'seats_remaining': available - seats,
+        'seats_remaining': remaining,
     }, status=status.HTTP_201_CREATED)
 
 
@@ -5827,7 +6184,7 @@ def trip_seat_block(request, trip_id, seat_no):
         if request.method == 'DELETE':
             trip.seat_assignments.filter(seat_no=seat_no, blocked=True).delete()
         else:
-            trip.seat_assignments.filter(booking__status='cancelled').delete()
+            purge_dead_rows(trip)
             if trip.seat_assignments.filter(seat_no=seat_no).exists():
                 return Response({'error': f'Seat {seat_no} is already taken.'},
                                 status=status.HTTP_409_CONFLICT)

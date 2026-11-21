@@ -34,8 +34,8 @@ jobs:
           case "$SCHEDULE" in
             '20 * * * *') jobs="generate-trips" ;;
             '0 3 * * *')  jobs="weekly-operations-reports" ;;
-            '')           jobs="expire-pending process-unapplied process-noshows close-stale-trips reconcile-refunds generate-trips" ;;
-            *)            jobs="expire-pending process-unapplied process-noshows close-stale-trips reconcile-refunds" ;;
+            '')           jobs="expire-pending process-unapplied process-noshows close-stale-trips reconcile-refunds wallet-sweeps generate-trips" ;;
+            *)            jobs="expire-pending process-unapplied process-noshows close-stale-trips reconcile-refunds wallet-sweeps" ;;
           esac
           failed=0
           for job in $jobs; do

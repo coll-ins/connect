@@ -54,6 +54,7 @@ export default function Sidebar({
               `sidebar-link ${isActive ? 'active' : ''}`
             }
             title={collapsed ? label : undefined}
+            aria-label={collapsed ? label : undefined}
           >
             <Icon size={19} strokeWidth={1.9} />
 
@@ -88,6 +89,7 @@ export default function Sidebar({
             logout();
           }}
           title={collapsed ? 'Logout' : undefined}
+          aria-label={collapsed ? 'Logout' : undefined}
         >
           <LogOut size={18} />
           {showLabels && <span>Logout</span>}

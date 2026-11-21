@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '../../legal/Legal.css';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -8,6 +8,7 @@ import FieldNote from '../../components/FieldNote';
 import { checkPhone, PHONE_HINT } from '../../utils/inputRules';
 import AuthTopBar from './AuthTopBar';
 import './Auth.css';
+import '../../styles/forms.css';
 
 // Only return to a page inside this user's own area.
 function returnPath(user, from) {
@@ -27,6 +28,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [slowConnection, setSlowConnection] = useState(false);
+  const phoneRef = useRef(null);
+
+  useEffect(() => { document.title = 'Sign in | CONNECT'; }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -52,6 +56,7 @@ export default function Login() {
       navigate(returnPath(user, location.state?.from), { replace: true });
     } catch (err) {
       setError(err.message);
+      phoneRef.current?.focus();
     } finally {
       setLoading(false);
     }
@@ -65,7 +70,7 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-page">
+    <main className="auth-page">
       <div className="auth-card">
         <AuthTopBar mode="signin" />
 
@@ -75,12 +80,13 @@ export default function Login() {
           Use the phone number and password you signed up with.
         </p>
 
-        {error && <div className="error">{error}</div>}
+        {error && <div id="login-error" className="error" role="alert">{error}</div>}
 
         <form onSubmit={submit} className="form-stack">
           <label>
             Phone number
             <input
+              ref={phoneRef}
               type="tel"
               inputMode="tel"
               maxLength={16}
@@ -89,22 +95,25 @@ export default function Login() {
               onChange={(e) => setPhone(e.target.value)}
               placeholder="07XX XXX XXX"
               autoComplete="tel"
-              aria-describedby="li-phone"
-              aria-invalid={Boolean(phone.trim() && phoneError)}
+              aria-describedby={error ? 'login-error li-phone' : 'li-phone'}
+              aria-invalid={Boolean(error || (phone.trim() && phoneError)) || undefined}
               required
             />
           </label>
           <FieldNote id="li-phone" value={phone} error={phoneError} hint={PHONE_HINT} />
 
-          <label>
-            Password
+          <div className="form-field">
+            <label htmlFor="login-password">Password</label>
             <PasswordInput
+              id="login-password"
               className="input"
+              aria-invalid={error ? 'true' : undefined}
+              aria-describedby={error ? 'login-error' : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-          </label>
+          </div>
 
           <button
             className="btn btn-primary btn-full"
@@ -125,6 +134,6 @@ export default function Login() {
           <Link to="/legal/refunds">Refunds</Link>
         </nav>
       </div>
-    </div>
+    </main>
   );
 }

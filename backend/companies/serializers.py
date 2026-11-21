@@ -4,6 +4,9 @@ from connect.validation import free_text, kenyan_mobile, place
 from .models import Company, Route, Trip, PickupStage
 
 
+ROUTE_PRICE_MAX = 100000  # KES per seat; keeps price x seats inside the total_amount column
+
+
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
@@ -45,6 +48,16 @@ class PickupStageSerializer(serializers.ModelSerializer):
             'source_ref',
         ]
         read_only_fields = ['id', 'route']
+
+    def validate_latitude(self, value):
+        if not -90 <= value <= 90:
+            raise serializers.ValidationError('Latitude must be between -90 and 90.')
+        return value
+
+    def validate_longitude(self, value):
+        if not -180 <= value <= 180:
+            raise serializers.ValidationError('Longitude must be between -180 and 180.')
+        return value
 
     def validate_name(self, value):
         name = ' '.join(str(value).strip().split())
@@ -120,6 +133,13 @@ class RouteSerializer(serializers.ModelSerializer):
     def validate_end_point(self, value):
         return place(value, 'the end point', example='e.g. Rongai')
 
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Price must be greater than zero.')
+        if value > ROUTE_PRICE_MAX:
+            raise serializers.ValidationError(f'Price cannot be more than {ROUTE_PRICE_MAX}.')
+        return value
+
 
 class TripSerializer(serializers.ModelSerializer):
     route_details = RouteSerializer(source='route', read_only=True)
@@ -152,8 +172,26 @@ class TripSerializer(serializers.ModelSerializer):
         annotated = getattr(obj, 'booked_annot', None)
         if annotated is not None:
             return int(annotated) + int(getattr(obj, 'blocked_annot', 0) or 0)
-        from bookings.seats import seats_taken
+        from bookings.services import seats_taken
         return seats_taken(obj)
+
+    booking_closes_at = serializers.SerializerMethodField()
+    booking_open = serializers.SerializerMethodField()
+    seats_available = serializers.SerializerMethodField()
+
+    def get_booking_closes_at(self, obj):
+        from bookings.services import booking_closes_at
+        return booking_closes_at(obj)
+
+    def get_booking_open(self, obj):
+        from django.utils import timezone
+        return (
+            obj.status in ('scheduled', 'boarding')
+            and timezone.now() < self.get_booking_closes_at(obj)
+        )
+
+    def get_seats_available(self, obj):
+        return max(obj.capacity - self.get_booked_seats(obj), 0)
 
     class Meta:
         model = Trip
@@ -172,6 +210,9 @@ class TripSerializer(serializers.ModelSerializer):
             'capacity',
             'status',
             'booked_seats',
+            'booking_closes_at',
+            'booking_open',
+            'seats_available',
         ]
         read_only_fields = [
             'id',

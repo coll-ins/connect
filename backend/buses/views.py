@@ -7,8 +7,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from bookings.seats import occupied_numbers, seats_taken
+from bookings.seats import occupied_numbers
+from bookings.services import seats_taken
 from companies.models import Company, Trip
+from connect.ids import parse_id
 from users.permissions import can_manage_company
 
 from .models import Bus
@@ -64,6 +66,11 @@ def bus_list(request):
         queryset = Bus.objects.select_related('company')
 
         requested_company_id = request.query_params.get('company_id')
+        if requested_company_id and parse_id(requested_company_id) is None:
+            return Response(
+                {'error': 'company_id must be a valid id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if user.is_superuser:
             if requested_company_id:
@@ -102,7 +109,12 @@ def bus_list(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        company_id = requested_company_id
+        company_id = parse_id(requested_company_id)
+        if company_id is None:
+            return Response(
+                {'error': 'company must be a valid id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     else:
         if not can_manage_company(user):

@@ -1,0 +1,96 @@
+.async-panel {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.async-panel-error { border-color: var(--danger); }
+.async-panel-error strong { color: var(--text); }
+
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -64px;
+  z-index: 10002;
+  padding: 12px 16px;
+  border-radius: var(--radius-control);
+  background: var(--surface-3);
+  color: var(--text);
+}
+.skip-link:focus { top: 8px; }
+
+.error-boundary {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  max-width: 480px;
+  margin: 12vh auto 0;
+  padding: 24px;
+  color: var(--text);
+}
+.error-boundary pre {
+  max-width: 100%;
+  overflow: auto;
+  font-size: 12px;
+  color: var(--danger-text);
+}
+
+/* Status chips: the word label always shows, each group has its own icon shape and one --st-* colour. */
+.passenger-status,
+.driver-live-page .driver-live-passenger-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: capitalize;
+}
+.passenger-status[data-status='pending'],
+.driver-live-page .driver-live-passenger-status[data-status='pending'] {
+  color: var(--st-pending) !important;
+  background: rgb(var(--st-pending-rgb) / 0.14) !important;
+  border-color: rgb(var(--st-pending-rgb) / 0.35) !important;
+}
+.passenger-status[data-status='confirmed'],
+.driver-live-page .driver-live-passenger-status[data-status='confirmed'] {
+  color: var(--st-confirmed) !important;
+  background: rgb(var(--st-confirmed-rgb) / 0.14) !important;
+  border-color: rgb(var(--st-confirmed-rgb) / 0.35) !important;
+}
+.passenger-status[data-status='boarding'],
+.driver-live-page .driver-live-passenger-status[data-status='boarding'] {
+  color: var(--st-boarding) !important;
+  background: rgb(var(--st-boarding-rgb) / 0.14) !important;
+  border-color: rgb(var(--st-boarding-rgb) / 0.35) !important;
+}
+.passenger-status[data-status='cancelled'],
+.driver-live-page .driver-live-passenger-status[data-status='cancelled'] {
+  color: var(--st-cancelled) !important;
+  background: rgb(var(--st-cancelled-rgb) / 0.14) !important;
+  border-color: rgb(var(--st-cancelled-rgb) / 0.35) !important;
+  text-decoration: line-through;
+}
+.passenger-status[data-status='refunded'],
+.driver-live-page .driver-live-passenger-status[data-status='refunded'] {
+  color: var(--st-refunded) !important;
+  background: rgb(var(--st-refunded-rgb) / 0.14) !important;
+  border-color: rgb(var(--st-refunded-rgb) / 0.35) !important;
+}
+.passenger-status[data-status='failed'],
+.driver-live-page .driver-live-passenger-status[data-status='failed'] {
+  color: var(--danger-text) !important;
+  background: rgb(var(--danger-rgb) / 0.14) !important;
+  border-color: rgb(var(--danger-rgb) / 0.35) !important;
+}
+
+/* Button states: one pressed and one disabled look for every filled button. Focus uses the global :focus-visible ring. */
+:is(.btn, .glass-primary-button, .glass-empty-action, .company-primary-button, .operator-primary-button, .pa-button, .pa-primary-button, .driver-live-update):active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.92);
+}
+:is(.btn, .glass-primary-button, .glass-empty-action, .company-primary-button, .operator-primary-button, .pa-button, .pa-primary-button, .driver-live-update):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

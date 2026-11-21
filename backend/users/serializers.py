@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from connect.validation import kenyan_mobile, person_name, place
 
 from .models import CustomUser
+from .phone import canonical_phone, phone_variants
 
 
 class _TypedFields:
@@ -116,6 +117,18 @@ class CompanyStaffSerializer(_TypedFields, serializers.ModelSerializer):
             'company',
             'company_name',
         ]
+
+    def validate_phone_number(self, value):
+        # The model stores the canonical form, so a differently written copy of
+        # an existing number would only fail later, as a database error.
+        canonical = canonical_phone(value)
+        taken = CustomUser.objects.filter(phone_number__in=phone_variants(canonical))
+        if self.instance is not None:
+            taken = taken.exclude(pk=self.instance.pk)
+        if taken.exists():
+            raise serializers.ValidationError(
+                'A user with this phone number already exists.')
+        return canonical
 
     def validate_role(self, value):
         allowed_roles = {

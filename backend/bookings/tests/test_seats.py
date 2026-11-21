@@ -87,9 +87,12 @@ class SeatBookingTests(APITestCase):
         self.assertEqual(r.json()["seat_numbers"], [7, 8])
 
     def test_without_numbers_random_free_seats_are_given(self):
-        self._book(self.pax, 10, list(range(1, 11)))
+        # One booking holds at most MAX_SEATS_PER_BOOKING (6) seats.
+        self._book(self.pax, 6, list(range(1, 7)))
         Booking.objects.filter(user=self.pax).update(status="confirmed")  # paid, so off the unpaid-seat cap
-        self._book(self.pax, 3, [11, 12, 13])
+        self._book(self.pax, 6, list(range(7, 13)))
+        Booking.objects.filter(user=self.pax).update(status="confirmed")
+        self._book(self.pax, 1, [13])
         with mock.patch("bookings.seats.random.sample", wraps=random.sample) as pick:
             r = self._book(self.other, 1)
         self.assertEqual(r.json()["seat_numbers"], [14])  # the only free seat

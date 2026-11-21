@@ -5,22 +5,34 @@ import { Armchair, ArrowUpRight, Banknote, Bell, Bus, Check, CreditCard, MapPin,
 import { apiRequest } from '../../api';
 import { enablePush, pushPermission } from '../../utils/push';
 import { useAuth } from '../../context/AuthContext';
+import Modal from '../../components/ui/Modal';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import PayCountdown from '../../components/ui/PayCountdown';
+import useAsyncData from '../../hooks/useAsyncData';
+import { formatMoney as money } from '../../utils/money';
+import { deriveStatus } from '../../utils/loadStatus';
+import { createIntentKeys, withIdempotencyKey } from '../../utils/idempotency';
+import { MAX_SEATS_PER_BOOKING, bookingClosedMessage, seatLimitMessage, shouldCheckPaymentStatus } from '../../utils/payment';
 import { canOpenTripMap, isActiveBooking } from './liveMapUtils';
+import WalletPayOption from './WalletPayOption';
+import { walletPayErrorMessage } from '../../utils/wallet';
 import AppShell from '../../components/layout/AppShell';
 import Notice, { NoticeStack } from '../../components/ui/Notice';
 import './PassengerHomeRedesign.css';
+import './WalletPanels.css';
 import PassengerLiveMap from './PassengerLiveMap';
 import SeatMap from '../../components/SeatMap';
 import FieldNote from '../../components/FieldNote';
 import { checkPhone, checkPlace, PHONE_HINT } from '../../utils/inputRules';
 import bookSeatImage from '../../assets/journeys/bookaseat.jpeg';
 import deliveryImage from '../../assets/journeys/orderdelivery.jpeg';
+import StatusIcon from '../../components/ui/StatusIcon';
+import { statusGroup } from '../../utils/statusChip';
 import bookBusImage from '../../assets/journeys/bookabus.jpeg';
 import supermetroImage from '../../assets/companies/supermetro.jpeg';
 import cityshuttleImage from '../../assets/companies/cityshuttle.jpeg';
 import latemaImage from '../../assets/companies/latema.jpeg';
 
-const money = (v) => `KES ${Number(v || 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const date = (v) => v ? new Date(v).toLocaleString('en-KE',{dateStyle:'medium',timeStyle:'short'}) : 'Not scheduled';
 
 function Shell({ children }) {
@@ -53,6 +65,42 @@ function PaymentModal({
     if (e.status >= 400 && e.status < 500 && e.status !== 409) onStarted(false, booking.booking_id);
   };
 
+  const [walletNonce, setWalletNonce] = useState(0);
+  // A same-tick second click runs before `busy` re-renders; the ref stops it.
+  const walletInFlight = useRef(false);
+
+  const walletPay = async () => {
+    if (walletInFlight.current) return;
+    walletInFlight.current = true;
+    setBusy(true); setError(''); onStarted(true);
+    try {
+      const res = await apiRequest(`/bookings/payments/${booking.booking_id}/wallet/`, {
+        method: 'POST', silent: true,
+      });
+      onPaymentConfirmed({
+        ...booking,
+        status: res?.booking_status || 'confirmed',
+        payment_status: 'confirmed',
+        payment_method: 'wallet',
+      });
+    } catch (e) {
+      refused(e);
+      const m = walletPayErrorMessage(e);
+      if (m.refreshBooking) {
+        // The booking changed under us: show why and reload it, offer no more options.
+        setMessage(m.text);
+        setStep('stale');
+        onPaid();
+      } else {
+        setError(m.text);
+        if (m.refreshWallet) setWalletNonce((n) => n + 1);
+      }
+    } finally {
+      walletInFlight.current = false;
+      setBusy(false);
+    }
+  };
+
   const cash = async () => {
     setBusy(true);
     setError('');
@@ -72,6 +120,7 @@ function PaymentModal({
     } catch (e) {
       setError(e.message);
       refused(e);
+      if (e?.status === 409) onPaid();
     } finally {
       setBusy(false);
     }
@@ -86,7 +135,17 @@ function PaymentModal({
       });
       setMessage(data.display_text || 'Check your phone and complete the M-PESA prompt.');
       setStep('mpesa-wait');
-    } catch(e){setError(e.message);refused(e)} finally{setBusy(false)}
+    } catch(e){
+      if (shouldCheckPaymentStatus(e)) {
+        // The prompt may still have been sent: check before starting another.
+        setMessage('We could not confirm that the payment request went through. Check the payment status before you try again.');
+        setStep('check-status');
+      } else {
+        setError(e.message);
+        refused(e);
+        if (e?.status === 409) onPaid();
+      }
+    } finally{setBusy(false)}
   };
 
   const card = async () => {
@@ -96,16 +155,26 @@ function PaymentModal({
         method:'POST', body:{callback_url:`${window.location.origin}/passenger/payment/${booking.booking_id}`}
       });
       window.location.href = data.authorization_url;
-    } catch(e){setError(e.message);refused(e);setBusy(false)}
+    } catch(e){
+      if (shouldCheckPaymentStatus(e)) {
+        setMessage('We could not confirm that the card checkout started. Check the payment status before you try again.');
+        setStep('check-status');
+      } else {
+        setError(e.message);
+        refused(e);
+        if (e?.status === 409) onPaid();
+      }
+      setBusy(false);
+    }
   };
 
   useEffect(() => {
-    if (step !== 'mpesa-wait') return undefined;
+    if (step !== 'mpesa-wait' && step !== 'check-status') return undefined;
     let active = true; let attempts = 0;
     const poll = async () => {
       attempts += 1;
       try {
-        const status = await apiRequest(`/bookings/payments/${booking.booking_id}/status/`);
+        const status = await apiRequest(`/bookings/payments/${booking.booking_id}/status/`, { silent: true });
         if (!active) return;
         setError('');
         if (status.payment_status === 'confirmed') { onPaymentConfirmed(booking); return; }
@@ -121,18 +190,28 @@ function PaymentModal({
     return () => { active = false; };
   }, [step, booking.booking_id, onPaid, onPaymentConfirmed, onStarted]);
 
+  // Read-only: after a timeout the charge may exist, so never start another.
+  const checkStatus = async () => {
+    setBusy(true); setError('');
+    try {
+      const data = await apiRequest(`/bookings/payments/${booking.booking_id}/status/`);
+      if (data.payment_status === 'confirmed') onPaymentConfirmed(booking);
+      else if (data.payment_status === 'failed') { setError('The payment did not go through. You can try again.'); setStep('method'); }
+      else setMessage('No payment has been confirmed yet. If you completed one, wait a moment and check again.');
+    } catch(e){setError(e.message)} finally{setBusy(false)}
+  };
+
   const verify = async () => {
     setBusy(true); setError('');
     try { const data = await apiRequest(`/bookings/payments/${booking.booking_id}/verify/`, {method:'POST'}); if(data.payment_status==='confirmed'){onPaymentConfirmed(booking);} else setMessage(data.message || 'Payment is still pending.'); }
     catch(e){setError(e.message)} finally{setBusy(false)}
   };
 
-  // Rendered on the body: an animated page section would otherwise anchor this
-  // "fixed" window to itself, leaving it down the page instead of on screen.
-  return createPortal(<div className="modal-backdrop"><div className="modal">
-    <button className="btn btn-ghost modal-close" onClick={onClose}>Close</button>
+  return <Modal labelledBy="pay-modal-title" onClose={onClose}>
     <p className="eyebrow">Booking {booking.booking_number}</p>
-    <h2>{money(booking.total_amount)}</h2>{step!=='mpesa-number' && <p className="muted">Choose how you want to complete this trip.</p>}
+    <h2 id="pay-modal-title">{money(booking.total_amount)}</h2>
+    {step !== 'stale' && <PayCountdown payBefore={booking.pay_before} />}
+    {step!=='mpesa-number' && <p className="muted">Choose how you want to complete this trip.</p>}
     {error && (
       <NoticeStack>
         <Notice title="Payment issue" onClose={() => setError('')}>
@@ -142,6 +221,7 @@ function PaymentModal({
     )}
     {step==='method' && <div className="stack" style={{marginTop:18}}>
       <button className="pay-option" onClick={()=>setStep('online')} disabled={busy}><div className="pay-icon"><CreditCard size={20} aria-hidden="true" /></div><div><strong>Pay online</strong><span>Choose M-PESA or Card securely through Paystack.</span></div></button>
+      <WalletPayOption booking={booking} busy={busy} onPay={walletPay} reloadKey={walletNonce} />
       {cashEnabled && <button className="pay-option" onClick={cash} disabled={busy || cashLocked} aria-describedby="cash-note"><div className="pay-icon"><Banknote size={20} aria-hidden="true" /></div><div><strong>Pay cash on board</strong><span id="cash-note">{cashLocked ? cashLockedReason : 'Get your PIN now, track the bus, and pay the driver when you board.'}</span></div></button>}
     </div>}
     {step==='online' && <div className="stack" style={{marginTop:18}}>
@@ -169,7 +249,9 @@ function PaymentModal({
           Enter the M-PESA number you want to use.
         </p>
 
+        <label htmlFor="mpesa-other-phone" style={{display:'block',marginTop:10,fontWeight:600}}>M-PESA phone number</label>
         <input
+          id="mpesa-other-phone"
           type="tel"
           value={mpesaPhone}
           onChange={(e)=>setMpesaPhone(e.target.value)}
@@ -219,8 +301,10 @@ function PaymentModal({
     </div>}
 
     {step==='mpesa-wait' && <div className="payment-status"><div className="payment-spinner"/><h3>Check your phone</h3><p className="muted">{message}</p><p className="mobile-note">Authorize the M-PESA prompt on the phone that received it.</p><button className="btn btn-secondary" onClick={verify} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
+    {step==='check-status' && <div className="payment-status"><h3>Check your payment</h3><p className="muted">{message}</p><button className="btn btn-secondary" onClick={checkStatus} disabled={busy}>{busy?'Checking…':'Check payment status'}</button></div>}
+    {step==='stale' && <div className="payment-status" role="status"><h3>Booking updated</h3><p className="muted">{message}</p></div>}
     {step==='cash-success' && <div className="success">Seat held. Your boarding PIN is on your trip card now. Track the bus, then pay the driver in cash and show your PIN when you board.</div>}
-  </div></div>, document.body);
+  </Modal>;
 }
 
 
@@ -274,11 +358,25 @@ const dayLabel = (key) =>
     month: 'short',
   });
 
+const isToday = (key) => {
+  const now = new Date();
+  return key === new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+
+// Minutes before departure at which booking closes, read from the server's own
+// per-trip closing time; '' when the list has nothing to read it from.
+const cutoffMinutes = (trips) => {
+  const t = trips.find((x) => x.booking_closes_at && x.departure_at);
+  if (!t) return null;
+  const m = Math.round((new Date(t.departure_at) - new Date(t.booking_closes_at)) / 60000);
+  return Number.isFinite(m) && m >= 0 ? m : null;
+};
+
 export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const urlJourney = fromSearch(location.search, initialJourneyStep);
-  const [companies,setCompanies]=useState([]),[routes,setRoutes]=useState([]),[trips,setTrips]=useState([]);
+  const [trips,setTrips]=useState([]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
@@ -287,8 +385,21 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   });
   const [nextTripDate,setNextTripDate]=useState(null),[tripsLoading,setTripsLoading]=useState(false);
   const [bookings,setBookings]=useState([]);
+  const [bookingsError,setBookingsError]=useState(''),[bookingsLoaded,setBookingsLoaded]=useState(false);
+  const [tripsError,setTripsError]=useState(''),[tripsReload,setTripsReload]=useState(0);
   const [trackingBooking,setTrackingBooking]=useState(null);
   const [company,setCompany]=useState(urlJourney.company),[route,setRoute]=useState(urlJourney.route);
+  const companiesQ = useAsyncData(
+    () => apiRequest('/companies/', { silent: true }).then((d) => (Array.isArray(d) ? d : [])),
+  );
+  const companies = companiesQ.data || [];
+  const routesQ = useAsyncData(
+    () => (company
+      ? apiRequest(`/companies/${company}/routes/`, { silent: true }).then((d) => (Array.isArray(d) ? d : []))
+      : Promise.resolve([])),
+    [company],
+  );
+  const routes = routesQ.data || [];
   const [bookingTrip,setBookingTrip]=useState(null);
   const [pickedSeats,setPickedSeats]=useState([]),[seatMapKey,setSeatMapKey]=useState(0);
   // autoCount > 0: the passenger let us choose; the server picks random free seats.
@@ -297,20 +408,23 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
   const [selectedStage,setSelectedStage]=useState(null);
   const [otherPickup,setOtherPickup]=useState('');
   const otherPickupError = checkPlace(otherPickup, 'the pickup location', { example: 'e.g. Shell Rongai or Galleria Mall' });
+  const intentKeys = useRef(createIntentKeys());
   const [paymentBooking,setPaymentBooking]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('');
 
+  // Page-load request: failure shows an inline Retry panel, not the toast.
+  // Only bookings are read here; the wallet result was never used and its
+  // failure used to wipe this list.
   const refresh = useCallback(async()=>{
     try {
-      const [bookingData] = await Promise.all([
-        apiRequest("/bookings/my/"),
-        apiRequest("/wallet/")
-      ]);
-
+      const bookingData = await apiRequest("/bookings/my/", { silent: true });
       setBookings(Array.isArray(bookingData) ? bookingData : []);
+      setBookingsLoaded(true);
+      setBookingsError('');
     } catch(e) {
-      setError(e.message);
+      setBookingsError(e.message);
     }
   },[]);
+  const bookingsStatus = deriveStatus({ loading: !bookingsError, error: bookingsError, hasData: bookingsLoaded });
   const handleBookingMapEntry = useCallback((booking = paymentBooking) => {
     const bookingId = booking?.booking_id ?? booking?.id;
 
@@ -369,8 +483,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     };
   }, [sheetOpen, closePayment]);
 
-  useEffect(()=>{apiRequest('/companies/').then(d=>setCompanies(Array.isArray(d)?d:[])).catch(e=>setError(e.message));refresh()},[refresh]);
-  useEffect(()=>{if(!company){setRoutes([]);setTrips([]);return} apiRequest(`/companies/${company}/routes/`).then(d=>setRoutes(d||[])).catch(e=>setError(e.message))},[company]);
+  useEffect(()=>{refresh()},[refresh]);
   useEffect(() => {
     if (!company) {
       setTrips([]);
@@ -381,13 +494,14 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     setTrips([]);
     setNextTripDate(null);
     setTripsLoading(true);
+    setTripsError('');
     setError('');
 
     const params = new URLSearchParams();
     if (route) params.set('route_id', route);
     if (selectedDate) params.set('date', selectedDate);
     const query = params.toString();
-    apiRequest(`/companies/${company}/trips/${query ? `?${query}` : ''}`)
+    apiRequest(`/companies/${company}/trips/${query ? `?${query}` : ''}`, { silent: true })
       .then(async (data) => {
         const list = Array.isArray(data) ? data : [];
         if (!active) return;
@@ -395,7 +509,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         if (list.length || !route) return;
         // Nothing on this date: find the route's next departure so the
         // passenger has somewhere to go instead of a dead end.
-        const all = await apiRequest(`/companies/${company}/trips/?route_id=${route}`);
+        const all = await apiRequest(`/companies/${company}/trips/?route_id=${route}`, { silent: true });
         const now = Date.now();
         const next = (Array.isArray(all) ? all : [])
           .filter((t) => ['scheduled', 'boarding'].includes(String(t.status).toLowerCase())
@@ -407,7 +521,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         }
       })
       .catch((error) => {
-        if (active) setError(error.message);
+        if (active) setTripsError(error.message);
       })
       .finally(() => {
         if (active) setTripsLoading(false);
@@ -416,7 +530,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     return () => {
       active = false;
     };
-  }, [company, route, selectedDate]);
+  }, [company, route, selectedDate, tripsReload]);
 
   // Cash bookings stay pending until the driver checks the PIN on board. Poll
   // so the trip card flips to boarded without a manual reload.
@@ -441,8 +555,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     return active.length>1?active.slice(0,-1):active;
   },[selectedRoute]);
   const seatsLeft=(t)=>Math.max(0,(t.capacity||0)-(t.booked_seats||0));
-  const canBookTrip=(t)=>seatsLeft(t)>0&&(t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId)));
+  const canBookTrip=(t)=>t.booking_open!==false&&seatsLeft(t)>0&&(t.status==='scheduled'||(t.status==='boarding'&&selectedStage&&String(selectedStage.id)===String(firstStageId)));
   const tripButtonLabel=(t)=>{
+    if(t.booking_open===false) return 'Booking closed';
     if(seatsLeft(t)<=0) return 'Fully booked';
     if(canBookTrip(t)) return 'Select trip';
     if(t.status==='boarding') return 'Boarding at first stage only';
@@ -477,10 +592,15 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         body.pickup_location = manualPickup;
       }
 
+      // One key per intent: a retry after a dropped response must not create
+      // a second pending booking; changing trip, seats or pickup starts a new one.
+      const intent = `${bookingTrip.id}|${autoCount}|${[...pickedSeats].sort((a, b) => a - b).join(',')}|${selectedStage?.id ?? ''}|${manualPickup}`;
       const b = await apiRequest('/bookings/create/', {
         method: 'POST',
-        body
+        body: withIdempotencyKey(body, intentKeys.current.keyFor(intent)),
+        silent: true,
       });
+      intentKeys.current.clear();
 
       // The stage stays chosen: closing the payment window before paying
       // returns to this same trip list, not back to picking a stage.
@@ -495,7 +615,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         fresh: true,
       });
     } catch(e) {
-      setError(e.message);
+      setError(bookingClosedMessage(e) || seatLimitMessage(e) || e.message);
       // Someone took the seat first: show the fresh map and let them re-pick.
       if (e.data?.code === 'seat_taken') { setPickedSeats([]); setSeatMapKey((k) => k + 1); }
     } finally {
@@ -554,7 +674,6 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     setJourneyMode(mode);
     setCompany('');
     setRoute('');
-    setRoutes([]);
     setTrips([]);
     setSelectedStage(null);
     setOtherPickup('');
@@ -605,8 +724,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
       setJourneyMode('');
       setCompany('');
       setRoute('');
-      setRoutes([]);
-      setTrips([]);
+        setTrips([]);
       setJourneyStep('home');
       return;
     }
@@ -614,8 +732,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     if (journeyStep === 'routes') {
       setCompany('');
       setRoute('');
-      setRoutes([]);
-      setTrips([]);
+        setTrips([]);
       setJourneyStep('companies');
       return;
     }
@@ -773,7 +890,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               </p>
             </div>
 
-            {!bookings.some(isActiveBooking) ? (
+            {bookingsStatus !== 'ready' ? (
+              <AsyncPanel status={bookingsStatus} title="your trips" loadingText="Loading your trips…" onRetry={() => { setBookingsError(''); refresh(); }} />
+            ) : !bookings.some(isActiveBooking) ? (
               <div className="glass-empty">
                 <span>No upcoming trips. Choose Book a seat above to find one.</span>
               </div>
@@ -825,7 +944,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                         <span>
                           <MapPin size={14} aria-hidden="true" /> {b.pickup_stage_name || b.pickup_location || 'Pickup pending'}
                         </span>
-                        <span>
+                        <span className="passenger-status" data-status={statusGroup(b.status)}>
+                          <StatusIcon group={statusGroup(b.status)} />
                           {b.status}
                         </span>
                       </div>
@@ -952,9 +1072,11 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             ))}
           </div>
 
-          {!companies.length && (
+          {companiesQ.status !== 'ready' ? (
+            <AsyncPanel status={companiesQ.status} title="transport companies" loadingText="Loading transport companies…" onRetry={companiesQ.reload} />
+          ) : !companies.length && (
             <div className="glass-empty">
-              <span>Loading transport companies…</span>
+              <span>No transport companies are available yet.</span>
             </div>
           )}
         </section>
@@ -1025,7 +1147,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
             ))}
           </div>
 
-          {!routes.length && (
+          {routesQ.status !== 'ready' ? (
+            <AsyncPanel status={routesQ.status} title="routes" loadingText="Loading routes…" onRetry={routesQ.reload} />
+          ) : !routes.length && (
             <div className="glass-empty">
               <span>No routes are currently available for this company.</span>
             </div>
@@ -1132,6 +1256,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
         <div className="pickup-other-form">
           <input
             id="other-pickup"
+            aria-label="Other pickup location"
             type="text"
             value={otherPickup}
             onChange={(e) => {
@@ -1147,7 +1272,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
           <button
             type="button"
-            className="primary-button"
+            className="btn btn-primary"
             disabled={Boolean(otherPickupError)}
             onClick={() => setJourneyStep('trips')}
           >
@@ -1217,11 +1342,16 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
           </label>
 
           <div className="modern-trip-list">
-            {tripsLoading && !trips.length ? (
+            {tripsError ? (
+              <AsyncPanel status="error" title="departures" onRetry={() => setTripsReload((n) => n + 1)} />
+            ) : tripsLoading && !trips.length ? (
               <div className="glass-empty" role="status">Loading departures…</div>
             ) : !trips.length ? (
               <div className="glass-empty">
                 <strong>No departures on {dayLabel(selectedDate)}</strong>
+                {isToday(selectedDate) && (
+                  <span>Booking for a trip closes shortly before it leaves, so a bus about to depart is not listed.</span>
+                )}
                 {nextTripDate ? (
                   <>
                     <span>The next departure on this route is on {dayLabel(nextTripDate)}.</span>
@@ -1239,7 +1369,15 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                 )}
               </div>
             ) : (
-              trips.map((t) => (
+              <>
+              {isToday(selectedDate) && (
+                <p className="muted">
+                  {cutoffMinutes(trips) != null
+                    ? `Booking closes ${cutoffMinutes(trips)} minutes before departure, so a bus about to leave is not listed.`
+                    : 'Booking closes shortly before departure, so a bus about to leave is not listed.'}
+                </p>
+              )}
+              {trips.map((t) => (
                 <article className="modern-trip-card" key={t.id}>
 
                   <div className="trip-time-block">
@@ -1278,7 +1416,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                     <span>
                       <Armchair size={14} aria-hidden="true" /> {seatsLeft(t)} of {t.capacity || 0} seats left
                     </span>
-                    <span>
+                    <span className="passenger-status" data-status={statusGroup(t.status)}>
+                      <StatusIcon group={statusGroup(t.status)} />
                       {t.status}
                     </span>
                   </div>
@@ -1297,7 +1436,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                   </div>
 
                 </article>
-              ))
+              ))}
+              </>
             )}
           </div>
         </section>
@@ -1307,21 +1447,16 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
           BOOKING MODAL
           ===================================================== */}
 
-      {bookingTrip && createPortal(
-        <div className="modal-backdrop">
-          <div className="modal modern-booking-modal">
+      {bookingTrip && (
+          <Modal
+            labelledBy="booking-modal-title"
+            className="modern-booking-modal"
+            onClose={() => setBookingTrip(null)}
+          >
             <div className="booking-modal-scroll">
-            <button
-              type="button"
-              className="btn btn-ghost modal-close"
-              onClick={() => setBookingTrip(null)}
-            >
-              Close
-            </button>
-
             <span className="glass-eyebrow">Confirm your journey</span>
 
-            <h2>{bookingTrip.route_details?.name}</h2>
+            <h2 id="booking-modal-title">{bookingTrip.route_details?.name}</h2>
 
             <p className="muted">
               {date(bookingTrip.departure_at)}
@@ -1359,7 +1494,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
               mode="pick"
               selected={pickedSeats}
               onChange={(next) => { setAutoCount(0); setPickedSeats(next); }}
-              max={Math.min(10, seatsLeft(bookingTrip))}
+              max={Math.min(MAX_SEATS_PER_BOOKING, seatsLeft(bookingTrip))}
               refreshKey={seatMapKey}
             />
             </div>
@@ -1381,7 +1516,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                         onClick={() => setAutoCount(autoCount - 1)}>−</button>
                       <strong aria-live="polite">{autoCount}</strong>
                       <button type="button" aria-label="One seat more"
-                        disabled={autoCount >= Math.min(10, seatsLeft(bookingTrip))}
+                        disabled={autoCount >= Math.min(MAX_SEATS_PER_BOOKING, seatsLeft(bookingTrip))}
                         onClick={() => setAutoCount(autoCount + 1)}>+</button>
                     </span>
                   </div>
@@ -1397,6 +1532,9 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                   <p className="booking-seat-note">Free seats are picked at random when you book. Your seat numbers show on your ticket.</p>
                 ) : null}
               </div>
+              {Number(seats) >= MAX_SEATS_PER_BOOKING && (
+                <p className="muted">You can book up to {MAX_SEATS_PER_BOOKING} seats at a time.</p>
+              )}
 
               <div className="booking-total-glass">
                 <span>Total journey cost</span>
@@ -1420,9 +1558,8 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
                   : seats ? `Book seat${seats === 1 ? '' : 's'} ${[...pickedSeats].sort((a, b) => a - b).join(', ')}` : 'Pick a seat first'}
               </button>
             </div>
-          </div>
-        </div>
-        , document.body)}
+          </Modal>
+      )}
 
       {/* =====================================================
           EXISTING PAYMENT FLOW
@@ -1430,7 +1567,7 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
 
       {paymentBooking && (
         <PaymentModal
-          booking={paymentBooking}
+          booking={bookings.find((b) => b.booking_id === paymentBooking.booking_id) || paymentBooking}
           onClose={closePayment}
           onStarted={markPaymentStarted}
           onPaid={refresh}
@@ -1449,4 +1586,3 @@ export default function PassengerDashboard({ initialJourneyStep = 'home' }) {
     </div>
   </Shell>;
 }
-import { createPortal } from 'react-dom';

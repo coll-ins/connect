@@ -97,6 +97,30 @@ class CashPaidAtPinTests(APITestCase):
         self.assertEqual(self.payment.settlement_status, "eligible")
         self.assertEqual(self.booking.status, "completed")
 
+    def test_cash_boarding_of_a_lapsed_hold_with_its_rows_purged_gets_seat_numbers(self):
+        from bookings.models import SeatAssignment
+        Booking.objects.filter(pk=self.booking.pk).update(held_until=timezone.now() - timedelta(minutes=5))
+        self.assertEqual(SeatAssignment.objects.filter(booking=self.booking).count(), 0)
+        r = self.client.post(self.url, {"boarding_pin": "482915"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, "completed")
+        self.assertEqual(SeatAssignment.objects.filter(booking=self.booking).count(), 1)
+
+    def test_cash_boarding_of_a_lapsed_hold_whose_seats_were_resold_is_refused(self):
+        trip = self.booking.trip
+        Booking.objects.filter(pk=self.booking.pk).update(held_until=timezone.now() - timedelta(minutes=5))
+        Booking.objects.create(
+            user=User.objects.create_user(username="q", password="x", phone_number="+254711000444"),
+            route=trip.route, trip=trip, driver=trip.driver, seats=trip.capacity,
+            total_amount=Decimal("1000"), status="confirmed")
+        r = self.client.post(self.url, {"boarding_pin": "482915"})
+        self.assertEqual(r.status_code, 409, r.content)
+        self.assertEqual(r.json()["code"], "hold_expired")
+        self.payment.refresh_from_db(); self.booking.refresh_from_db()
+        self.assertEqual(self.payment.status, "pending")
+        self.assertEqual(self.booking.status, "pending")
+
     def test_wrong_pin_records_nothing(self):
         r = self.client.post(self.url, {"boarding_pin": "000000"})
         self.assertEqual(r.status_code, 400)

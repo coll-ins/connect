@@ -29,7 +29,7 @@
   margin: 0;
   padding: 12px;
   border: 1px solid rgba(255,255,255,.12);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
 }
 
 .service-template-days legend {
@@ -42,6 +42,7 @@
 .service-template-days label {
   display: flex;
   align-items: center;
+  min-height: 32px;
   gap: 6px;
   color: var(--text);
   font-size: 13px;
@@ -49,15 +50,15 @@
 
 .service-template-days input,
 .service-template-renew input {
-  accent-color: var(--accent-text);
+  accent-color: var(--primary-text);
 }
 
 .service-template-renew {
   grid-column: 1 / -1;
   padding: 13px;
-  border: 1px solid rgb(var(--accent-rgb) / 0.22);
-  border-radius: 14px;
-  background: rgb(var(--accent-rgb) / 0.06);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-3);
 }
 
 .service-template-renew span,
@@ -96,7 +97,7 @@
   gap: 16px;
   padding: 15px;
   border: 1px solid rgba(255,255,255,.1);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: rgba(255,255,255,.035);
 }
 
@@ -127,7 +128,7 @@
 .service-template-empty {
   padding: 18px;
   border: 1px dashed rgba(255,255,255,.16);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   color: var(--text-2);
   font-size: 13px;
 }

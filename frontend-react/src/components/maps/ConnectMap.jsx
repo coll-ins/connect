@@ -86,9 +86,20 @@ function stageIcon(stage) {
       <i class="stage3d__shadow"></i>
       ${passengerCount > 0 ? `<b class="stage3d__badge">${passengerCount}</b>` : ''}
     `,
-    iconSize: [34, 44],
-    iconAnchor: [17, 42],
+    iconSize: [44, 44],
+    iconAnchor: [22, 42],
     popupAnchor: [0, -38],
+  });
+}
+// Tabbing to a marker outside the visible map would leave focus on something
+// the user cannot see, so the map pans just enough to bring it into view.
+function revealOnFocus(event) {
+  const marker = event.target;
+  const el = marker.getElement?.();
+  if (!el || el.dataset.revealOnFocus) return;
+  el.dataset.revealOnFocus = '1';
+  el.addEventListener('focus', () => {
+    marker._map?.panInside(marker.getLatLng(), { padding: [30, 30], animate: false });
   });
 }
 const stageIconCache = new Map();
@@ -225,7 +236,7 @@ function PassengerPopup({ passenger, stage }) {
           <div
             style={{
               marginTop: '4px',
-              fontSize: '11px',
+              fontSize: 'var(--text-xs)',
               color: '#777',
             }}
           >
@@ -570,6 +581,8 @@ export default function ConnectMap({
             key={`stage-${stage.id}`}
             position={stage.position}
             icon={cachedStageIcon(stage)}
+            title={`Stage ${stage.order}: ${stage.name}`}
+            eventHandlers={{ add: revealOnFocus }}
           >
             <Popup>
               <div style={{ minWidth: '230px' }}>
@@ -654,7 +667,7 @@ export default function ConnectMap({
                             <div
                               style={{
                                 marginTop: '3px',
-                                fontSize: '11px',
+                                fontSize: 'var(--text-xs)',
                                 color: '#777',
                               }}
                             >
@@ -698,6 +711,7 @@ export default function ConnectMap({
             key={`passenger-${assignedPassenger.booking_id}`}
             position={assignedPassenger.position}
             icon={passengerIcon}
+            title="Passenger pickup"
             zIndexOffset={900}
           >
             <Popup>
@@ -719,6 +733,7 @@ export default function ConnectMap({
             ref={vehicleMarkerRef}
             position={matchedPosition}
             icon={driverIcon}
+            title="Bus"
             zIndexOffset={1000}
           >
             <Popup>
@@ -782,6 +797,7 @@ export default function ConnectMap({
           <Marker
             position={passengerPosition}
             icon={passengerIcon}
+            title="Your location"
             zIndexOffset={900}
           >
             <Popup>

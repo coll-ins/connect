@@ -19,6 +19,8 @@ def get_sms():
 
 def format_number(phone):
     phone = phone.strip().replace(' ', '')
+    if phone.startswith('254') and len(phone) == 12:
+        return '+' + phone
     if phone.startswith('0'):
         return '+254' + phone[1:]
     if not phone.startswith('+'):

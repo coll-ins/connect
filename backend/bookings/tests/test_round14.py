@@ -101,7 +101,7 @@ class CashConfirmationIdentityTests(_Fixture, APITestCase):
         legacy = '0' + self.driver.phone_number[4:]
         Driver.objects.filter(pk=self.driver.pk).update(phone_number=legacy)
         passenger = self._user('r14_borrower', self.driver.phone_number)
-        self.assertEqual(self._post(passenger).status_code, 403)
+        self.assertEqual(self._post(passenger).status_code, 404)
         self._still_unpaid()
 
     def test_blank_phone_driver_record_authorises_nobody(self):
@@ -109,5 +109,5 @@ class CashConfirmationIdentityTests(_Fixture, APITestCase):
         user = User.objects.create_user(
             username='r14_nophone_driver', password=STRONG,
             role='driver', company=self.company)
-        self.assertEqual(self._post(user).status_code, 403)
+        self.assertEqual(self._post(user).status_code, 404)
         self._still_unpaid()

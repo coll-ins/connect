@@ -1,1 +1,1 @@
-web: python manage.py migrate --noinput && python manage.py createcachetable && python manage.py ensure_superuser && gunicorn connect.wsgi --log-file -
+web: python manage.py migrate --noinput && python manage.py createcachetable && python manage.py ensure_superuser && gunicorn connect.wsgi --workers 2 --threads 4 --timeout 120 --log-file -

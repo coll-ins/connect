@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import './Notice.css';
 
 export function NoticeStack({ children }) {
-  return <div className="cn-stack" aria-live="assertive">{children}</div>;
+  return <div className="cn-stack">{children}</div>;
 }
 
 export default function Notice({ kind = 'error', title, children, onClose, autoHideMs = 0 }) {

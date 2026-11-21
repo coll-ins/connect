@@ -49,7 +49,11 @@ test('cash booking opens the map with the boarding PIN before the cash is paid',
 
   // The company manager takes the cash.
   const staff = await browser.newContext({ baseURL: 'http://127.0.0.1:5174' });
+  // Login is CSRF-protected too: fetch the token first, then read the fresh one the login issues.
+  await staff.request.get('/api/users/csrf/');
+  const loginCsrf = (await staff.cookies()).find((c) => c.name === 'csrftoken')?.value;
   const login = await staff.request.post('/api/users/login/', {
+    headers: { 'X-CSRFToken': loginCsrf, Origin: 'http://127.0.0.1:5174' },
     data: { phone_number: '+254799000003', password: 'demo-pass-123' },
   });
   expect(login.ok()).toBeTruthy();

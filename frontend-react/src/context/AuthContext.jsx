@@ -125,7 +125,8 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('connect:signed-out', end);
   }, []);
 
-  const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials }));
+  // silent: Login renders its own role="alert" error; a global toast would say it twice.
+  const login = async (credentials) => save(await apiRequest('/users/login/', { method: 'POST', body: credentials, silent: true }));
   // Signup renders its own role="alert" error; a global toast would say it twice.
   const signup = async (credentials) => save(await apiRequest('/users/register/', { method: 'POST', body: credentials, silent: true }));
 

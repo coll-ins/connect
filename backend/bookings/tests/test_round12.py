@@ -51,21 +51,21 @@ class CashConfirmationRoleTests(_Fixture, APITestCase):
     def test_passenger_with_the_drivers_phone_is_refused(self):
         impostor = self._user('r12_impostor', self.driver.phone_number)
         response = self._post(impostor)
-        self.assertEqual(response.status_code, 403, getattr(response, 'data', None))
+        self.assertEqual(response.status_code, 404, getattr(response, 'data', None))
         self._still_unpaid()
 
     def test_driver_account_of_another_company_is_refused(self):
         other = Company.objects.create(name='R12 Other Co')
         stranger = self._user(
             'r12_stranger', self.driver.phone_number, role='driver', company=other)
-        self.assertEqual(self._post(stranger).status_code, 403)
+        self.assertEqual(self._post(stranger).status_code, 404)
         self._still_unpaid()
 
     def test_manager_of_another_company_is_refused(self):
         other = Company.objects.create(name='R12 Other Co 2')
         manager = self._user(
             'r12_other_manager', '+254733001201', role='company_manager', company=other)
-        self.assertEqual(self._post(manager).status_code, 403)
+        self.assertEqual(self._post(manager).status_code, 404)
         self._still_unpaid()
 
     def test_assigned_driver_is_still_allowed(self):

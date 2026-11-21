@@ -2,6 +2,7 @@ import hmac
 import io
 import logging
 import time
+import uuid
 
 from django.conf import settings
 from django.core.cache import cache
@@ -20,6 +21,7 @@ JOBS = {
     'reconcile-refunds': ('reconcile_refunds', []),
     'generate-trips': ('generate_scheduled_trips', []),
     'weekly-operations-reports': ('send_weekly_operations_reports', []),
+    'wallet-sweeps': ('wallet_sweeps', []),
 }
 LOCK_TTL = 600  # seconds; a crashed run frees itself after this
 
@@ -39,7 +41,10 @@ def run_job(request, job):
 
     name, args = spec
     lock_key = f'cron-lock:{job}'
-    if not cache.add(lock_key, '1', LOCK_TTL):
+    # A unique token, so a run whose lock timed out cannot delete the lock
+    # of the run that started after it.
+    token = uuid.uuid4().hex
+    if not cache.add(lock_key, token, LOCK_TTL):
         return JsonResponse({'status': 'already_running', 'job': job}, status=202)
 
     out = io.StringIO()
@@ -50,7 +55,8 @@ def run_job(request, job):
         log.exception('cron job %s failed', job)
         return JsonResponse({'status': 'error', 'job': job}, status=500)
     finally:
-        cache.delete(lock_key)
+        if cache.get(lock_key) == token:
+            cache.delete(lock_key)
     return JsonResponse({
         'status': 'ok',
         'job': job,

@@ -9,11 +9,10 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from bookings.models import BoardingEvent, Booking
+from bookings.models import Booking
 from buses.models import Bus
 from companies.models import Company, Route, Trip
 from drivers.models import Driver  # Ensure driver model is imported
-from wallets.models import Wallet
 
 User = get_user_model()
 
@@ -1082,7 +1081,7 @@ class CompanyFunctionViewsTests(APITestCase):
           price=Decimal("600.00"),
       )
 
-      other_trip = Trip.objects.create(
+      Trip.objects.create(
           route=other_route,
           driver=other_driver,
           departure_at=timezone.now(),

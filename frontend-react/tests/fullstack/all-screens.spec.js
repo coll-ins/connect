@@ -20,6 +20,8 @@ for (const [role, [phone, paths]] of Object.entries(ROLES)) {
     const problems = [];
     page.on('pageerror', (err) => problems.push(`JS error: ${err.message}`));
     page.on('response', (res) => {
+      // Withdrawals answer 503 feature_disabled on purpose while payouts are off; the wallet screen shows a calm "not yet".
+      if (res.url().includes('/api/wallet/withdrawals/') && res.status() === 503) return;
       if (res.url().includes('/api/') && res.status() >= 500) {
         problems.push(`${res.status()} ${res.request().method()} ${new URL(res.url()).pathname}`);
       }

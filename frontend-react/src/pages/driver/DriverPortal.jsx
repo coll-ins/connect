@@ -16,6 +16,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { Link, useLocation } from "react-router-dom";
 import { apiRequest } from "../../api";
+import Modal from "../../components/ui/Modal";
 import DriverJobs from "./DriverJobs";
 import "./DriverPortal.css";
 import SeatMap from "../../components/SeatMap";
@@ -208,6 +209,8 @@ export default function DriverPortal() {
   const [timetable, setTimetable] = useState([]);
   const [timetableLoading, setTimetableLoading] = useState(true);
   const [timetableError, setTimetableError] = useState("");
+  const [timetableKey, setTimetableKey] = useState(0);
+  const [bookingsLoaded, setBookingsLoaded] = useState(false);
   const [error, setError] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -222,7 +225,7 @@ export default function DriverPortal() {
 
     async function load() {
       try {
-        const d = await apiRequest("/drivers/me/");
+        const d = await apiRequest("/drivers/me/", { silent: true });
 
         if (!mounted) return;
 
@@ -233,13 +236,20 @@ export default function DriverPortal() {
           d?.driver?.id ||
           d?.profile?.id;
 
-        if (!driverId) return;
+        if (!driverId) {
+          setError("Your driver profile could not be found.");
+          return;
+        }
 
         const result = await apiRequest(
-          `/bookings/driver/${driverId}/`
+          `/bookings/driver/${driverId}/`,
+          { silent: true },
         );
 
         if (!mounted) return;
+
+        setError("");
+        setBookingsLoaded(true);
 
         setBookings(
           Array.isArray(result)
@@ -266,12 +276,10 @@ export default function DriverPortal() {
   }, [reloadKey]);
 
   useEffect(() => {
-    if (!driver?.id) return undefined;
-
     let mounted = true;
     const loadTimetable = async () => {
       try {
-        const result = await apiRequest("/drivers/me/timetable/");
+        const result = await apiRequest("/drivers/me/timetable/", { silent: true });
         if (!Array.isArray(result?.trips)) {
           throw new Error("The timetable response was invalid.");
         }
@@ -294,7 +302,7 @@ export default function DriverPortal() {
       mounted = false;
       window.clearInterval(interval);
     };
-  }, [driver?.id]);
+  }, [timetableKey]);
 
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -322,6 +330,11 @@ export default function DriverPortal() {
   const companyName = getCompanyName(driver);
   const initial = driverName.charAt(0).toUpperCase();
 
+  const retryTimetable = () => {
+    setTimetableLoading(true);
+    setTimetableKey((k) => k + 1);
+  };
+
   const selectPage = () => {
     setMobileOpen(false);
   };
@@ -329,32 +342,38 @@ export default function DriverPortal() {
   return (
     <div className="driver-app">
       {pinTarget && (
-        <div style={{position:"fixed",inset:0,zIndex:10000,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div style={{background:"#fff",color:"#111",borderRadius:16,padding:20,width:"100%",maxWidth:360}}>
-            <h3 style={{margin:"0 0 4px"}}>Board passenger</h3>
+        <Modal
+          labelledBy="board-pin-title"
+          onClose={() => { if (!pinBusy) setPinTarget(null); }}
+        >
+          <form onSubmit={(e) => { e.preventDefault(); submitPin(); }}>
+            <h3 id="board-pin-title" style={{margin:"0 0 4px"}}>Board passenger</h3>
             <p style={{margin:"0 0 12px"}}>{pinName(pinTarget)} · {pinTarget.booking_number || pinTarget.booking_id}</p>
             {cashDueOnBoard(pinTarget) && (
               <p style={{margin:"0 0 12px",padding:"8px 12px",borderRadius:8,background:"#fef3c7",color:"#78350f",fontWeight:600}}>
                 Take {kes(pinTarget.total_amount)} cash first. Entering the PIN records it as paid.
               </p>
             )}
+            <label htmlFor="board-pin-input" style={{display:"block",margin:"0 0 6px",fontWeight:600}}>Boarding PIN</label>
             <input
-              autoFocus
+              id="board-pin-input"
+              className="input"
               inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-              onKeyDown={(e) => e.key === "Enter" && submitPin()}
-              placeholder="Boarding PIN"
-              style={{width:"100%",fontSize:24,letterSpacing:6,textAlign:"center",padding:12,borderRadius:10,border:"1px solid #999",boxSizing:"border-box"}}
+              aria-invalid={pinError ? "true" : undefined}
+              aria-describedby={pinError ? "board-pin-error" : undefined}
+              style={{fontSize:24,letterSpacing:6,textAlign:"center",padding:12,borderRadius:10}}
             />
-            {pinError && <p style={{color:"#b42828",margin:"10px 0 0",fontWeight:600}}>{pinError}</p>}
+            {pinError && <p id="board-pin-error" role="alert" style={{color:"var(--danger-text)",margin:"10px 0 0",fontWeight:600}}>{pinError}</p>}
             <div style={{display:"flex",gap:8,marginTop:14}}>
-              <button type="button" disabled={pinBusy} onClick={() => setPinTarget(null)} style={{flex:1,padding:12,borderRadius:10,border:"1px solid #999",background:"#fff"}}>Cancel</button>
-              <button type="button" disabled={pinBusy || pin.length < 4} onClick={submitPin} style={{flex:1,padding:12,borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontWeight:700,opacity:(pinBusy || pin.length < 4) ? 0.6 : 1}}>{pinBusy ? "Verifying..." : "Verify"}</button>
+              <button type="button" className="btn btn-secondary" disabled={pinBusy} onClick={() => setPinTarget(null)} style={{flex:1,padding:12,borderRadius:10}}>Cancel</button>
+              <button type="submit" disabled={pinBusy || pin.length < 4} style={{flex:1,padding:12,borderRadius:10,border:"none",background:"var(--primary)",color:"var(--primary-ink)",fontWeight:700,opacity:(pinBusy || pin.length < 4) ? 0.6 : 1}}>{pinBusy ? "Verifying…" : "Verify"}</button>
             </div>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {/* SIDEBAR */}
@@ -504,8 +523,9 @@ export default function DriverPortal() {
           </div>
 
           {flash && (
-            <div onClick={() => setFlash(null)} style={{margin:"0 0 12px",padding:"12px 14px",borderRadius:12,fontWeight:700,cursor:"pointer",color:"#fff",background:flash.ok ? "#16a34a" : "#b42828"}}>
-              {flash.text}
+            <div role={flash.ok ? "status" : "alert"} style={{margin:"0 0 12px",padding:"12px 14px",borderRadius:12,fontWeight:700,color:flash.ok ? "var(--primary-ink)" : "#fff",background:flash.ok ? "var(--success)" : "var(--danger-fill)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+              <span>{flash.text}</span>
+              <button type="button" onClick={() => setFlash(null)} style={{minHeight:44,minWidth:44,padding:"0 12px",borderRadius:10,border:"1px solid currentColor",background:"transparent",color:"inherit",fontWeight:700}}>Dismiss</button>
             </div>
           )}
 
@@ -521,9 +541,12 @@ export default function DriverPortal() {
                 </Link>
               </div>
               {timetableLoading ? (
-                <div className="driver-empty">Loading your timetable…</div>
+                <div className="driver-empty" role="status" aria-busy="true">Loading your timetable…</div>
               ) : timetableError ? (
-                <div className="driver-error">{timetableError}</div>
+                <div className="driver-error" role="alert">
+                  {timetableError}{" "}
+                  <button type="button" className="btn btn-secondary" onClick={retryTimetable}>Retry</button>
+                </div>
               ) : todaysTrips.length ? (
                 <div className="driver-timetable-list">
                   {todaysTrips.map((trip) => (
@@ -552,12 +575,13 @@ export default function DriverPortal() {
               <section style={{order:5,margin:"16px 0 0",padding:18,borderRadius:16,border:"1px solid rgba(255,255,255,.12)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                   <h2 style={{margin:0,fontSize:18}}>Boarding desk</h2>
-                  <strong style={{padding:"6px 12px",borderRadius:999,background:"rgba(22,163,74,.18)"}}>Boarded {boarded} / {total}</strong>
+                  <strong style={{padding:"6px 12px",borderRadius:999,background:"rgb(var(--success-rgb) / 0.14)",color:"var(--success-text)"}}>Boarded {boarded} / {total}</strong>
                 </div>
                 <div style={{height:6,borderRadius:3,background:"rgba(255,255,255,.1)",margin:"12px 0 4px"}}>
-                  <div style={{height:6,borderRadius:3,width:`${pct}%`,background:"#16a34a",transition:"width .4s"}} />
+                  <div style={{height:6,borderRadius:3,width:`${pct}%`,background:"var(--success)",transition:"width .4s"}} />
                 </div>
-                {rows.length === 0 && <p style={{opacity:.7,margin:"12px 0 0"}}>No passengers assigned yet.</p>}
+                {!bookingsLoaded && !error && <p role="status" style={{color:"var(--text-2)",margin:"12px 0 0"}}>Loading passengers…</p>}
+                {bookingsLoaded && rows.length === 0 && <p style={{color:"var(--text-2)",margin:"12px 0 0"}}>No passengers assigned yet.</p>}
                 {rows.map((b) => {
                   const boardedRow = st(b) === "completed";
                   const cashDue = cashDueOnBoard(b);
@@ -567,18 +591,18 @@ export default function DriverPortal() {
                     <div key={b.booking_id} style={{display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderTop:"1px solid rgba(255,255,255,.08)"}}>
                       <div style={{minWidth:0}}>
                         <strong>{pinName(b)}</strong>
-                        <div style={{fontSize:13,opacity:.75}}>
+                        <div style={{fontSize:13,color:"var(--text-2)"}}>
                           {b.booking_number || `#${b.booking_id}`} · {b.payment_method || "-"} · pay {pay(b) || "-"} · {b.seat_numbers?.length ? `seat ${b.seat_numbers.join(", ")}` : `${b.seats || 1} seat(s)`}
                         </div>
                       </div>
                       {boardedRow ? (
-                        <span style={{...btn,background:"#16a34a",cursor:"default",display:"inline-flex",alignItems:"center"}}>Boarded</span>
+                        <span style={{...btn,background:"var(--success)",color:"var(--primary-ink)",cursor:"default",display:"inline-flex",alignItems:"center"}}>Boarded</span>
                       ) : cashDue ? (
-                        <button type="button" style={{...btn,background:"#d97706"}} onClick={() => verifyPassenger(b)}>Cash {kes(b.total_amount)} · Verify PIN</button>
+                        <button type="button" style={{...btn,background:"var(--primary)",color:"var(--primary-ink)"}} onClick={() => verifyPassenger(b)}>Cash {kes(b.total_amount)} · Verify PIN</button>
                       ) : canBoard ? (
-                        <button type="button" style={{...btn,background:"#2563eb"}} onClick={() => verifyPassenger(b)}>Verify PIN</button>
+                        <button type="button" style={{...btn,background:"var(--primary)",color:"var(--primary-ink)"}} onClick={() => verifyPassenger(b)}>Verify PIN</button>
                       ) : (
-                        <span style={{...btn,background:"#475569",cursor:"default",display:"inline-flex",alignItems:"center"}}>{label}</span>
+                        <span style={{...btn,background:"var(--surface-3)",color:"var(--text-2)",cursor:"default",display:"inline-flex",alignItems:"center"}}>{label}</span>
                       )}
                     </div>
                   );
@@ -588,9 +612,10 @@ export default function DriverPortal() {
           })()}
 
           {error && (
-            <div className="driver-error">
+            <div className="driver-error" role="alert">
               <strong>Data connection:</strong>{" "}
-              {error}
+              {error}{" "}
+              <button type="button" className="btn btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>Retry</button>
             </div>
           )}
 
@@ -692,12 +717,13 @@ export default function DriverPortal() {
               </div>
 
               {timetableLoading ? (
-                <div className="driver-empty">
+                <div className="driver-empty" role="status" aria-busy="true">
                   Loading your timetable…
                 </div>
               ) : timetableError ? (
-                <div className="driver-error">
-                  {timetableError}
+                <div className="driver-error" role="alert">
+                  {timetableError}{" "}
+                  <button type="button" className="btn btn-secondary" onClick={retryTimetable}>Retry</button>
                 </div>
               ) : timetableDays.length === 0 ? (
                 <div className="driver-empty">
@@ -758,7 +784,9 @@ export default function DriverPortal() {
                   );
                 })}
 
-              {bookings.length === 0 ? (
+              {!bookingsLoaded ? (
+                !error && <div className="driver-empty" role="status" aria-busy="true">Loading passengers…</div>
+              ) : bookings.length === 0 ? (
                 <div className="driver-empty">
                   No passengers found.
                 </div>
@@ -798,8 +826,8 @@ export default function DriverPortal() {
                               padding: "7px 12px",
                               border: 0,
                               borderRadius: 8,
-                              background: "#5fd9b0",
-                              color: "#03120d",
+                              background: "var(--primary)",
+                              color: "var(--primary-ink)",
                               fontSize: 12,
                               fontWeight: 800,
                               cursor: "pointer",
@@ -860,7 +888,9 @@ export default function DriverPortal() {
                 they need to be picked up.
               </p>
 
-              {bookings.length === 0 ? (
+              {!bookingsLoaded ? (
+                !error && <div className="driver-empty" role="status" aria-busy="true">Loading passengers…</div>
+              ) : bookings.length === 0 ? (
                 <div className="driver-empty">
                   No passenger pickups assigned.
                 </div>
@@ -929,8 +959,8 @@ export default function DriverPortal() {
                               padding: "7px 12px",
                               border: 0,
                               borderRadius: 8,
-                              background: "#5fd9b0",
-                              color: "#03120d",
+                              background: "var(--primary)",
+                              color: "var(--primary-ink)",
                               fontSize: 12,
                               fontWeight: 800,
                               cursor: "pointer",

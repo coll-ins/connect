@@ -776,7 +776,7 @@ export default function PassengerLiveMap({
 
   const requestIncidentRefund = async () => {
     if (!bookingId) return;
-    if (!window.confirm('Cancel your booking and request a refund?')) return;
+    if (!window.confirm('Cancel your booking? You get a full refund before the free-change cut-off, otherwise 50%.')) return;
 
     setIncidentBusy(true);
 
@@ -1545,6 +1545,7 @@ export default function PassengerLiveMap({
                 key={stage.id ?? stage.name}
                 position={position}
                 icon={stopIcon(Number(stage.order) || 1, Number(stage.order) === 1 ? 'first' : 'default')}
+                title={`Stop ${Number(stage.order) || 1}: ${stage.name}`}
               >
                 <Popup>
                   <strong>
@@ -1559,6 +1560,7 @@ export default function PassengerLiveMap({
             <Marker
               position={pickupPosition}
               icon={pickupIcon}
+              title="Your pickup stage"
               zIndexOffset={900}
             >
               <Popup>
@@ -1577,6 +1579,7 @@ export default function PassengerLiveMap({
             <Marker
               position={parkedBus.position}
               icon={parkedIcon}
+              title="Bus waiting at the stage"
               zIndexOffset={1000}
             >
               <Popup>
@@ -1595,6 +1598,7 @@ export default function PassengerLiveMap({
               position={shownBusPosition}
               icon={vehicleIcon}
               opacity={bus3DReady ? 0 : 1}
+              title="Bus"
             >
               <Popup>
                 <strong>{busNumber}</strong>
@@ -1618,6 +1622,7 @@ export default function PassengerLiveMap({
             <Marker
               position={passengerPosition}
               icon={passengerIcon}
+              title="Your location"
             >
               <Popup>
                 <strong>You</strong>
@@ -1765,7 +1770,7 @@ export default function PassengerLiveMap({
         {!sheetOpen && (
           <p
             onClick={() => setSheetOpen(true)}
-            style={{ margin: '8px 0 4px', fontSize: 14, fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}
+            style={{ margin: '8px 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
           >
             {busStatus}
             {etaMinutes != null ? ` · ${formatEta(etaMinutes)} to pickup` : ''}
@@ -1813,7 +1818,7 @@ export default function PassengerLiveMap({
                       padding: '10px 12px',
                       borderRadius: 12,
                       border: 'none',
-                      background: '#b42828',
+                      background: 'var(--danger-fill)',
                       color: '#fff',
                       fontWeight: 600,
                       cursor: 'pointer',

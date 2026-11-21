@@ -3,32 +3,66 @@
 :root {
   --font: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  --bg: #0b1215;
-  --surface: #10191d;
-  --surface-2: #16222a;
-  --surface-3: #1d2b33;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: #2a3a42;
+  --bg: #0f1114;
+  --surface: #171a1f;
+  --surface-2: #1f2329;
+  --surface-3: #282d34;
+  --border: #3a414a;
+  /* Input edge: at least 3:1 against bg and surface (WCAG 1.4.11). */
+  --border-input: #6b747e;
+  --border-strong: var(--border-input);
 
-  --text: #e8efed;
-  --text-2: #a7b5b3;
-  --text-3: #7d8d8b;
+  --text: #f2f0eb;
+  --text-2: #bcb8ae;
+  --text-3: #9f9b91;
 
-  --accent: #2ec98a;
-  --accent-rgb: 46 201 138;
-  --accent-text: #6fdcae;
-  --accent-ink: #03140c;
-  --accent-deep: #0f2a21;
+  /* Amber is the one action colour. Green is only for confirmed/live (--success). */
+  --primary: #f2b01e;
+  --primary-rgb: 242 176 30;
+  --primary-text: #f2b01e;
+  --primary-ink: #1a1304;
+  --primary-deep: #2e2408;
 
-  --warn: #efb041;
-  --warn-rgb: 239 176 65;
-  --danger: #ef6461;
-  --danger-rgb: 239 100 97;
-  --danger-text: #ff9b98;
+  --success: #3ddc97;
+  --success-rgb: 61 220 151;
+  --success-text: #3ddc97;
+  --info: #5bb8ff;
+  --info-rgb: 91 184 255;
+
+  --st-pending: #ff9f5a;
+  --st-confirmed: #3ddc97;
+  --st-boarding: #5bb8ff;
+  --st-cancelled: #b4b8be;
+  --st-refunded: #c4a7ff;
+  /* Channel triplets of the five status colours, for tinted chip backgrounds (no color-mix, so older WebViews work). */
+  --st-pending-rgb: 255 159 90;
+  --st-confirmed-rgb: 61 220 151;
+  --st-boarding-rgb: 91 184 255;
+  --st-cancelled-rgb: 180 184 190;
+  --st-refunded-rgb: 196 167 255;
+
+  /* Legacy names, kept as aliases so existing CSS keeps working until it is retargeted. */
+  --accent: var(--primary);
+  --accent-rgb: var(--primary-rgb);
+  --accent-text: var(--primary-text);
+  --accent-ink: var(--primary-ink);
+  --accent-deep: var(--primary-deep);
+
+  /* Same orange as --st-pending: 9.3:1 on --bg, 5.0:1 on its 20% tint (.rp-warn). */
+  --warn: #ff9f5a;
+  --warn-rgb: 255 159 90;
+  --danger: #e5484d;
+  --danger-rgb: 229 72 77;
+  --danger-text: #ff8a8e;
+  /* White text on this fill is 5.53:1; on --danger it was 3.15:1. */
+  --danger-fill: #c8282e;
+
+  --text-xs: 12px;
 
   --radius-control: 10px;
   --radius-card: 14px;
   --radius-panel: 16px;
+  --radius-pill: 999px;
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
