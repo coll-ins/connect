@@ -6,6 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import get_resolver
 from rest_framework.test import APIClient
 from companies.models import Company
+from bookings.tests.sim import fake_gateway as fg
 
 KEYS = ['trip_id','route_id','company_id','driver_id','bus_id','booking_id','seat_number','seat_numbers','amount','latitude','longitude','schedule_id','delivery_id','parcel_id','charter_id','pickup_stage_id','dropoff_stage_id','passengers','seats','count','page','limit','id','quantity']
 BODIES = [json.dumps({k: 'abc' for k in KEYS}), json.dumps({k: 99999999999999999999999 for k in KEYS}), json.dumps({k: {'a':1} for k in KEYS}), json.dumps({k: -1 for k in KEYS}), json.dumps({k: '' for k in KEYS}),
@@ -28,9 +29,14 @@ def fill(s):
 
 from collections import Counter
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+# The wallet switches are off by default and answer 503 'disabled' before reading the
+# body, which would hide the validation paths. On, with the gateway faked, the hostile
+# bodies reach them; a call that escaped to the real gateway fails the test.
+@override_settings(SECURE_SSL_REDIRECT=False, WALLET_TOPUP_ENABLED=True, WALLET_PAYOUTS_ENABLED=True)
 class Fuzz(TestCase):
     def test_fuzz(self):
+        fake = fg.FakePaystack().install(self)
+        self.addCleanup(lambda: self.assertEqual(fake.leaks, []))
         from unittest import mock
         import logging
         logging.disable(logging.CRITICAL)
@@ -47,7 +53,7 @@ class Fuzz(TestCase):
         for role in roles:
             try:
                 u = U.objects.create(username=f'u{role}', role=role, company=co, phone_number='0700000009' if role=='x' else None) if hasattr(U,'role') else U.objects.create(username=f'u{role}')
-            except Exception as e:
+            except Exception:
                 u = U.objects.create(username=f'u{role}')
             c = APIClient(raise_request_exception=False)
             c.force_authenticate(user=u)

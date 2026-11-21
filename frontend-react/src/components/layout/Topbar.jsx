@@ -49,7 +49,6 @@ export default function Topbar({ user }) {
           placeholder="Search CONNECT..."
           aria-label="Search CONNECT"
         />
-        <kbd>⌘ K</kbd>
       </div>
 
       <div className="topbar-actions">

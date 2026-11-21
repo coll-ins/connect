@@ -188,7 +188,11 @@ test('cash reservation opens its trip map without confirming payment', async ({ 
     page.locator('.leaflet-overlay-pane path').first(),
   ).toBeVisible();
   expect(createdBooking).toEqual({
-    trip_id: 22, seats: 1, seat_numbers: [5], pickup_stage_id: 5,
+    trip_id: 22,
+    seats: 1,
+    seat_numbers: [5],
+    pickup_stage_id: 5,
+    idempotency_key: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
   expect(selectedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 });
@@ -294,7 +298,12 @@ test('confirmed M-PESA payment enters the selected trip map automatically', asyn
   await expect(
     page.locator('.leaflet-overlay-pane path').first(),
   ).toBeVisible();
-  expect(createdBooking).toEqual({ trip_id: 22, seats: 1, pickup_stage_id: 5 });
+  expect(createdBooking).toEqual({
+    trip_id: 22,
+    seats: 1,
+    pickup_stage_id: 5,
+    idempotency_key: expect.stringMatching(/^[0-9a-f-]{36}$/),
+  });
 });
 
 test('cash booking automatically enables live tracking when its driver starts boarding', async ({ page }) => {

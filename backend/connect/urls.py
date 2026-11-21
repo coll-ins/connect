@@ -1,5 +1,6 @@
 from connect import cron as cron_views
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
@@ -44,7 +45,6 @@ def system_diagnostics(request):
 
 urlpatterns = [
     path('', health_check, name='root'),
-    path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health-check'),
     path(
     'api/system/diagnostics/',
@@ -94,6 +94,16 @@ urlpatterns = [
     path('api/internal/cron/<slug:job>/', cron_views.run_job, name='cron-job'),
     path('api/charters/', include('charters.urls')),
 ]
+
+# The Django admin is a second login door, so it is only mounted when the
+# deployment asks for it (ADMIN_SITE_ENABLED); its login has the same lockout.
+if settings.ADMIN_SITE_ENABLED:
+    from users.admin_login import locked_admin_login
+
+    urlpatterns += [
+        path('admin/login/', locked_admin_login, name='admin-login-locked'),
+        path('admin/', admin.site.urls),
+    ]
 
 admin.site.site_header = "My Custom API Admin"
 admin.site.site_title = "Admin Portal"

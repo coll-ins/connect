@@ -9,16 +9,18 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from companies.models import Company, Trip, TripSimulation
+from connect.ids import parse_id
 from users.models import CustomUser
 from users.permissions import (
     can_manage_company,
-    can_access_company,
 )
 from .models import Driver
 from .serializers import DriverSerializer
 from rest_framework.decorators import throttle_classes
 from .throttles import DriverLocationThrottle
+from django.conf import settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from users.identity import drivers_for_user, is_driver_account_for
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
@@ -122,6 +124,11 @@ def driver_list(request):
             )
 
         company_id = request.query_params.get('company_id')
+        if company_id and parse_id(company_id) is None:
+            return Response(
+                {'error': 'company_id must be a valid id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         queryset = Driver.objects.select_related(
             'company'
@@ -187,6 +194,13 @@ def driver_list(request):
         if not requested_company_id:
             return Response(
                 {'error': 'company is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        requested_company_id = parse_id(requested_company_id)
+        if requested_company_id is None:
+            return Response(
+                {'error': 'company must be a valid id.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -507,12 +521,44 @@ def _can_manage_driver_location(request, driver):
     return can_manage_company(user, driver.company)
 
 
-def record_driver_fix(driver, latitude, longitude, simulated=False):
+def _read_fix_quality(data):
+    """
+    Optional `fix_at` (ISO 8601 with a timezone: the device's own fix time) and
+    `accuracy_m`. Returns (fixed_at or None, accuracy_m or None, error or None).
+    A fix time ahead of the server clock is clamped to now, so a phone with a
+    fast clock cannot make every later fix look out of order.
+    """
+    fixed_at = None
+    raw = data.get('fix_at')
+    if raw not in (None, ''):
+        try:
+            fixed_at = parse_datetime(str(raw))
+        except ValueError:
+            fixed_at = None
+        if fixed_at is None or timezone.is_naive(fixed_at):
+            return None, None, 'fix_at must be an ISO 8601 time with a timezone.'
+        fixed_at = min(fixed_at, timezone.now())
+
+    accuracy_m = None
+    raw = data.get('accuracy_m')
+    if raw not in (None, ''):
+        try:
+            if isinstance(raw, bool):
+                raise TypeError
+            accuracy_m = float(raw)
+        except (TypeError, ValueError):
+            return None, None, 'accuracy_m must be a number.'
+        if not 0 <= accuracy_m < float('inf'):
+            return None, None, 'accuracy_m must be zero or more.'
+    return fixed_at, accuracy_m, None
+
+
+def record_driver_fix(driver, latitude, longitude, simulated=False, fixed_at=None):
     """Save a driver position and run the auto-depart hook."""
     prev = (driver.latitude, driver.longitude)
     driver.latitude = latitude
     driver.longitude = longitude
-    driver.location_updated_at = timezone.now()
+    driver.location_updated_at = fixed_at or timezone.now()
     driver.save(
         update_fields=['latitude', 'longitude', 'location_updated_at']
     )
@@ -534,18 +580,29 @@ MAX_FIX_ACCURACY_M = 50
 MAX_FIX_SPEED_KMH = 140
 
 
-def _imprecise_fix(driver, latitude, longitude, accuracy):
+def _imprecise_fix(driver, latitude, longitude, accuracy, fixed_at=None):
     """Why this fix must not move the bus, or None if it is fine."""
     # Every browser reports accuracy; a fix without it cannot be trusted.
     try:
+        if isinstance(accuracy, bool):
+            raise TypeError
         accuracy = float(accuracy)
     except (TypeError, ValueError):
         return 'no_accuracy'
     if not 0 <= accuracy <= MAX_FIX_ACCURACY_M:
         return 'low_accuracy'
+    now = timezone.now()
+    if fixed_at is not None and now - fixed_at > timedelta(seconds=settings.GPS_FIX_MAX_AGE_SECONDS):
+        return 'stale'
+    if (
+        fixed_at is not None
+        and driver.location_updated_at is not None
+        and fixed_at <= driver.location_updated_at
+    ):
+        return 'out_of_order'
     if driver.latitude is None or driver.location_updated_at is None:
         return None
-    seconds = (timezone.now() - driver.location_updated_at).total_seconds()
+    seconds = ((fixed_at or now) - driver.location_updated_at).total_seconds()
     if seconds <= 0 or seconds > 120:
         return None  # an old last fix says nothing about speed
     from bookings.departure import _metres
@@ -614,9 +671,15 @@ def driver_location(request, driver_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    ignored = _imprecise_fix(driver, latitude, longitude, request.data.get('accuracy'))
+    fixed_at, accuracy_m, error = _read_fix_quality(request.data)
+    if error:
+        return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+    accuracy = request.data.get('accuracy')
+    if accuracy is None:
+        accuracy = accuracy_m
+    ignored = _imprecise_fix(driver, latitude, longitude, accuracy, fixed_at)
     if ignored:
-        # Not an error: the phone keeps sending and the next good fix counts.
+        # 200, not an error: the phone keeps sending and the next good fix counts.
         return Response(
             {'ignored': ignored, 'driver_id': driver.id,
              'latitude': driver.latitude, 'longitude': driver.longitude,
@@ -624,7 +687,7 @@ def driver_location(request, driver_id):
             status=status.HTTP_200_OK,
         )
 
-    record_driver_fix(driver, latitude, longitude)
+    record_driver_fix(driver, latitude, longitude, fixed_at=fixed_at)
     # A real GPS post means a real driver is driving: end any admin simulation.
     TripSimulation.objects.filter(
         trip__driver=driver, status='running'
@@ -633,6 +696,7 @@ def driver_location(request, driver_id):
     return Response(
         {
             'message': 'Driver location updated.',
+            'ignored': False,
             'driver_id': driver.id,
             'latitude': driver.latitude,
             'longitude': driver.longitude,

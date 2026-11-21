@@ -271,7 +271,8 @@ test.describe('CONNECT public entry and access guards', () => {
       'That action isn’t available right now. Please try again later.',
     )).toBeVisible();
     await expect(errorBanner).toBeInViewport();
-    expect((await errorBanner.boundingBox()).y).toBeLessThan(100);
+    // The error is inline above the form (not a toast), so it only has to be on screen.
+    expect((await errorBanner.boundingBox()).y).toBeLessThan(page.viewportSize().height);
     await expect(page.getByText(/405|Method 'POST'/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled();
   });

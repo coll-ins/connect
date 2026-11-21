@@ -49,15 +49,26 @@ class RedTeamVerifyTests(APITestCase):
             status="pending", provider_reference=REF)
         self.client.force_authenticate(user=self.owner)
 
-    def test_late_payment_found_by_status_poll_is_refunded(self):
+    def test_late_payment_found_by_status_poll_is_left_to_the_sweep(self):
+        # A GET never calls the refund endpoint (D-7); the payment is marked
+        # and process_noshows refunds it.
         with patch("bookings.views.requests.get", return_value=_paystack_success()), \
              patch("bookings.views.settle_booking_fault") as refund:
             r = self.client.get(
                 reverse("bookings:payment-status", args=[self.booking.id]))
         self.assertEqual(r.status_code, 200)
-        refund.assert_called_once()
+        refund.assert_not_called()
         self.booking.refresh_from_db()
+        self.payment.refresh_from_db()
         self.assertEqual(self.booking.status, "cancelled")
+        self.assertEqual(self.payment.refund_reason, "late_payment")
+
+    def test_late_payment_found_by_verify_is_refunded_at_once(self):
+        with patch("bookings.views.requests.get", return_value=_paystack_success()), \
+             patch("bookings.views.settle_booking_fault") as refund:
+            self.client.post(
+                reverse("bookings:verify-paystack-payment", args=[self.booking.id]))
+        refund.assert_called_once()
 
     def test_verify_cannot_revive_a_refunded_payment(self):
         Payment.objects.filter(pk=self.payment.pk).update(

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import Q
 from users.models import CustomUser
@@ -18,6 +19,10 @@ class Company(models.Model):
     phone_number = models.CharField(max_length=15, blank=True)
     # Bus hire is opt-in: only companies that switch this on can receive requests.
     accepts_charters = models.BooleanField(default=False)
+    # Online booking closes this many minutes before departure so the stage
+    # can count seats and board walk-ups.
+    booking_cutoff_minutes = models.PositiveSmallIntegerField(
+        default=15, validators=[MaxValueValidator(240)])
 
     def __str__(self):
         return self.name

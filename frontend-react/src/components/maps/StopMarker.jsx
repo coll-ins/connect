@@ -4,7 +4,7 @@ import './StopMarker.css';
 
 const COLORS = {
   default: ['#ff6b4a', '#c62d14'],
-  first: ['#34d399', '#047857'],
+  first: ['#3ddc97', '#047857'],
   last: ['#60a5fa', '#1d4ed8'],
 };
 const PATH = 'M14 1C7 1 2 6.3 2 13c0 9 12 24 12 24s12-15 12-24C26 6.3 21 1 14 1z';
@@ -47,7 +47,7 @@ export default function StopMarker({ lat, lng, name, index, total }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const variant = index === 0 ? 'first' : total && index === total - 1 ? 'last' : 'default';
   return (
-    <Marker position={[lat, lng]} icon={stopIcon(index + 1, variant)}>
+    <Marker position={[lat, lng]} icon={stopIcon(index + 1, variant)} title={name ? `Stop ${index + 1}: ${name}` : `Stop ${index + 1}`}>
       {name && <Tooltip direction="top" offset={[0, -34]}>{name}</Tooltip>}
     </Marker>
   );

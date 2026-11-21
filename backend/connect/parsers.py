@@ -3,11 +3,16 @@ from rest_framework.parsers import JSONParser
 
 
 class ObjectJSONParser(JSONParser):
-    """Every endpoint reads request.data as an object: a list, string or null
-    body would crash request.data.get(), so refuse it with 400."""
+    """
+    Views read request.data.get(...) everywhere; a JSON list, string or number
+    would make that an AttributeError (500). Refuse such bodies up front.
+    """
 
     def parse(self, stream, media_type=None, parser_context=None):
         data = super().parse(stream, media_type, parser_context)
         if not isinstance(data, dict):
-            raise ParseError('Send a JSON object.')
+            raise ParseError({
+                'code': 'invalid_body',
+                'detail': 'The request body must be a JSON object.',
+            })
         return data

@@ -15,7 +15,8 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
 
-from bookings.models import Payment
+from bookings.models import Payment, UnappliedPayment
+from connect.paystack_extra import refunds_of_transaction, route_refund
 from bookings.services import (
     RefundClaim,
     RefundRejected,
@@ -57,7 +58,7 @@ class Command(BaseCommand):
             return None
         if response.status_code != 200 or not body.get('status'):
             return None
-        return body.get('data') or []
+        return refunds_of_transaction(body.get('data') or [], reference)
 
     def _flag(self, payment, message, dry):
         self.flagged += 1
@@ -99,7 +100,25 @@ class Command(BaseCommand):
                 ref, payment.refund_amount,
             )
 
-            if not refunds:
+            # An overpayment's refund on the same charge is a sibling record,
+            # not an extra: pick ours by its stored id, then by amount.
+            expected = int(payment.refund_amount * Decimal('100'))
+            siblings = UnappliedPayment.objects.filter(
+                reference=ref, status__in=['refunding', 'refunded'])
+            verdict, item = route_refund(
+                refunds,
+                payment.refund_reference,
+                expected,
+                [r.refund_reference for r in siblings if r.refund_reference],
+                [int(r.amount * 100) for r in siblings
+                 if not r.refund_reference and r.amount],
+            ) if refunds else ('none', None)
+
+            if verdict == 'ambiguous':
+                self._flag(payment, f'{len(refunds)} refunds exist at Paystack and none can be told apart from the others; left for a human.', dry)
+                continue
+
+            if verdict == 'none':
                 never_sent = (
                     payment.refund_status == 'processing'
                     and not payment.refund_reference
@@ -121,14 +140,10 @@ class Command(BaseCommand):
                     self._flag(payment, 'NO refund exists at Paystack. Check the dashboard, then rerun with --resend.', dry)
                 continue
 
-            item = refunds[0]
             amount = item.get('amount')
-            expected = int(payment.refund_amount * Decimal('100'))
             problem = None
 
-            if len(refunds) > 1:
-                problem = f'{len(refunds)} refunds exist at Paystack'
-            elif item.get('status') not in CONFIRMED:
+            if item.get('status') not in CONFIRMED:
                 problem = f'Paystack refund status is {item.get("status")!r}'
             elif amount is not None and int(amount) != expected:
                 problem = f'amount mismatch (Paystack {amount}, expected {expected})'

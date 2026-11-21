@@ -55,7 +55,7 @@ const terms = {
     {
       h: 'Cancellations, no-shows and refunds',
       body: [
-        'The platform applies the refund rules in the Refund and Cancellation Policy automatically, on behalf of the transport company. In short: you get a full refund when the transport company cancels or cannot carry you; you get the full fare back if you cancel more than 15 minutes before departure, and half the fare if you cancel later or do not board. Anything outside those rules, such as compensation for a delay or a cash refund, is for the transport company to decide.',
+        'The platform applies the refund rules in the Refund and Cancellation Policy automatically, on behalf of the transport company. In short: you get a full refund when the transport company cancels or cannot carry you; you get the full fare back if you cancel more than 15 minutes (by default) before departure, and half the fare if you cancel later or do not board. Anything outside those rules, such as compensation for a delay or a cash refund, is for the transport company to decide.',
       ],
     },
     {

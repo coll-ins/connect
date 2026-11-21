@@ -1,0 +1,14 @@
+/* The page heading lives in each screen; this company name is a plain label so
+   every route has exactly one h1. Same look the h1 had in App.css. */
+.company-management-topbar .company-topbar-title {
+  margin: 2px 0 0;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+@media (max-width: 650px) {
+  .company-management-topbar .company-topbar-title {
+    font-size: 18px;
+  }
+}

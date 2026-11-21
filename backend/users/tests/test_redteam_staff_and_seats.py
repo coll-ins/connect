@@ -24,11 +24,12 @@ class BreakerRegressionTests(APITestCase):
         return User.objects.create_user(username=f'u{n}', password='pw-123456x', phone_number=f'+2547200000{n:02d}')
 
     def test_one_account_cannot_hold_a_whole_bus_unpaid(self):
+        # Integration: the caps are 6 seats per booking and 6 unpaid per trip (was 10).
         a, b = self._u(1), self._u(2)
         ca = APIClient(); ca.force_authenticate(a)
         r = ca.post('/api/bookings/create/', {'trip_id': self.trip.id, 'seats': 14, 'pickup_stage_id': self.stage.id}, format='json')
         self.assertEqual(r.status_code, 400)
-        r = ca.post('/api/bookings/create/', {'trip_id': self.trip.id, 'seats': 10, 'pickup_stage_id': self.stage.id}, format='json')
+        r = ca.post('/api/bookings/create/', {'trip_id': self.trip.id, 'seats': 6, 'pickup_stage_id': self.stage.id}, format='json')
         self.assertEqual(r.status_code, 201, r.data)
         r = ca.post('/api/bookings/create/', {'trip_id': self.trip.id, 'seats': 1, 'pickup_stage_id': self.stage.id}, format='json')
         self.assertEqual(r.status_code, 400)

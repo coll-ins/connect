@@ -44,9 +44,10 @@ the Render backend before checking static files and then applying the SPA
 fallback. Django must remain deployed separately; Vercel hosts the static
 frontend, not the Channels/Django backend.
 
-Set `VITE_WS_HOST` to the backend hostname (`connect-lhqy.onrender.com`) in
-Vercel to enable live-location WebSockets. The API proxy does not proxy
-WebSockets.
+Leave `VITE_WS_HOST` unset. The API proxy does not proxy WebSockets, and a direct
+connection to the backend host would not carry the session cookie, so the live map
+uses its polling fallback (every 2 to 10 seconds). Setting `VITE_WS_HOST` only makes
+sense once the backend is reachable on the same site as the frontend.
 
 On the backend, include the API hostname in `ALLOWED_HOSTS`, and set
 `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` to the exact Vercel frontend origin

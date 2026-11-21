@@ -85,9 +85,10 @@ export default function PaymentReturn() {
     const t = setTimeout(() => setAttempt((value) => value + 1), 4000);
     return () => clearTimeout(t);
   }, [status, attempt]);
+  useEffect(() => { document.title = 'Payment | CONNECT'; }, []);
 
   return (
-    <div className="auth-page">
+    <main className="auth-page">
       {(status === 'error' || status === 'map-error') && (
         <NoticeStack>
           <Notice
@@ -137,6 +138,6 @@ export default function PaymentReturn() {
           <Link className="btn btn-ghost" to="/passenger/bookings">See my bookings</Link>
         )}
       </div>
-    </div>
+    </main>
   );
 }

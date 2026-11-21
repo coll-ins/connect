@@ -156,7 +156,9 @@ class BoardingStageBookingTests(Base):
 
     def test_boarding_trip_accepts_first_stage_only(self):
         self.trip.status = 'boarding'
-        self.trip.departure_at = timezone.now() - dt.timedelta(minutes=10)
+        # Online booking closes at departure minus the company cut-off, so
+        # the boarding trip must still be outside it.
+        self.trip.departure_at = timezone.now() + dt.timedelta(minutes=30)
         self.trip.save(update_fields=['status', 'departure_at'])
         self.assertEqual(self._book(self.stage1).status_code, 201)
         self.assertEqual(self._book(self.stage2).status_code, 400)
@@ -257,9 +259,17 @@ class BoardingTripVisibilityTests(Base):
         self.assertEqual(resp.status_code, 200)
         return {t.get('id') for t in resp.data}
 
-    def test_recent_boarding_trip_is_listed_for_passengers(self):
+    def test_boarding_trip_inside_the_cutoff_is_not_listed_for_passengers(self):
+        # Plan decision D4: the company cut-off replaces the old "boarding trips
+        # stay bookable for 2 hours after departure" rule for online booking.
         self.trip.status = 'boarding'
         self.trip.departure_at = timezone.now() - dt.timedelta(minutes=10)
+        self.trip.save(update_fields=['status', 'departure_at'])
+        self.assertNotIn(self.trip.id, self._visible_ids())
+
+    def test_boarding_trip_before_the_cutoff_is_listed_for_passengers(self):
+        self.trip.status = 'boarding'
+        self.trip.departure_at = timezone.now() + dt.timedelta(hours=1)
         self.trip.save(update_fields=['status', 'departure_at'])
         self.assertIn(self.trip.id, self._visible_ids())
 

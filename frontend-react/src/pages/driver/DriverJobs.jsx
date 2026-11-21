@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { apiRequest } from '../../api';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import useAsyncData from '../../hooks/useAsyncData';
 import { label, when } from '../shared/serviceUtils';
 import '../shared/Services.css';
 
@@ -41,7 +43,8 @@ function ParcelJob({ parcel, onChange }) {
       )}
       {parcel.status === 'picked_up' && (
         <div className="svc-actions">
-          <input className="input" style={{ maxWidth: 180 }} inputMode="numeric" maxLength={6} placeholder="Receiver's 6-digit PIN"
+          <label htmlFor={`receiver-pin-${parcel.id}`} className="svc-muted">Receiver PIN</label>
+          <input id={`receiver-pin-${parcel.id}`} className="input" style={{ maxWidth: 180 }} inputMode="numeric" maxLength={6} placeholder="Receiver's 6-digit PIN"
             value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
           <button className="btn btn-primary" disabled={busy || pin.length !== 6} onClick={() => act('deliver', { pin })}>
             {busy ? 'Checking…' : 'Confirm delivery'}
@@ -86,31 +89,29 @@ function CharterJob({ charter, onChange }) {
   );
 }
 
+const asList = (d) => (Array.isArray(d) ? d : []);
+
 export default function DriverJobs() {
-  const [parcels, setParcels] = useState(null);
-  const [charters, setCharters] = useState(null);
-  const [error, setError] = useState('');
+  const parcels = useAsyncData(() => apiRequest('/deliveries/driver/', { silent: true }).then(asList), []);
+  const charters = useAsyncData(() => apiRequest('/charters/driver/', { silent: true }).then(asList), []);
 
-  const load = useCallback(() => {
-    apiRequest('/deliveries/driver/').then((d) => setParcels(Array.isArray(d) ? d : [])).catch((e) => { setError(e.message); setParcels([]); });
-    apiRequest('/charters/driver/').then((d) => setCharters(Array.isArray(d) ? d : [])).catch((e) => { setError(e.message); setCharters([]); });
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const reload = () => { parcels.reload(); charters.reload(); };
 
   return (
     <div className="svc-page">
-      {error && <div className="svc-error">{error}</div>}
-
       <div className="svc-head"><h2 style={{ margin: 0 }}>Parcels on your trips</h2></div>
-      {parcels === null ? <div className="glass-empty">Loading…</div> : !parcels.length ? (
-        <div className="glass-empty">No paid parcels waiting.</div>
-      ) : parcels.map((p) => <ParcelJob key={p.id} parcel={p} onChange={load} />)}
+      <AsyncPanel status={parcels.status} title="your parcels" onRetry={parcels.reload}>
+        {!parcels.data?.length ? (
+          <div className="glass-empty">No paid parcels waiting.</div>
+        ) : parcels.data.map((p) => <ParcelJob key={p.id} parcel={p} onChange={reload} />)}
+      </AsyncPanel>
 
       <div className="svc-head"><h2 style={{ margin: 0 }}>Bus hire jobs</h2></div>
-      {charters === null ? <div className="glass-empty">Loading…</div> : !charters.length ? (
-        <div className="glass-empty">No confirmed hires assigned to you.</div>
-      ) : charters.map((c) => <CharterJob key={c.id} charter={c} onChange={load} />)}
+      <AsyncPanel status={charters.status} title="your bus hires" onRetry={charters.reload}>
+        {!charters.data?.length ? (
+          <div className="glass-empty">No confirmed hires assigned to you.</div>
+        ) : charters.data.map((c) => <CharterJob key={c.id} charter={c} onChange={reload} />)}
+      </AsyncPanel>
     </div>
   );
 }

@@ -1,0 +1,5 @@
+# Dev and CI extras. The gate runner stays `python manage.py test`; pytest is optional.
+-r requirements.txt
+pytest==9.2.0
+pytest-django==4.14.0
+pyflakes==4.1.0

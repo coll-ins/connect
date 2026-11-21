@@ -61,7 +61,7 @@ class AuditFixTests(APITestCase):
                 status='confirmed', pickup_location='x')
             raise RefundRejected('Paystack refused the refund.')
 
-        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1')
+        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1', payment_id=None)
         self.client.force_authenticate(self.pax)
         with mock.patch('bookings.services.claim_booking_refund',
                         return_value=(Decimal('50'), claim)), \
@@ -79,7 +79,7 @@ class AuditFixTests(APITestCase):
         self.assertLessEqual(taken, self.trip.capacity)
 
     def test_rejected_refund_restores_booking_when_seat_still_free(self):
-        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1')
+        claim = SimpleNamespace(provider_reference='REF', booking_number='BK1', payment_id=None)
         self.client.force_authenticate(self.pax)
         with mock.patch('bookings.services.claim_booking_refund',
                         return_value=(Decimal('50'), claim)), \
@@ -102,7 +102,7 @@ class AuditFixTests(APITestCase):
         self.assertEqual(r.status_code, 200)
 
     def test_currency_check_normalises_and_tolerates_missing_field(self):
-        from bookings.views import _currency_ok
+        from bookings.services import currency_ok as _currency_ok
         self.assertTrue(_currency_ok('KES'))
         self.assertTrue(_currency_ok(' kes '))
         self.assertTrue(_currency_ok(None))

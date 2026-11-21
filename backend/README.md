@@ -122,3 +122,21 @@ auto-depart applies. The admin's open tab drives it (one point every 2 seconds);
 closing the tab stops the bus. Only one simulation runs at a time, it expires
 after 30 minutes, and a real GPS post from that driver stops it. Routes without
 a map line cannot be simulated.
+
+## Booking and payment rules
+
+- An unpaid online booking holds its seats for 10 minutes (`PAYMENT_HOLD_MINUTES`);
+  pay-at-stage cash keeps 20. A charge arriving up to 60 seconds late still counts
+  if the seat is free; later money is refunded.
+- Online booking closes before departure by a per-company cut-off (default 15
+  minutes, set by the manager). After that the stage can book and board walk-ups on
+  unbooked seats.
+- One booking is limited to 6 seats, and one user can hold at most 6 unpaid seats
+  per trip (`MAX_SEATS_PER_BOOKING`, `MAX_PENDING_SEATS_PER_TRIP`).
+- Refunds: 50% when the passenger is at fault, 100% when the company is, nothing
+  below KES 5. A refund is sent once and retried by a sweep with backoff; after 10
+  attempts a human is alerted.
+- Wallet top-up and withdrawals are switched off (`WALLET_TOPUP_ENABLED`,
+  `WALLET_PAYOUTS_ENABLED`) until tested live with Paystack. Only
+  `wallets/services.py` may change a balance.
+- The Django admin site is off in production unless `ADMIN_SITE_ENABLED=true`.

@@ -14,15 +14,20 @@
 
 .weekly-reports-heading > div > span,
 .weekly-report-kicker {
-  color: var(--accent-text);
-  font-size: 11px;
+  color: var(--text-2);
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0;
 }
 
+.weekly-reports-heading h1,
 .weekly-reports-heading h2,
 .weekly-report-card h3 {
   margin: 5px 0;
+}
+
+.weekly-reports-heading h1 {
+  font-size: 1.5em;
 }
 
 .weekly-reports-heading p,
@@ -38,7 +43,7 @@
   gap: 8px;
   padding: 9px 13px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   color: inherit;
   background: rgba(255, 255, 255, 0.06);
   cursor: pointer;
@@ -53,7 +58,7 @@
 .weekly-report-empty {
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--surface);
 }
 
@@ -62,14 +67,14 @@
   align-items: center;
   gap: 6px;
   padding: 6px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
   text-transform: capitalize;
 }
 
 .weekly-report-email-sent {
-  color: var(--accent-text);
-  background: rgb(var(--accent-rgb) / 0.14);
+  color: var(--success-text);
+  background: rgb(var(--success-rgb) / 0.14);
 }
 
 .weekly-report-email-failed {
@@ -86,7 +91,7 @@
 .weekly-report-delivery-note,
 .weekly-reports-error {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   color: var(--text);
   background: rgb(var(--danger-rgb) / 0.14);
 }
@@ -101,7 +106,7 @@
 .weekly-report-summary-section {
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .weekly-report-summary-section h3 {

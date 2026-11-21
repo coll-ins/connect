@@ -989,8 +989,9 @@ class DeadDigitalAttemptTests(TestCase):
         body = json.dumps({'event': 'refund.failed', 'data': {
             'transaction_reference': 'CONNECT-GONE'}}).encode()
         sig = hmac.new(settings.PAYSTACK_SECRET_KEY.encode(), body, hashlib.sha512).hexdigest()
-        r = self.client.post(reverse('bookings:paystack-webhook'), data=body,
-                             content_type='application/json', HTTP_X_PAYSTACK_SIGNATURE=sig)
+        with self.captureOnCommitCallbacks(execute=True):  # the alert leaves after commit
+            r = self.client.post(reverse('bookings:paystack-webhook'), data=body,
+                                 content_type='application/json', HTTP_X_PAYSTACK_SIGNATURE=sig)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(UnappliedPayment.objects.get(reference='CONNECT-GONE').status, 'review')
         sms.assert_called_once()

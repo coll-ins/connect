@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from bookings.models import Booking, Incident, Payment
 
-from .models import Trip, TripSchedule, WeeklyOperationsReport
+from .models import Trip, TripSchedule
 
 logger = logging.getLogger(__name__)
 

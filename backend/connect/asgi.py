@@ -9,15 +9,11 @@ from connect.startup import ensure_platform_admin  # noqa: E402
 
 ensure_platform_admin()
 
-from channels.auth import AuthMiddlewareStack  # noqa: E402
-from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
-from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
+from channels.routing import ProtocolTypeRouter  # noqa: E402
 
-from bookings.live_routing import websocket_urlpatterns  # noqa: E402
+from connect.ws_origin import build_websocket_application  # noqa: E402
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    "websocket": AllowedHostsOriginValidator(
-        AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
-    ),
+    "websocket": build_websocket_application(),
 })

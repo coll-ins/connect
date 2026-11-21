@@ -78,11 +78,13 @@ class RedTeamIdorTests(APITestCase):
 
     def test_booking_detail_access(self):
         url = reverse("bookings:get-booking-detail", args=[self.booking.id])
-        for label, u in (("anon", None), ("stranger", self.stranger),
-                         ("other manager", self.mgr_b)):
+        self._as(None)
+        self.assertIn(self.client.get(url).status_code, NO)
+        # A stranger gets the same 404 as a missing id, so ids cannot be probed.
+        for label, u in (("stranger", self.stranger), ("other manager", self.mgr_b)):
             with self.subTest(attacker=label):
                 self._as(u)
-                self.assertIn(self.client.get(url).status_code, NO)
+                self.assertEqual(self.client.get(url).status_code, 404)
         for label, u in (("owner", self.owner), ("manager", self.mgr), ("auditor", self.aud)):
             with self.subTest(viewer=label):
                 self._as(u)

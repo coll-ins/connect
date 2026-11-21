@@ -2,6 +2,7 @@ from django.db import connection
 from django.utils import timezone
 
 from bookings.models import Booking
+from bookings.services import seats_taken
 from companies.models import Company, Route, Trip
 from drivers.models import Driver
 from users.models import CustomUser
@@ -280,17 +281,7 @@ def run_system_checks():
         trips = Trip.objects.all()
 
         for trip in trips:
-            booked_seats = (
-                Booking.objects.filter(
-                    trip_id=trip.id
-                )
-                .exclude(
-                    status__in=["cancelled", "completed", "no_show"]
-                )
-                .values_list("seats", flat=True)
-            )
-
-            total_seats = sum(int(seats or 0) for seats in booked_seats)
+            total_seats = seats_taken(trip)
 
             if total_seats > trip.capacity:
                 over_capacity.append({

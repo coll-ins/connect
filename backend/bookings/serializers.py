@@ -38,6 +38,13 @@ class BookingCreateSerializer(serializers.Serializer):
     def validate_pickup_location(self, value):
         return place(value, 'the pickup location', required=False, max_length=255)
 
+    # Optional: sending the same key again returns the first booking.
+    idempotency_key = serializers.RegexField(
+        r'^[A-Za-z0-9_.:-]{1,64}$',
+        required=False,
+        allow_blank=True,
+    )
+
     def validate_trip_id(self, value):
         if not Trip.objects.filter(id=value).exists():
             raise serializers.ValidationError("Trip does not exist.")

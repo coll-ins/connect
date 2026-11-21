@@ -1,5 +1,4 @@
-export const money = (v) =>
-  `KES ${Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export { formatMoney as money } from '../../utils/money';
 
 export const when = (v) =>
   v ? new Date(v).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : '—';

@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import PageTransition from './PageTransition';
+import '../../styles/states.css';
 
 export default function AppShell({ children }) {
   const { user, logout } = useAuth();
@@ -16,6 +17,8 @@ export default function AppShell({ children }) {
         mobileOpen ? 'mobile-sidebar-open' : ''
       }`}
     >
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+
       <Sidebar
         user={user}
         logout={logout}
@@ -46,7 +49,7 @@ export default function AppShell({ children }) {
       <div className="connect-main">
         <Topbar user={user} />
 
-        <main className="connect-content">
+        <main id="main-content" tabIndex={-1} className="connect-content">
           <PageTransition>
             {children}
           </PageTransition>

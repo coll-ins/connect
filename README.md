@@ -56,8 +56,12 @@ connect/
 │   ├── connect/              ← Project settings and URLs
 │   ├── users/                ← Signup, login, admin accounts
 │   ├── companies/            ← Bus companies and routes
-│   ├── bookings/             ← Booking creation and management
+│   ├── bookings/             ← Booking creation, payments, refunds and settlement
+│   ├── buses/                ← Buses
+│   ├── charters/             ← Bus hire
+│   ├── deliveries/           ← Parcels
 │   ├── drivers/              ← Driver profiles and live location
+│   ├── wallets/              ← Passenger wallet: top-up, spend, withdrawals
 │   ├── notifications/        ← SMS via Africa's Talking
 │   └── manage.py
 │
@@ -111,25 +115,25 @@ frontend lint/build, and Playwright browser tests on every push and pull request
 
 ## Deployment
 
-The deployment kit targets a single Ubuntu VPS with nginx, Daphne, PostgreSQL and
-Redis. Follow the step-by-step [deployment runbook](./deploy/RUNBOOK.md) for a
-full deployment. The repository-root Vercel configuration deploys only the React
-frontend; the Django backend still needs a separate host. See the
-[frontend Vercel setup](./frontend-react/README.md#vercel-frontend) for its
-required environment variables. Production requires a chosen backend/domain and
-real Paystack and Africa's Talking credentials. Never copy local `.env` values
-to the server.
+The live setup is Render (Django backend, PostgreSQL, Redis) with Vercel for the
+React frontend. Follow [deploy/RENDER-VERCEL.md](./deploy/RENDER-VERCEL.md): it lists
+the start command, every environment variable, the production database checks to run
+first, and the known limitations. The single-VPS kit (nginx, Daphne, PostgreSQL,
+Redis) in [deploy/RUNBOOK.md](./deploy/RUNBOOK.md) is an alternative that is not
+the live target. Production requires real Paystack and Africa's Talking credentials.
+Never copy local `.env` values to the server.
 
 ## Automation and operations
 
 - GitHub Actions runs backend checks, production configuration checks, frontend
   lint/build, and browser tests on pushes and pull requests.
-- The production VPS schedules trip generation, booking expiry, no-show handling,
-  refund reconciliation, and backups. Commands are locked against overlap and
-  logged under `/var/log/connect`; see the deployment runbook.
-- The `generate-trips` GitHub workflow is a manual recovery action, not a second
-  scheduler. Configure the `CONNECT_API_URL` repository variable and
-  `CRON_SECRET` repository secret before using it.
+- On Render, GitHub Actions (`scheduled-jobs`) calls the protected cron endpoint every
+  10 minutes for booking expiry, late payments, no-shows, refund retries, wallet
+  sweeps and trip generation. Set the `CONNECT_API_URL` repository variable and the
+  `CRON_SECRET` repository secret (the same value as on Render), or nothing runs.
+- On the single-VPS kit the server's own cron schedules the same jobs and backups;
+  see the deployment runbook.
+- The `generate-trips` workflow is a manual recovery action only.
 - After deployment, run the smoke test and periodically test database restores;
   automation cannot replace monitoring payment settlement, SMS delivery, and
   passenger/driver support.
@@ -154,8 +158,16 @@ additional provider and infrastructure settings; see [deploy/RUNBOOK.md](./deplo
 | `AT_USERNAME`, `AT_API_KEY` | Africa's Talking username and API key |
 | `ADMIN_SIGNUP_CODE` | Private code for admin signup; disable self-service admin signup in production |
 | `DEBUG` | Set to `False` in production |
-| `ALLOWED_HOSTS` | Comma-separated list of allowed domains in production |
+| `ALLOWED_HOSTS` | Comma-separated list of allowed domains in production (no `*`) |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed frontend origins |
+| `FRONTEND_URL` | The frontend's public URL |
+| `DATABASE_URL`, `REDIS_URL` | PostgreSQL and Redis in production (Redis is required) |
+| `NUM_PROXIES` | Number of proxies in front of the app (1 or more in production) |
+| `CRON_SECRET` | 32+ random characters; required in production for scheduled jobs |
+| `ADMIN_SITE_ENABLED` | Django admin site; off in production unless `true` |
+| `WALLET_TOPUP_ENABLED`, `WALLET_PAYOUTS_ENABLED` | Wallet top-up and withdrawals; both stay `false` until tested live |
+
+The full production list is in [deploy/RENDER-VERCEL.md](./deploy/RENDER-VERCEL.md).
 
 Frontend (`frontend-react/.env.example`, set the same names in Vercel):
 
@@ -196,6 +208,13 @@ the code; change both together.
 | POST | `/api/companies/trips/create/` | Create a trip |
 | GET | `/api/drivers/` | List available drivers |
 | POST | `/api/drivers/:id/location/` | Update driver GPS location |
+| GET/PATCH | `/api/companies/booking-settings/` | Per-company booking cut-off (manager) |
+| GET | `/api/companies/trips/:id/seat-summary/` | Booked and open seats for a trip (staff) |
+| POST | `/api/bookings/walk-in/:trip_id/` | Book and board a walk-up passenger |
+| POST | `/api/bookings/payments/:booking_id/wallet/` | Pay a booking from the wallet |
+| GET | `/api/wallet/` | Wallet balance |
+| POST | `/api/wallet/topup/` | Start a wallet top-up (off until enabled) |
+| POST | `/api/wallet/withdraw/` | Withdraw to M-PESA (off until enabled) |
 
 ---
 

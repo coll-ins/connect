@@ -16,6 +16,7 @@ Every function that writes assumes the caller holds the Trip row lock
 import random
 
 from django.db.models import Q, Sum
+from django.utils import timezone
 
 AISLE = None
 _ = AISLE
@@ -154,37 +155,46 @@ def layout_for(capacity, vehicle_type=None):
     return v['layout'] if v else _generic(capacity)
 
 
-def _active():
-    # Seats held by a cancelled booking are free again; no cancel path has
-    # to remember to delete them.
-    return Q(blocked=True) | Q(booking__isnull=False) & ~Q(booking__status='cancelled')
-
-
-def seats_taken(trip):
-    """Seats no longer sellable: every live booking's seat count plus blocks."""
-    booked = (
-        trip.bookings.exclude(status='cancelled')
-        .aggregate(total=Sum('seats'))['total'] or 0
+def seat_row_active_q(now=None):
+    """The seat-row twin of services.active_seat_q: a blocked row, or a row of
+    a booking that takes a seat right now. Expired holds and cancelled
+    bookings are free, so no path has to remember to delete their rows."""
+    from .services import active_seat_q
+    return Q(blocked=True) | (
+        Q(booking__isnull=False) & active_seat_q(now, prefix='booking__')
     )
-    return booked + trip.seat_assignments.filter(blocked=True).count()
 
 
-def occupied_numbers(trip):
-    return set(trip.seat_assignments.filter(_active()).values_list('seat_no', flat=True))
+def purge_dead_rows(trip, now=None):
+    """Delete the rows the unique (trip, seat_no) constraint still sees but
+    nobody holds: cancelled bookings and pending ones whose hold has lapsed.
+    Every writer calls this first, under the Trip lock."""
+    now = now or timezone.now()
+    trip.seat_assignments.filter(
+        Q(booking__status='cancelled')
+        | Q(booking__status='pending', booking__held_until__lte=now)
+    ).delete()
+
+
+def occupied_numbers(trip, now=None):
+    return set(
+        trip.seat_assignments.filter(seat_row_active_q(now))
+        .values_list('seat_no', flat=True)
+    )
 
 
 class SeatError(ValueError):
     pass
 
 
-def assign_seats(trip, booking, wanted=None):
+def assign_seats(trip, booking, wanted=None, now=None):
     """Give `booking` booking.seats seats on `trip`: the `wanted` numbers if
     given and free, else the lowest free ones. Returns the numbers."""
     from .models import SeatAssignment
 
-    trip.seat_assignments.filter(booking__status='cancelled').delete()
+    purge_dead_rows(trip, now)
     trip.seat_assignments.filter(booking=booking).delete()
-    taken = occupied_numbers(trip)
+    taken = occupied_numbers(trip, now)
     count = booking.seats
 
     if wanted:
@@ -222,16 +232,32 @@ def move_seats(old_trip, new_trip, booking):
         .values_list('seat_no', flat=True)
     )
     booking.seat_assignments.filter(trip=old_trip).delete()
-    new_trip.seat_assignments.filter(booking__status='cancelled').delete()
+    purge_dead_rows(new_trip)
     free_there = not (set(keep) & occupied_numbers(new_trip))
     if keep and len(keep) == booking.seats and free_there and max(keep) <= new_trip.capacity:
         return assign_seats(new_trip, booking, keep)
     return assign_seats(new_trip, booking)
 
 
+def ensure_numbers(trip, booking, wanted=None, now=None):
+    """Called under the Trip lock at every pending -> confirmed edge: a hold
+    that lapsed had its rows purged, so a late payment gets numbers again
+    (`wanted` when still free, else any free ones)."""
+    have = trip.seat_assignments.filter(booking=booking).count()
+    if have >= booking.seats:
+        return sorted(trip.seat_assignments.filter(booking=booking)
+                      .values_list('seat_no', flat=True))
+    try:
+        return assign_seats(trip, booking, wanted or None, now)
+    except SeatError:
+        return assign_seats(trip, booking, None, now)
+
+
 def seat_map(trip, viewer_booking_ids=(), show_names=False):
+    from .services import active_seat_q
+    now = timezone.now()
     rows = (
-        trip.seat_assignments.filter(_active())
+        trip.seat_assignments.filter(seat_row_active_q(now))
         .select_related('booking__user', 'booking__boarding_event')
     )
     by_no = {}
@@ -253,7 +279,7 @@ def seat_map(trip, viewer_booking_ids=(), show_names=False):
     seats = [{'no': no, **by_no.get(no, {'state': 'free'})} for no in range(1, trip.capacity + 1)]
     numbered = sum(1 for a in rows if not a.blocked)
     live_seats = (
-        trip.bookings.exclude(status='cancelled')
+        trip.bookings.filter(active_seat_q(now))
         .aggregate(total=Sum('seats'))['total'] or 0
     )
     bus = trip.bus
@@ -275,4 +301,5 @@ def seat_map(trip, viewer_booking_ids=(), show_names=False):
         'seats': seats,
         # Seats sold before seat numbers existed: real but not on the map.
         'unassigned': max(0, live_seats - numbered),
+        'blocked_count': sum(1 for a in rows if a.blocked),
     }

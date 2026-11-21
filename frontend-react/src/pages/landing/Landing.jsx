@@ -9,7 +9,8 @@ import seatPhoto from '../../assets/journeys/bookaseat.jpeg';
 import { isInstalledApp } from '../../utils/installedApp';
 import Welcome from './Welcome';
 import InstallApp from './InstallApp';
-import HowItWorks from './HowItWorks';
+// Explicit extension: howItWorks.js (data) differs only by case, and a case-insensitive disk resolves the bare name to it.
+import HowItWorks from './HowItWorks.jsx';
 import './Landing.css';
 
 // three.js is large: fetched after the words and buttons are already on screen.

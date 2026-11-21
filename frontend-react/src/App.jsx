@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { titleForPath } from './utils/pageTitle';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import Notice, { NoticeStack } from './components/ui/Notice';
 import { clearRequestError, getLatestRequestError } from './api';
 
@@ -111,6 +113,16 @@ function DriverRoutes() {
   );
 }
 
+// Only the passenger and auth layouts mount PageTransition, so staff screens
+// shared one tab title. Setting it here covers every route.
+function RouteTitle() {
+  const { pathname } = useLocation();
+  useEffect(function syncTitle() {
+    document.title = titleForPath(pathname);
+  }, [pathname]);
+  return null;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -172,7 +184,10 @@ export default function App() {
         <div className="app-shell">
           <RequestErrorNotice />
           <Suspense fallback={<div role="status">Loading CONNECT...</div>}>
-            <AppRoutes />
+            <ErrorBoundary>
+              <RouteTitle />
+              <AppRoutes />
+            </ErrorBoundary>
           </Suspense>
         </div>
       </BrowserRouter>

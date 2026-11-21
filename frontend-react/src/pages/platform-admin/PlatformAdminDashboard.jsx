@@ -21,7 +21,6 @@ import {
   Trash2,
   UserRound,
   Users,
-  X,
   Menu,
 } from 'lucide-react';
 import {
@@ -36,12 +35,13 @@ import { checkName, checkPhone, checkPlace, checkText, NAME_HINT, PHONE_HINT } f
 import { confirmTripCancel, tripCancelSummary } from '../../utils/tripCancel';
 import { useAuth } from '../../context/AuthContext';
 import { DEFAULT_VEHICLE, VehicleOptions, driverVehicle, useCompanyBuses } from '../../components/Fleet';
+import Modal from '../../components/ui/Modal';
+import AsyncPanel from '../../components/ui/AsyncPanel';
+import { deriveStatus } from '../../utils/loadStatus';
+import { formatMoney } from '../../utils/money';
+import { humanLabel } from '../../utils/labels';
 
-const money = (value) =>
-  `KES ${Number(value || 0).toLocaleString('en-KE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const money = formatMoney;
 
 const formatDate = (value) =>
   value
@@ -106,7 +106,7 @@ function TripSimulateControl({ trip, sim, busy, onStart, onStop }) {
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <span
           aria-hidden="true"
-          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)' }}
+          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }}
         />
         <span role="status" style={{ fontVariantNumeric: 'tabular-nums' }}>
           Moving · {sim.progress}%
@@ -245,8 +245,8 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           font-weight: 700;
-          background: var(--accent);
-          color: var(--accent-ink);
+          background: var(--primary);
+          color: var(--primary-ink);
           box-shadow: none;
         }
 
@@ -258,7 +258,7 @@ function PlatformShell({ logout, children }) {
         .pa-brand small,
         .pa-admin-card span {
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
         }
 
         .pa-admin-card {
@@ -278,8 +278,8 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           border-radius: 10px;
-          color: var(--accent-text);
-          background: rgb(var(--accent-rgb) / 0.12);
+          color: var(--text-2);
+          background: var(--surface-3);
         }
 
         .pa-nav {
@@ -292,7 +292,7 @@ function PlatformShell({ logout, children }) {
         .pa-nav-label {
           margin: 15px 8px 5px;
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
           font-weight: 600;
           letter-spacing: 0;
         }
@@ -316,7 +316,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-link.active {
           color: var(--text);
-          background: rgb(var(--accent-rgb) / 0.13);
+          background: rgb(var(--primary-rgb) / 0.13);
           box-shadow: none;
         }
 
@@ -427,8 +427,8 @@ function PlatformShell({ logout, children }) {
 
         .pa-overline,
         .pa-card-eyebrow {
-          color: var(--accent-text);
-          font-size: 11px;
+          color: var(--text-2);
+          font-size: var(--text-xs);
           font-weight: 600;
           letter-spacing: 0;
         }
@@ -484,7 +484,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-user span {
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
         }
 
         .pa-avatar {
@@ -493,8 +493,8 @@ function PlatformShell({ logout, children }) {
           display: grid;
           place-items: center;
           border-radius: 50%;
-          background: rgb(var(--accent-rgb) / 0.16);
-          color: var(--accent-text);
+          background: rgb(var(--primary-rgb) / 0.16);
+          color: var(--primary-text);
           font-weight: 700;
         }
 
@@ -517,7 +517,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-system-status.healthy {
-          color: var(--accent-text);
+          color: var(--success-text);
         }
 
         .pa-system-status.warning {
@@ -580,12 +580,12 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-primary-button {
-          background: var(--accent);
-          color: #04150f;
+          background: var(--primary);
+          color: var(--primary-ink);
         }
 
         .pa-primary-button:hover {
-          background: var(--accent);
+          background: var(--primary);
         }
 
         .pa-secondary-button {
@@ -629,7 +629,7 @@ function PlatformShell({ logout, children }) {
         .pa-stat-card span {
           display: block;
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
           margin-bottom: 7px;
         }
 
@@ -671,8 +671,8 @@ function PlatformShell({ logout, children }) {
           border-radius: 10px;
           display: grid;
           place-items: center;
-          background: rgb(var(--accent-rgb) / 0.11);
-          color: var(--accent-text);
+          background: var(--surface-3);
+          color: var(--text-2);
         }
 
         .pa-command-icon.warning {
@@ -687,9 +687,9 @@ function PlatformShell({ logout, children }) {
 
         .pa-command-message {
           padding: 11px 14px;
-          border: 1px solid rgb(var(--accent-rgb) / 0.2);
-          background: rgb(var(--accent-rgb) / 0.07);
-          color: var(--accent-text);
+          border: 1px solid var(--border);
+          background: var(--surface-3);
+          color: var(--text-2);
           border-radius: 10px;
           margin-bottom: 16px;
           font-size: 12px;
@@ -707,10 +707,10 @@ function PlatformShell({ logout, children }) {
           place-items: center;
           border: 2px solid white;
           border-radius: 999px;
-          background: var(--accent);
+          background: var(--primary);
           box-shadow: 0 2px 9px rgba(0,0,0,.4);
-          color: var(--accent-ink);
-          font-size: 11px;
+          color: var(--primary-ink);
+          font-size: var(--text-xs);
           font-weight: 700;
         }
 
@@ -789,7 +789,7 @@ function PlatformShell({ logout, children }) {
         .pa-setting-row span,
         .pa-test-row span {
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
         }
 
         .pa-table-wrap {
@@ -847,10 +847,10 @@ function PlatformShell({ logout, children }) {
           align-items: center;
           padding: 4px 8px;
           border-radius: 999px;
-          font-size: 11px;
+          font-size: var(--text-xs);
           font-weight: 700;
-          background: rgb(var(--accent-rgb) / 0.1);
-          color: var(--accent-text);
+          background: var(--surface-3);
+          color: var(--text-2);
         }
 
         .pa-badge.warning {
@@ -909,7 +909,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-field label {
           color: var(--text-2);
-          font-size: 11px;
+          font-size: var(--text-xs);
           font-weight: 700;
         }
 
@@ -936,17 +936,7 @@ function PlatformShell({ logout, children }) {
         .pa-field input:focus,
         .pa-field select:focus,
         .pa-field textarea:focus {
-          border-color: rgb(var(--accent-rgb) / 0.5);
-        }
-
-        .pa-modal-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 100;
-          background: var(--bg);
-          display: grid;
-          place-items: center;
-          padding: 20px;
+          border-color: rgb(var(--primary-rgb) / 0.5);
         }
 
         .pa-modal {
@@ -1017,7 +1007,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-issue-summary-card.healthy {
-          color: var(--accent-text);
+          color: var(--success-text);
         }
 
         .pa-issue-summary-card strong,
@@ -1032,7 +1022,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-issue-summary-card span {
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
         }
 
         .pa-issue-list {
@@ -1090,7 +1080,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-issue-content span {
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
           margin-top: 3px;
         }
 
@@ -1116,7 +1106,7 @@ function PlatformShell({ logout, children }) {
 
         .pa-test-summary span {
           color: var(--text-3);
-          font-size: 11px;
+          font-size: var(--text-xs);
           margin-top: 4px;
         }
 
@@ -1134,7 +1124,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-test-row.passed .pa-test-icon {
-          color: var(--accent-text);
+          color: var(--success-text);
         }
 
         .pa-test-row.warning .pa-test-icon {
@@ -1152,7 +1142,7 @@ function PlatformShell({ logout, children }) {
         .pa-test-status {
           padding: 4px 8px;
           border-radius: 999px;
-          font-size: 11px !important;
+          font-size: var(--text-xs) !important;
           font-weight: 600;
           background: rgba(255,255,255,.05);
         }
@@ -1172,7 +1162,7 @@ function PlatformShell({ logout, children }) {
         }
 
         .pa-setting-value {
-          color: var(--accent-text) !important;
+          color: var(--text-2) !important;
         }
 
         .pa-spin {
@@ -1365,6 +1355,8 @@ export default function PlatformAdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState({});
+  const [failed, setFailed] = useState({});
   const [commandMessage, setCommandMessage] = useState('');
 
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -1413,13 +1405,13 @@ export default function PlatformAdminDashboard() {
     setError('');
 
     const results = await Promise.allSettled([
-      apiRequest('/companies/'),
-      apiRequest('/companies/routes/'),
-      apiRequest('/drivers/'),
-      apiRequest('/companies/trips/'),
-      apiRequest('/bookings/all/'),
-      apiRequest('/users/'),
-      apiRequest('/users/company-staff/'),
+      apiRequest('/companies/', { silent: true }),
+      apiRequest('/companies/routes/', { silent: true }),
+      apiRequest('/drivers/', { silent: true }),
+      apiRequest('/companies/trips/', { silent: true }),
+      apiRequest('/bookings/all/', { silent: true }),
+      apiRequest('/users/', { silent: true }),
+      apiRequest('/users/company-staff/', { silent: true }),
     ]);
 
     const [
@@ -1466,11 +1458,31 @@ export default function PlatformAdminDashboard() {
 
     if (usersResult.status === 'fulfilled') {
       setUsers(list(usersResult.value));
+    } else {
+      errors.push(`Users: ${usersResult.reason?.message || 'failed'}`);
     }
 
     if (operatorsResult.status === 'fulfilled') {
       setOperators(list(operatorsResult.value));
+    } else {
+      errors.push(`Staff: ${operatorsResult.reason?.message || 'failed'}`);
     }
+
+    // A refresh that fails keeps the rows already on screen; the banner says so.
+    const sources = [
+      'companies', 'routes', 'drivers', 'trips', 'bookings', 'users', 'operators',
+    ];
+    setLoaded((prev) => ({
+      ...prev,
+      ...Object.fromEntries(
+        sources
+          .filter((_, index) => results[index].status === 'fulfilled')
+          .map((source) => [source, true])
+      ),
+    }));
+    setFailed(Object.fromEntries(
+      sources.map((source, index) => [source, results[index].status === 'rejected'])
+    ));
 
     if (errors.length) {
       setError(errors.join(' • '));
@@ -1807,6 +1819,21 @@ export default function PlatformAdminDashboard() {
     return alerts;
   }, [trips, bookings, drivers, currentTime]);
 
+  const statusOf = (source) => deriveStatus({
+    loading,
+    error: failed[source],
+    hasData: Boolean(loaded[source]),
+  });
+
+  // Alerts and totals are derived from trips, bookings and drivers: until all
+  // three loaded they must not read as "healthy" or zero.
+  const alertSources = ['trips', 'bookings', 'drivers'];
+  const alertsStatus = alertSources.every((source) => statusOf(source) === 'ready')
+    ? 'ready'
+    : alertSources.some((source) => statusOf(source) === 'loading')
+      ? 'loading'
+      : 'error';
+
   const criticalAlerts = platformAlerts.filter(
     (alert) => alert.severity === 'critical'
   );
@@ -1822,7 +1849,7 @@ export default function PlatformAdminDashboard() {
         ? 'warning'
         : 'healthy';
 
-  const revenue = bookings.reduce(
+  const revenue = statusOf('bookings') !== 'ready' ? null : bookings.reduce(
     (total, booking) =>
       total +
       Number(
@@ -2258,7 +2285,9 @@ export default function PlatformAdminDashboard() {
                         ? ''
                         : 's'
                     }`
-                  : 'System healthy'}
+                  : alertsStatus === 'ready'
+                    ? 'System healthy'
+                    : 'System status unknown'}
             </span>
 
             <ChevronRight size={15} />
@@ -2283,8 +2312,16 @@ export default function PlatformAdminDashboard() {
 
       <main className="pa-content">
         {error && (
-          <div className="pa-error">
-            {error}
+          <div className="pa-error" role="alert">
+            {error}{' '}
+            <button
+              type="button"
+              className="pa-secondary-button"
+              onClick={refresh}
+              disabled={loading}
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -2321,13 +2358,13 @@ export default function PlatformAdminDashboard() {
                       System health
                     </span>
 
-                    <h3>
+                    <h2>
                       {systemStatus === 'healthy'
                         ? 'System healthy'
                         : systemStatus === 'critical'
                           ? 'Critical attention required'
                           : 'Attention required'}
-                    </h3>
+                    </h2>
                   </div>
 
                   <div
@@ -2354,7 +2391,9 @@ export default function PlatformAdminDashboard() {
                             ? ''
                             : 's'
                         } detected.`
-                      : 'No active operational issues detected.'}
+                      : alertsStatus === 'ready'
+                        ? 'No active operational issues detected.'
+                        : 'Issue check has not completed.'}
                 </p>
 
                 <button
@@ -2378,9 +2417,9 @@ export default function PlatformAdminDashboard() {
                       Diagnostics
                     </span>
 
-                    <h3>
+                    <h2>
                       Platform system tests
-                    </h3>
+                    </h2>
                   </div>
 
                   <div className="pa-command-icon">
@@ -2478,7 +2517,7 @@ export default function PlatformAdminDashboard() {
               <div className="pa-panel">
                 <div className="pa-panel-header">
                   <div>
-                    <h3>Companies</h3>
+                    <h2>Companies</h2>
                     <p>
                       Global company directory.
                     </p>
@@ -2532,18 +2571,20 @@ export default function PlatformAdminDashboard() {
                     )
                   )}
 
-                  {!companies.length && (
-                    <div className="pa-empty-state">
-                      No companies found.
-                    </div>
-                  )}
+                  <AsyncPanel status={statusOf('companies')} title="companies" onRetry={load}>
+                    {!companies.length && (
+                      <div className="pa-empty-state">
+                        No companies found.
+                      </div>
+                    )}
+                  </AsyncPanel>
                 </div>
               </div>
 
               <div className="pa-panel">
                 <div className="pa-panel-header">
                   <div>
-                    <h3>Latest trips</h3>
+                    <h2>Latest trips</h2>
                     <p>
                       Most recent operational trips.
                     </p>
@@ -2602,11 +2643,13 @@ export default function PlatformAdminDashboard() {
                       </div>
                     ))}
 
-                  {!trips.length && (
-                    <div className="pa-empty-state">
-                      No trips found.
-                    </div>
-                  )}
+                  <AsyncPanel status={statusOf('trips')} title="trips" onRetry={load}>
+                    {!trips.length && (
+                      <div className="pa-empty-state">
+                        No trips found.
+                      </div>
+                    )}
+                  </AsyncPanel>
                 </div>
               </div>
             </div>
@@ -2615,9 +2658,9 @@ export default function PlatformAdminDashboard() {
               <div className="pa-panel">
                 <div className="pa-panel-header">
                   <div>
-                    <h3>
+                    <h2>
                       Operational attention
-                    </h3>
+                    </h2>
 
                     <p>
                       Issues detected from current
@@ -2692,9 +2735,9 @@ export default function PlatformAdminDashboard() {
                   Global directory
                 </span>
 
-                <h3>
+                <h2>
                   Transport companies
-                </h3>
+                </h2>
 
                 <p>
                   Create and manage companies
@@ -2803,14 +2846,16 @@ export default function PlatformAdminDashboard() {
                 </table>
               </div>
 
-              {!companies.length && (
-                <div className="pa-empty-state">
-                  <Building2 size={28} />
-                  <strong>
-                    No companies found
-                  </strong>
-                </div>
-              )}
+              <AsyncPanel status={statusOf('companies')} title="companies" onRetry={load}>
+                {!companies.length && (
+                  <div className="pa-empty-state">
+                    <Building2 size={28} />
+                    <strong>
+                      No companies found
+                    </strong>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
           </section>
         )}
@@ -2823,7 +2868,7 @@ export default function PlatformAdminDashboard() {
                   Network
                 </span>
 
-                <h3>Routes</h3>
+                <h2>Routes</h2>
 
                 <p>
                   Global route configuration.
@@ -2920,6 +2965,16 @@ export default function PlatformAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              <AsyncPanel status={statusOf('routes')} title="routes" onRetry={load}>
+                {!routes.length && (
+                  <div className="pa-empty-state">
+                    <strong>
+                      No routes found
+                    </strong>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
           </section>
         )}
@@ -2932,7 +2987,7 @@ export default function PlatformAdminDashboard() {
                   Fleet
                 </span>
 
-                <h3>Drivers</h3>
+                <h2>Drivers</h2>
 
                 <p>
                   Global driver directory.
@@ -3026,6 +3081,16 @@ export default function PlatformAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              <AsyncPanel status={statusOf('drivers')} title="drivers" onRetry={load}>
+                {!drivers.length && (
+                  <div className="pa-empty-state">
+                    <strong>
+                      No drivers found
+                    </strong>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
           </section>
         )}
@@ -3038,7 +3103,7 @@ export default function PlatformAdminDashboard() {
                   Operations
                 </span>
 
-                <h3>Trips</h3>
+                <h2>Trips</h2>
 
                 <p>
                   Global trip schedule and
@@ -3179,7 +3244,7 @@ export default function PlatformAdminDashboard() {
                                   '1px solid rgba(255,255,255,.08)',
                                 borderRadius: 8,
                                 padding: '7px',
-                                fontSize: 11,
+                                fontSize: 12,
                               }}
                             >
                               <option value="scheduled">
@@ -3204,6 +3269,16 @@ export default function PlatformAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              <AsyncPanel status={statusOf('trips')} title="trips" onRetry={load}>
+                {!trips.length && (
+                  <div className="pa-empty-state">
+                    <strong>
+                      No trips found
+                    </strong>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
 
             {simError && (
@@ -3227,7 +3302,7 @@ export default function PlatformAdminDashboard() {
                   Company access
                 </span>
 
-                <h3>Operators</h3>
+                <h2>Operators</h2>
 
                 <p>
                   Manage company managers,
@@ -3270,7 +3345,7 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <span className="pa-badge">
-                              {operator.role}
+                              {humanLabel(operator.role)}
                             </span>
                           </td>
 
@@ -3297,14 +3372,16 @@ export default function PlatformAdminDashboard() {
                 </table>
               </div>
 
-              {!operators.length && (
-                <div className="pa-empty-state">
-                  <Users size={28} />
-                  <strong>
-                    No company staff found
-                  </strong>
-                </div>
-              )}
+              <AsyncPanel status={statusOf('operators')} title="company staff" onRetry={load}>
+                {!operators.length && (
+                  <div className="pa-empty-state">
+                    <Users size={28} />
+                    <strong>
+                      No company staff found
+                    </strong>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
           </section>
         )}
@@ -3317,7 +3394,7 @@ export default function PlatformAdminDashboard() {
                   Bookings
                 </span>
 
-                <h3>Global bookings</h3>
+                <h2>Global bookings</h2>
 
                 <p>
                   Platform-wide booking activity.
@@ -3380,9 +3457,9 @@ export default function PlatformAdminDashboard() {
                   <tbody>
                     {bookings.map(
                       (booking) => (
-                        <tr key={booking.id}>
+                        <tr key={booking.id ?? booking.booking_id ?? booking.booking_number}>
                           <td>
-                            #{booking.id}
+                            #{booking.id ?? booking.booking_id}
                           </td>
 
                           <td>
@@ -3414,8 +3491,8 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <span className="pa-badge">
-                              {booking.status ||
-                                'unknown'}
+                              {humanLabel(booking.status) ||
+                                'Unknown'}
                             </span>
                           </td>
                         </tr>
@@ -3424,6 +3501,16 @@ export default function PlatformAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              <AsyncPanel status={statusOf('bookings')} title="bookings" onRetry={load}>
+                {!bookings.length && (
+                  <div className="pa-empty-state">
+                    <strong>
+                      No bookings found
+                    </strong>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
           </section>
         )}
@@ -3436,7 +3523,7 @@ export default function PlatformAdminDashboard() {
                   Platform directory
                 </span>
 
-                <h3>Users</h3>
+                <h2>Users</h2>
 
                 <p>
                   Global user population across
@@ -3533,7 +3620,7 @@ export default function PlatformAdminDashboard() {
 
                           <td>
                             <span className="pa-badge">
-                              {item.role}
+                              {humanLabel(item.role)}
                             </span>
                           </td>
 
@@ -3566,18 +3653,20 @@ export default function PlatformAdminDashboard() {
                 </table>
               </div>
 
-              {!users.length && (
-                <div className="pa-empty-state">
-                  <UserRound size={28} />
-                  <strong>
-                    User directory unavailable
-                  </strong>
-                  <span>
-                    The platform user endpoint did
-                    not return a user list.
-                  </span>
-                </div>
-              )}
+              <AsyncPanel status={statusOf('users')} title="users" onRetry={load}>
+                {!users.length && (
+                  <div className="pa-empty-state">
+                    <UserRound size={28} />
+                    <strong>
+                      User directory unavailable
+                    </strong>
+                    <span>
+                      The platform user endpoint did
+                      not return a user list.
+                    </span>
+                  </div>
+                )}
+              </AsyncPanel>
             </div>
           </section>
         )}
@@ -3590,9 +3679,9 @@ export default function PlatformAdminDashboard() {
                   Platform insights
                 </span>
 
-                <h3>
+                <h2>
                   Operational reports
-                </h3>
+                </h2>
 
                 <p>
                   Current platform-wide operational
@@ -3634,9 +3723,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     Company activity
-                  </h3>
+                  </h2>
 
                   <p>
                     Route and trip distribution
@@ -3728,7 +3817,7 @@ export default function PlatformAdminDashboard() {
                   Financial overview
                 </span>
 
-                <h3>Revenue</h3>
+                <h2>Revenue</h2>
 
                 <p>
                   Platform-wide booking value.
@@ -3764,10 +3853,12 @@ export default function PlatformAdminDashboard() {
                 <span>Average booking</span>
                 <strong>
                   {money(
-                    bookings.length
-                      ? revenue /
-                          bookings.length
-                      : 0
+                    revenue === null
+                      ? null
+                      : bookings.length
+                        ? revenue /
+                            bookings.length
+                        : 0
                   )}
                 </strong>
               </div>
@@ -3776,9 +3867,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     Booking value by company
-                  </h3>
+                  </h2>
 
                   <p>
                     Calculated from booking amounts
@@ -3850,9 +3941,9 @@ export default function PlatformAdminDashboard() {
                   Operations
                 </span>
 
-                <h3>
+                <h2>
                   Issue workspace
-                </h3>
+                </h2>
 
                 <p>
                   Live operational exceptions
@@ -3930,9 +4021,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     Active issues
-                  </h3>
+                  </h2>
 
                   <p>
                     Click an issue to open its
@@ -3941,7 +4032,13 @@ export default function PlatformAdminDashboard() {
                 </div>
               </div>
 
-              {platformAlerts.length === 0 ? (
+              {alertsStatus !== 'ready' ? (
+                <AsyncPanel
+                  status={alertsStatus}
+                  title="platform issues"
+                  onRetry={load}
+                />
+              ) : platformAlerts.length === 0 ? (
                 <div className="pa-empty-state">
                   <CheckCircle2
                     size={30}
@@ -4011,9 +4108,9 @@ export default function PlatformAdminDashboard() {
                   System
                 </span>
 
-                <h3>
+                <h2>
                   Platform system tests
-                </h3>
+                </h2>
 
                 <p>
                   Verify the health and integrity
@@ -4110,9 +4207,9 @@ export default function PlatformAdminDashboard() {
                 <div className="pa-panel">
                   <div className="pa-panel-header">
                     <div>
-                      <h3>
+                      <h2>
                         Diagnostic results
-                      </h3>
+                      </h2>
 
                       <p>
                         Results returned directly
@@ -4172,9 +4269,9 @@ export default function PlatformAdminDashboard() {
                   System configuration
                 </span>
 
-                <h3>
+                <h2>
                   Platform settings
-                </h3>
+                </h2>
 
                 <p>
                   Platform-level configuration and
@@ -4186,9 +4283,9 @@ export default function PlatformAdminDashboard() {
             <div className="pa-panel">
               <div className="pa-panel-header">
                 <div>
-                  <h3>
+                  <h2>
                     System information
-                  </h3>
+                  </h2>
 
                   <p>
                     Current CONNECT platform
@@ -4294,943 +4391,927 @@ export default function PlatformAdminDashboard() {
       </main>
 
       {companyModal && (
-        <div className="pa-modal-backdrop">
-          <div className="pa-modal">
-            <div className="pa-modal-head">
-              <div>
-                <h3>
-                  {companyEditingId
-                    ? 'Edit company'
-                    : 'Add company'}
-                </h3>
+        <Modal
+          labelledBy="pa-company-modal-title"
+          onClose={() => setCompanyModal(false)}
+          className="pa-modal"
+        >
+          <div className="pa-modal-head">
+            <div>
+              <h3 id="pa-company-modal-title">
+                {companyEditingId
+                  ? 'Edit company'
+                  : 'Add company'}
+              </h3>
 
-                <p>
-                  Platform administrators can create
-                  and update transport companies.
-                </p>
+              <p>
+                Platform administrators can create
+                and update transport companies.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="pa-form"
+            onSubmit={saveCompany}
+          >
+            <div className="pa-form-grid">
+              <div className="pa-field full">
+                <label htmlFor="pa-company-1">
+                  Company name
+                </label>
+
+                <ValidatedInput
+                  hint={'The registered name passengers will see, e.g. Super Metro Sacco.'}
+                  error={checkPlace(companyForm.name, 'the company name', { example: 'e.g. Super Metro Sacco' })}
+                  id="pa-company-1"
+                  value={companyForm.name}
+                  onChange={(event) =>
+                    setCompanyForm({
+                      ...companyForm,
+                      name: event.target.value,
+                    })
+                  }
+                  required
+                />
               </div>
 
+              <div className="pa-field full">
+                <label htmlFor="pa-company-2">
+                  Areas served
+                </label>
+
+                <ValidatedInput
+                  hint={'Places the company runs to, separated by commas.'}
+                  error={checkPlace(companyForm.areas_served, 'the areas served', { maxLength: 500, example: 'e.g. CBD, Westlands, Rongai' })}
+                  id="pa-company-2"
+                  value={
+                    companyForm.areas_served
+                  }
+                  onChange={(event) =>
+                    setCompanyForm({
+                      ...companyForm,
+                      areas_served:
+                        event.target.value,
+                    })
+                  }
+                  placeholder="CBD, Rongai, Ngong..."
+                  required
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-company-3">
+                  Phone number
+                </label>
+
+                <ValidatedInput
+                  hint={'Optional. The office line passengers can call. ' + PHONE_HINT}
+                  error={checkPhone(companyForm.phone_number, { required: false })}
+                  id="pa-company-3"
+                  value={
+                    companyForm.phone_number
+                  }
+                  onChange={(event) =>
+                    setCompanyForm({
+                      ...companyForm,
+                      phone_number:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="pa-field full">
+                <label htmlFor="pa-company-4">
+                  Description
+                </label>
+
+                <ValidatedInput as="textarea"
+                  hint={'Optional. One or two plain sentences about the company.'}
+                  error={checkText(companyForm.description, 'the company description', { required: false })}
+                  id="pa-company-4"
+                  value={
+                    companyForm.description
+                  }
+                  onChange={(event) =>
+                    setCompanyForm({
+                      ...companyForm,
+                      description:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="pa-modal-actions">
               <button
                 type="button"
-                className="pa-icon-button"
+                className="pa-secondary-button"
                 onClick={() =>
                   setCompanyModal(false)
                 }
               >
-                <X size={17} />
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="pa-primary-button"
+                disabled={companySaving}
+              >
+                {companySaving
+                  ? 'Saving...'
+                  : companyEditingId
+                    ? 'Save Changes'
+                    : 'Create Company'}
               </button>
             </div>
-
-            <form
-              className="pa-form"
-              onSubmit={saveCompany}
-            >
-              <div className="pa-form-grid">
-                <div className="pa-field full">
-                  <label>
-                    Company name
-                  </label>
-
-                  <ValidatedInput
-                    hint={'The registered name passengers will see, e.g. Super Metro Sacco.'}
-                    error={checkPlace(companyForm.name, 'the company name', { example: 'e.g. Super Metro Sacco' })}
-                    value={companyForm.name}
-                    onChange={(event) =>
-                      setCompanyForm({
-                        ...companyForm,
-                        name: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field full">
-                  <label>
-                    Areas served
-                  </label>
-
-                  <ValidatedInput
-                    hint={'Places the company runs to, separated by commas.'}
-                    error={checkPlace(companyForm.areas_served, 'the areas served', { maxLength: 500, example: 'e.g. CBD, Westlands, Rongai' })}
-                    value={
-                      companyForm.areas_served
-                    }
-                    onChange={(event) =>
-                      setCompanyForm({
-                        ...companyForm,
-                        areas_served:
-                          event.target.value,
-                      })
-                    }
-                    placeholder="CBD, Rongai, Ngong..."
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Phone number
-                  </label>
-
-                  <ValidatedInput
-                    hint={'Optional. The office line passengers can call. ' + PHONE_HINT}
-                    error={checkPhone(companyForm.phone_number, { required: false })}
-                    value={
-                      companyForm.phone_number
-                    }
-                    onChange={(event) =>
-                      setCompanyForm({
-                        ...companyForm,
-                        phone_number:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="pa-field full">
-                  <label>
-                    Description
-                  </label>
-
-                  <ValidatedInput as="textarea"
-                    hint={'Optional. One or two plain sentences about the company.'}
-                    error={checkText(companyForm.description, 'the company description', { required: false })}
-                    value={
-                      companyForm.description
-                    }
-                    onChange={(event) =>
-                      setCompanyForm({
-                        ...companyForm,
-                        description:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="pa-modal-actions">
-                <button
-                  type="button"
-                  className="pa-secondary-button"
-                  onClick={() =>
-                    setCompanyModal(false)
-                  }
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="pa-primary-button"
-                  disabled={companySaving}
-                >
-                  {companySaving
-                    ? 'Saving...'
-                    : companyEditingId
-                      ? 'Save Changes'
-                      : 'Create Company'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {routeModal && (
-        <div className="pa-modal-backdrop">
-          <div className="pa-modal">
-            <div className="pa-modal-head">
-              <div>
-                <h3>
-                  {routeEditingId
-                    ? 'Edit route'
-                    : 'Add route'}
-                </h3>
+        <Modal
+          labelledBy="pa-route-modal-title"
+          onClose={() => setRouteModal(false)}
+          className="pa-modal"
+        >
+          <div className="pa-modal-head">
+            <div>
+              <h3 id="pa-route-modal-title">
+                {routeEditingId
+                  ? 'Edit route'
+                  : 'Add route'}
+              </h3>
 
-                <p>
-                  Configure the route and owning
-                  company.
-                </p>
+              <p>
+                Configure the route and owning
+                company.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="pa-form"
+            onSubmit={saveRoute}
+          >
+            <div className="pa-form-grid">
+              <div className="pa-field full">
+                <label htmlFor="pa-route-1">
+                  Company
+                </label>
+
+                <select
+                  id="pa-route-1"
+                  value={
+                    routeForm.company_id
+                  }
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      company_id:
+                        event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select company
+                  </option>
+
+                  {companies.map(
+                    (company) => (
+                      <option
+                        key={company.id}
+                        value={company.id}
+                      >
+                        {company.name}
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
 
+              <div className="pa-field full">
+                <label htmlFor="pa-route-2">
+                  Route name
+                </label>
+
+                <ValidatedInput
+                  hint={'What passengers see when they pick a route, e.g. CBD to Rongai.'}
+                  error={checkPlace(routeForm.name, 'the route name', { maxLength: 200, example: 'e.g. CBD to Rongai' })}
+                  id="pa-route-2"
+                  value={routeForm.name}
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      name: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-route-3">
+                  Start point
+                </label>
+
+                <ValidatedInput
+                  hint={'Where the route starts: the first stage\'s name.'}
+                  error={checkPlace(routeForm.start_point, 'the starting point', { example: 'e.g. Kencom, CBD' })}
+                  id="pa-route-3"
+                  value={
+                    routeForm.start_point
+                  }
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      start_point:
+                        event.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-route-4">
+                  End point
+                </label>
+
+                <ValidatedInput
+                  hint={'Where the route ends: the last stage\'s name.'}
+                  error={checkPlace(routeForm.end_point, 'the end point', { example: 'e.g. Rongai' })}
+                  id="pa-route-4"
+                  value={
+                    routeForm.end_point
+                  }
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      end_point:
+                        event.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-route-5">
+                  Price (KES)
+                </label>
+
+                <input
+                  id="pa-route-5"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={
+                    routeForm.price
+                  }
+                  onChange={(event) =>
+                    setRouteForm({
+                      ...routeForm,
+                      price: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="pa-modal-actions">
               <button
                 type="button"
-                className="pa-icon-button"
+                className="pa-secondary-button"
                 onClick={() =>
                   setRouteModal(false)
                 }
               >
-                <X size={17} />
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="pa-primary-button"
+                disabled={routeSaving}
+              >
+                {routeSaving
+                  ? 'Saving...'
+                  : routeEditingId
+                    ? 'Save Changes'
+                    : 'Create Route'}
               </button>
             </div>
-
-            <form
-              className="pa-form"
-              onSubmit={saveRoute}
-            >
-              <div className="pa-form-grid">
-                <div className="pa-field full">
-                  <label>
-                    Company
-                  </label>
-
-                  <select
-                    value={
-                      routeForm.company_id
-                    }
-                    onChange={(event) =>
-                      setRouteForm({
-                        ...routeForm,
-                        company_id:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select company
-                    </option>
-
-                    {companies.map(
-                      (company) => (
-                        <option
-                          key={company.id}
-                          value={company.id}
-                        >
-                          {company.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div className="pa-field full">
-                  <label>
-                    Route name
-                  </label>
-
-                  <ValidatedInput
-                    hint={'What passengers see when they pick a route, e.g. CBD to Rongai.'}
-                    error={checkPlace(routeForm.name, 'the route name', { maxLength: 200, example: 'e.g. CBD to Rongai' })}
-                    value={routeForm.name}
-                    onChange={(event) =>
-                      setRouteForm({
-                        ...routeForm,
-                        name: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Start point
-                  </label>
-
-                  <ValidatedInput
-                    hint={'Where the route starts: the first stage\'s name.'}
-                    error={checkPlace(routeForm.start_point, 'the starting point', { example: 'e.g. Kencom, CBD' })}
-                    value={
-                      routeForm.start_point
-                    }
-                    onChange={(event) =>
-                      setRouteForm({
-                        ...routeForm,
-                        start_point:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    End point
-                  </label>
-
-                  <ValidatedInput
-                    hint={'Where the route ends: the last stage\'s name.'}
-                    error={checkPlace(routeForm.end_point, 'the end point', { example: 'e.g. Rongai' })}
-                    value={
-                      routeForm.end_point
-                    }
-                    onChange={(event) =>
-                      setRouteForm({
-                        ...routeForm,
-                        end_point:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Price (KES)
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={
-                      routeForm.price
-                    }
-                    onChange={(event) =>
-                      setRouteForm({
-                        ...routeForm,
-                        price: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="pa-modal-actions">
-                <button
-                  type="button"
-                  className="pa-secondary-button"
-                  onClick={() =>
-                    setRouteModal(false)
-                  }
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="pa-primary-button"
-                  disabled={routeSaving}
-                >
-                  {routeSaving
-                    ? 'Saving...'
-                    : routeEditingId
-                      ? 'Save Changes'
-                      : 'Create Route'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {driverModal && (
-        <div className="pa-modal-backdrop">
-          <div className="pa-modal">
-            <div className="pa-modal-head">
-              <div>
-                <h3>
-                  {driverEditingId
-                    ? 'Edit driver'
-                    : 'Add driver'}
-                </h3>
+        <Modal
+          labelledBy="pa-driver-modal-title"
+          onClose={() => setDriverModal(false)}
+          className="pa-modal"
+        >
+          <div className="pa-modal-head">
+            <div>
+              <h3 id="pa-driver-modal-title">
+                {driverEditingId
+                  ? 'Edit driver'
+                  : 'Add driver'}
+              </h3>
 
-                <p>
-                  Assign the driver to exactly one
-                  transport company.
-                </p>
+              <p>
+                Assign the driver to exactly one
+                transport company.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="pa-form"
+            onSubmit={saveDriver}
+          >
+            <div className="pa-form-grid">
+              <div className="pa-field full">
+                <label htmlFor="pa-driver-1">
+                  Company
+                </label>
+
+                <select
+                  id="pa-driver-1"
+                  value={
+                    driverForm.company
+                  }
+                  onChange={(event) =>
+                    setDriverForm({
+                      ...driverForm,
+                      company:
+                        event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select company
+                  </option>
+
+                  {companies.map(
+                    (company) => (
+                      <option
+                        key={company.id}
+                        value={company.id}
+                      >
+                        {company.name}
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
 
+              <div className="pa-field">
+                <label htmlFor="pa-driver-2">
+                  Driver name
+                </label>
+
+                <ValidatedInput
+                  hint={'As on the driver\'s ID. ' + NAME_HINT}
+                  error={checkName(driverForm.name, "the driver's name")}
+                  id="pa-driver-2"
+                  value={driverForm.name}
+                  onChange={(event) =>
+                    setDriverForm({
+                      ...driverForm,
+                      name: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-driver-3">
+                  Phone
+                </label>
+
+                <ValidatedInput
+                  hint={'The driver signs in with it. ' + PHONE_HINT}
+                  error={checkPhone(driverForm.phone_number)}
+                  id="pa-driver-3"
+                  value={
+                    driverForm.phone_number
+                  }
+                  onChange={(event) =>
+                    setDriverForm({
+                      ...driverForm,
+                      phone_number:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-driver-4">
+                  Bus number
+                </label>
+
+                <input
+                  id="pa-driver-4"
+                  value={
+                    driverForm.bus_number
+                  }
+                  onChange={(event) =>
+                    setDriverForm({
+                      ...driverForm,
+                      bus_number:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="pa-modal-actions">
               <button
                 type="button"
-                className="pa-icon-button"
+                className="pa-secondary-button"
                 onClick={() =>
                   setDriverModal(false)
                 }
               >
-                <X size={17} />
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="pa-primary-button"
+                disabled={driverSaving}
+              >
+                {driverSaving
+                  ? 'Saving...'
+                  : driverEditingId
+                    ? 'Save Changes'
+                    : 'Create Driver'}
               </button>
             </div>
-
-            <form
-              className="pa-form"
-              onSubmit={saveDriver}
-            >
-              <div className="pa-form-grid">
-                <div className="pa-field full">
-                  <label>
-                    Company
-                  </label>
-
-                  <select
-                    value={
-                      driverForm.company
-                    }
-                    onChange={(event) =>
-                      setDriverForm({
-                        ...driverForm,
-                        company:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select company
-                    </option>
-
-                    {companies.map(
-                      (company) => (
-                        <option
-                          key={company.id}
-                          value={company.id}
-                        >
-                          {company.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Driver name
-                  </label>
-
-                  <ValidatedInput
-                    hint={'As on the driver\'s ID. ' + NAME_HINT}
-                    error={checkName(driverForm.name, "the driver's name")}
-                    value={driverForm.name}
-                    onChange={(event) =>
-                      setDriverForm({
-                        ...driverForm,
-                        name: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Phone
-                  </label>
-
-                  <ValidatedInput
-                    hint={'The driver signs in with it. ' + PHONE_HINT}
-                    error={checkPhone(driverForm.phone_number)}
-                    value={
-                      driverForm.phone_number
-                    }
-                    onChange={(event) =>
-                      setDriverForm({
-                        ...driverForm,
-                        phone_number:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Bus number
-                  </label>
-
-                  <input
-                    value={
-                      driverForm.bus_number
-                    }
-                    onChange={(event) =>
-                      setDriverForm({
-                        ...driverForm,
-                        bus_number:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="pa-modal-actions">
-                <button
-                  type="button"
-                  className="pa-secondary-button"
-                  onClick={() =>
-                    setDriverModal(false)
-                  }
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="pa-primary-button"
-                  disabled={driverSaving}
-                >
-                  {driverSaving
-                    ? 'Saving...'
-                    : driverEditingId
-                      ? 'Save Changes'
-                      : 'Create Driver'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {tripModal && (
-        <div className="pa-modal-backdrop">
-          <div className="pa-modal">
-            <div className="pa-modal-head">
-              <div>
-                <h3>
-                  Create trip
-                </h3>
+        <Modal
+          labelledBy="pa-trip-modal-title"
+          onClose={() => setTripModal(false)}
+          className="pa-modal"
+        >
+          <div className="pa-modal-head">
+            <div>
+              <h3 id="pa-trip-modal-title">
+                Create trip
+              </h3>
 
-                <p>
-                  Create a scheduled trip using an
-                  existing route and driver.
-                </p>
+              <p>
+                Create a scheduled trip using an
+                existing route and driver.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="pa-form"
+            onSubmit={createTrip}
+          >
+            <div className="pa-form-grid">
+              <div className="pa-field full">
+                <label htmlFor="pa-trip-1">
+                  Company
+                </label>
+
+                <select
+                  id="pa-trip-1"
+                  value={
+                    tripForm.company_id
+                  }
+                  onChange={(event) =>
+                    setTripForm({
+                      ...tripForm,
+                      company_id:
+                        event.target.value,
+                      route_id: '',
+                      driver_id: '',
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select company
+                  </option>
+
+                  {companies.map(
+                    (company) => (
+                      <option
+                        key={company.id}
+                        value={company.id}
+                      >
+                        {company.name}
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
 
+              <div className="pa-field full">
+                <label htmlFor="pa-trip-2">
+                  Route
+                </label>
+
+                <select
+                  id="pa-trip-2"
+                  value={
+                    tripForm.route_id
+                  }
+                  onChange={(event) =>
+                    setTripForm({
+                      ...tripForm,
+                      route_id:
+                        event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select route
+                  </option>
+
+                  {routes
+                    .filter(
+                      (route) =>
+                        !tripForm.company_id ||
+                        String(
+                          route.company
+                        ) ===
+                          String(
+                            tripForm.company_id
+                          )
+                    )
+                    .map((route) => (
+                      <option
+                        key={route.id}
+                        value={route.id}
+                      >
+                        {route.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="pa-field full">
+                <label htmlFor="pa-trip-3">
+                  Driver
+                </label>
+
+                <select
+                  id="pa-trip-3"
+                  value={
+                    tripForm.driver_id
+                  }
+                  onChange={(event) =>
+                    setTripForm({
+                      ...tripForm,
+                      driver_id:
+                        event.target.value,
+                      vehicle_type:
+                        driverVehicle(tripBuses, drivers.find((d) => String(d.id) === event.target.value))
+                        || tripForm.vehicle_type,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select driver
+                  </option>
+
+                  {drivers
+                    .filter(
+                      (driver) =>
+                        !tripForm.company_id ||
+                        String(
+                          driver.company
+                        ) ===
+                          String(
+                            tripForm.company_id
+                          )
+                    )
+                    .map((driver) => (
+                      <option
+                        key={driver.id}
+                        value={driver.id}
+                      >
+                        {driver.name} —{' '}
+                        {driver.bus_number ||
+                          'No bus'}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-trip-4">
+                  Departure
+                </label>
+
+                <input
+                  id="pa-trip-4"
+                  type="datetime-local"
+                  value={
+                    tripForm.departure_at
+                  }
+                  onChange={(event) =>
+                    setTripForm({
+                      ...tripForm,
+                      departure_at:
+                        event.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-trip-5">
+                  Vehicle (its seats are the trip's seats)
+                </label>
+
+                <select
+                  id="pa-trip-5"
+                  value={tripForm.vehicle_type}
+                  onChange={(event) =>
+                    setTripForm({
+                      ...tripForm,
+                      vehicle_type: event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <VehicleOptions />
+                </select>
+              </div>
+            </div>
+
+            <div className="pa-modal-actions">
               <button
                 type="button"
-                className="pa-icon-button"
+                className="pa-secondary-button"
                 onClick={() =>
                   setTripModal(false)
                 }
               >
-                <X size={17} />
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="pa-primary-button"
+                disabled={tripSaving}
+              >
+                {tripSaving
+                  ? 'Creating...'
+                  : 'Create Trip'}
               </button>
             </div>
-
-            <form
-              className="pa-form"
-              onSubmit={createTrip}
-            >
-              <div className="pa-form-grid">
-                <div className="pa-field full">
-                  <label>
-                    Company
-                  </label>
-
-                  <select
-                    value={
-                      tripForm.company_id
-                    }
-                    onChange={(event) =>
-                      setTripForm({
-                        ...tripForm,
-                        company_id:
-                          event.target.value,
-                        route_id: '',
-                        driver_id: '',
-                      })
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select company
-                    </option>
-
-                    {companies.map(
-                      (company) => (
-                        <option
-                          key={company.id}
-                          value={company.id}
-                        >
-                          {company.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div className="pa-field full">
-                  <label>
-                    Route
-                  </label>
-
-                  <select
-                    value={
-                      tripForm.route_id
-                    }
-                    onChange={(event) =>
-                      setTripForm({
-                        ...tripForm,
-                        route_id:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select route
-                    </option>
-
-                    {routes
-                      .filter(
-                        (route) =>
-                          !tripForm.company_id ||
-                          String(
-                            route.company
-                          ) ===
-                            String(
-                              tripForm.company_id
-                            )
-                      )
-                      .map((route) => (
-                        <option
-                          key={route.id}
-                          value={route.id}
-                        >
-                          {route.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="pa-field full">
-                  <label>
-                    Driver
-                  </label>
-
-                  <select
-                    value={
-                      tripForm.driver_id
-                    }
-                    onChange={(event) =>
-                      setTripForm({
-                        ...tripForm,
-                        driver_id:
-                          event.target.value,
-                        vehicle_type:
-                          driverVehicle(tripBuses, drivers.find((d) => String(d.id) === event.target.value))
-                          || tripForm.vehicle_type,
-                      })
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select driver
-                    </option>
-
-                    {drivers
-                      .filter(
-                        (driver) =>
-                          !tripForm.company_id ||
-                          String(
-                            driver.company
-                          ) ===
-                            String(
-                              tripForm.company_id
-                            )
-                      )
-                      .map((driver) => (
-                        <option
-                          key={driver.id}
-                          value={driver.id}
-                        >
-                          {driver.name} —{' '}
-                          {driver.bus_number ||
-                            'No bus'}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Departure
-                  </label>
-
-                  <input
-                    type="datetime-local"
-                    value={
-                      tripForm.departure_at
-                    }
-                    onChange={(event) =>
-                      setTripForm({
-                        ...tripForm,
-                        departure_at:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label htmlFor="pa-trip-bus">
-                    Vehicle (its seats are the trip's seats)
-                  </label>
-
-                  <select
-                    id="pa-trip-bus"
-                    value={tripForm.vehicle_type}
-                    onChange={(event) =>
-                      setTripForm({
-                        ...tripForm,
-                        vehicle_type: event.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <VehicleOptions />
-                  </select>
-                </div>
-              </div>
-
-              <div className="pa-modal-actions">
-                <button
-                  type="button"
-                  className="pa-secondary-button"
-                  onClick={() =>
-                    setTripModal(false)
-                  }
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="pa-primary-button"
-                  disabled={tripSaving}
-                >
-                  {tripSaving
-                    ? 'Creating...'
-                    : 'Create Trip'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       {operatorModal && (
-        <div className="pa-modal-backdrop">
-          <div className="pa-modal">
-            <div className="pa-modal-head">
-              <div>
-                <h3>
-                  Add company staff
-                </h3>
+        <Modal
+          labelledBy="pa-operator-modal-title"
+          onClose={() => setOperatorModal(false)}
+          className="pa-modal"
+        >
+          <div className="pa-modal-head">
+            <div>
+              <h3 id="pa-operator-modal-title">
+                Add company staff
+              </h3>
 
-                <p>
-                  Create a manager, auditor or
-                  operator for one company.
-                </p>
+              <p>
+                Create a manager, auditor or
+                operator for one company.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="pa-form"
+            onSubmit={saveOperator}
+          >
+            <div className="pa-form-grid">
+              <div className="pa-field">
+                <label htmlFor="pa-operator-1">
+                  Username
+                </label>
+
+                <input
+                  id="pa-operator-1"
+                  value={
+                    operatorForm.username
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      username:
+                        event.target.value,
+                    })
+                  }
+                  required
+                />
               </div>
 
+              <div className="pa-field">
+                <label htmlFor="pa-operator-2">
+                  Email
+                </label>
+
+                <input
+                  id="pa-operator-2"
+                  type="email"
+                  value={
+                    operatorForm.email
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      email:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-operator-3">
+                  Phone
+                </label>
+
+                <ValidatedInput
+                  hint={'Optional. ' + PHONE_HINT}
+                  error={checkPhone(operatorForm.phone_number, { required: false })}
+                  id="pa-operator-3"
+                  value={
+                    operatorForm.phone_number
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      phone_number:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-operator-4">
+                  Location
+                </label>
+
+                <ValidatedInput
+                  hint={'Optional. Where they usually work, e.g. Kencom.'}
+                  error={checkPlace(operatorForm.location, 'the location', { required: false })}
+                  id="pa-operator-4"
+                  value={
+                    operatorForm.location
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      location:
+                        event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-operator-5">
+                  Role
+                </label>
+
+                <select
+                  id="pa-operator-5"
+                  value={
+                    operatorForm.role
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      role: event.target.value,
+                    })
+                  }
+                >
+                  <option value="company_manager">
+                    Company Manager
+                  </option>
+
+                  <option value="company_operator">
+                    Company Operator
+                  </option>
+
+                  <option value="company_auditor">
+                    Company Auditor
+                  </option>
+                </select>
+              </div>
+
+              <div className="pa-field">
+                <label htmlFor="pa-operator-6">
+                  Company
+                </label>
+
+                <select
+                  id="pa-operator-6"
+                  value={
+                    operatorForm.company
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      company:
+                        event.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="">
+                    Select company
+                  </option>
+
+                  {companies.map(
+                    (company) => (
+                      <option
+                        key={company.id}
+                        value={company.id}
+                      >
+                        {company.name}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              <div className="pa-field full">
+                <label htmlFor="pa-operator-7">
+                  Temporary password
+                </label>
+
+                <input
+                  id="pa-operator-7"
+                  type="password"
+                  value={
+                    operatorForm.password
+                  }
+                  onChange={(event) =>
+                    setOperatorForm({
+                      ...operatorForm,
+                      password:
+                        event.target.value,
+                    })
+                  }
+                  minLength={6}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="pa-modal-actions">
               <button
                 type="button"
-                className="pa-icon-button"
+                className="pa-secondary-button"
                 onClick={() =>
                   setOperatorModal(false)
                 }
               >
-                <X size={17} />
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="pa-primary-button"
+                disabled={operatorSaving}
+              >
+                {operatorSaving
+                  ? 'Creating...'
+                  : 'Create Staff Account'}
               </button>
             </div>
-
-            <form
-              className="pa-form"
-              onSubmit={saveOperator}
-            >
-              <div className="pa-form-grid">
-                <div className="pa-field">
-                  <label>
-                    Username
-                  </label>
-
-                  <input
-                    value={
-                      operatorForm.username
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        username:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Email
-                  </label>
-
-                  <input
-                    type="email"
-                    value={
-                      operatorForm.email
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        email:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Phone
-                  </label>
-
-                  <ValidatedInput
-                    hint={'Optional. ' + PHONE_HINT}
-                    error={checkPhone(operatorForm.phone_number, { required: false })}
-                    value={
-                      operatorForm.phone_number
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        phone_number:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Location
-                  </label>
-
-                  <ValidatedInput
-                    hint={'Optional. Where they usually work, e.g. Kencom.'}
-                    error={checkPlace(operatorForm.location, 'the location', { required: false })}
-                    value={
-                      operatorForm.location
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        location:
-                          event.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Role
-                  </label>
-
-                  <select
-                    value={
-                      operatorForm.role
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        role: event.target.value,
-                      })
-                    }
-                  >
-                    <option value="company_manager">
-                      Company Manager
-                    </option>
-
-                    <option value="company_operator">
-                      Company Operator
-                    </option>
-
-                    <option value="company_auditor">
-                      Company Auditor
-                    </option>
-                  </select>
-                </div>
-
-                <div className="pa-field">
-                  <label>
-                    Company
-                  </label>
-
-                  <select
-                    value={
-                      operatorForm.company
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        company:
-                          event.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <option value="">
-                      Select company
-                    </option>
-
-                    {companies.map(
-                      (company) => (
-                        <option
-                          key={company.id}
-                          value={company.id}
-                        >
-                          {company.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div className="pa-field full">
-                  <label>
-                    Temporary password
-                  </label>
-
-                  <input
-                    type="password"
-                    value={
-                      operatorForm.password
-                    }
-                    onChange={(event) =>
-                      setOperatorForm({
-                        ...operatorForm,
-                        password:
-                          event.target.value,
-                      })
-                    }
-                    minLength={6}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="pa-modal-actions">
-                <button
-                  type="button"
-                  className="pa-secondary-button"
-                  onClick={() =>
-                    setOperatorModal(false)
-                  }
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="pa-primary-button"
-                  disabled={operatorSaving}
-                >
-                  {operatorSaving
-                    ? 'Creating...'
-                    : 'Create Staff Account'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
     </PlatformShell>
   );

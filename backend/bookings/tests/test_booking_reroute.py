@@ -80,7 +80,7 @@ class BookingRerouteTests(APITestCase):
     @patch('companies.routing.road_line', return_value=(LINE, 900.0))
     def test_refuses_anyone_who_does_not_own_the_booking(self, road_line):
         self.client.force_authenticate(user=self.stranger)
-        self.assertEqual(self.get().status_code, 403)
+        self.assertEqual(self.get().status_code, 404)
         road_line.assert_not_called()
 
     @patch('companies.routing.road_line', return_value=(LINE, 900.0))
