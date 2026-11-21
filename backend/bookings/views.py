@@ -32,7 +32,7 @@ from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 
 from companies.models import Trip, PickupStage
 from .models import Incident, IncidentResolution
-from users.permissions import can_manage_company, can_access_company
+from users.permissions import can_access_company
 from notifications import push
 from notifications.sms import send_admin_alert_sms
 from drivers.models import Driver

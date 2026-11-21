@@ -53,7 +53,7 @@ class Fuzz(TestCase):
         for role in roles:
             try:
                 u = U.objects.create(username=f'u{role}', role=role, company=co, phone_number='0700000009' if role=='x' else None) if hasattr(U,'role') else U.objects.create(username=f'u{role}')
-            except Exception as e:
+            except Exception:
                 u = U.objects.create(username=f'u{role}')
             c = APIClient(raise_request_exception=False)
             c.force_authenticate(user=u)

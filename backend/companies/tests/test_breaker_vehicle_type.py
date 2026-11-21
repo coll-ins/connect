@@ -1,10 +1,7 @@
-from datetime import timedelta
-from django.utils import timezone
 from rest_framework.test import APITestCase
 from buses.models import Bus
-from companies.models import Trip, TripSchedule
+from companies.models import TripSchedule
 from companies.tests.test_trip_bus import TripBusTests
-from drivers.models import Driver
 
 
 class BreakerVehicleType(APITestCase):
